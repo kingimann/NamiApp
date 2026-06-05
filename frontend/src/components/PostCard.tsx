@@ -9,6 +9,8 @@ import { theme } from "@/src/theme";
 import MediaGrid from "./MediaGrid";
 import RichText from "./RichText";
 import LinkPreviewCard from "./LinkPreviewCard";
+import EmbedCard from "./EmbedCard";
+import { getEmbed } from "@/src/utils/embeds";
 import PollCard from "./PollCard";
 import QuoteCard from "./QuoteCard";
 import LikersModal from "./LikersModal";
@@ -54,6 +56,7 @@ export default function PostCard({
   const display = (isRepost ? post.reposted_post! : post);
   const isOwner = !!viewerId && display.user_id === viewerId;
   const hasVideo = (display.media || []).some((m) => m.type === "video");
+  const embed = getEmbed(display.text);
 
   const openDetail = () => {
     if (disableOpen) return;
@@ -161,9 +164,11 @@ export default function PostCard({
         />
       )}
 
-      {display.link_preview && !display.quoted_post && (
+      {embed ? (
+        <EmbedCard url={embed.url} aspect={embed.aspect} />
+      ) : display.link_preview && !display.quoted_post ? (
         <LinkPreviewCard preview={display.link_preview} />
-      )}
+      ) : null}
 
       {display.poll && (
         <PollCard
