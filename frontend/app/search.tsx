@@ -18,9 +18,11 @@ export default function SearchScreen() {
   const [communities, setCommunities] = useState<Community[]>([]);
   const [listings, setListings] = useState<Listing[]>([]);
   const [loading, setLoading] = useState(false);
+  const [trending, setTrending] = useState<{ tag: string; count: number }[]>([]);
   const inputRef = useRef<TextInput>(null);
 
   useEffect(() => { const t = setTimeout(() => inputRef.current?.focus(), 250); return () => clearTimeout(t); }, []);
+  useEffect(() => { api.trendingHashtags().then((r) => setTrending(r.hashtags)).catch(() => {}); }, []);
 
   const run = useCallback(async (term: string) => {
     const s = term.trim();
@@ -87,7 +89,27 @@ export default function SearchScreen() {
       {loading && !hasResults ? (
         <View style={styles.center}><ActivityIndicator color={theme.primary} /></View>
       ) : !q.trim() ? (
-        <View style={styles.center}><Text style={styles.hint}>Search across the whole site — people, communities, marketplace and hashtags.</Text></View>
+        <View style={{ flex: 1 }}>
+          {trending.length > 0 && (
+            <>
+              <Text style={styles.section}>Popular hashtags</Text>
+              <View style={styles.tagWrap}>
+                {trending.map((h) => (
+                  <TouchableOpacity
+                    key={h.tag}
+                    style={styles.tagChip}
+                    onPress={() => router.push({ pathname: "/hashtag/[tag]", params: { tag: h.tag } })}
+                    testID={`trend-${h.tag}`}
+                  >
+                    <Text style={styles.tagText}>#{h.tag}</Text>
+                    <Text style={styles.tagCount}>{h.count}</Text>
+                  </TouchableOpacity>
+                ))}
+              </View>
+            </>
+          )}
+          <View style={styles.center}><Text style={styles.hint}>Search across the whole site — people, communities, marketplace and hashtags.</Text></View>
+        </View>
       ) : (
         <FlatList
           data={rows}
@@ -142,6 +164,10 @@ const styles = StyleSheet.create({
   hint: { color: theme.textMuted, fontSize: 13, textAlign: "center", lineHeight: 19 },
   empty: { color: theme.textMuted, fontSize: 13, textAlign: "center", paddingVertical: 40 },
   section: { color: theme.textMuted, fontSize: 12, fontWeight: "800", textTransform: "uppercase", letterSpacing: 0.5, paddingHorizontal: 16, paddingTop: 16, paddingBottom: 6 },
+  tagWrap: { flexDirection: "row", flexWrap: "wrap", gap: 8, paddingHorizontal: 16, paddingTop: 4 },
+  tagChip: { flexDirection: "row", alignItems: "center", gap: 6, backgroundColor: theme.surface, borderWidth: 1, borderColor: theme.border, borderRadius: 999, paddingHorizontal: 12, paddingVertical: 8 },
+  tagText: { color: theme.primary, fontSize: 13.5, fontWeight: "800" },
+  tagCount: { color: theme.textMuted, fontSize: 11.5, fontWeight: "700" },
   row: { flexDirection: "row", alignItems: "center", gap: 12, paddingHorizontal: 16, paddingVertical: 10, borderBottomWidth: StyleSheet.hairlineWidth, borderBottomColor: theme.border },
   avatar: { width: 44, height: 44, borderRadius: 22, overflow: "hidden", backgroundColor: theme.primary, alignItems: "center", justifyContent: "center" },
   avatarImg: { width: "100%", height: "100%" },

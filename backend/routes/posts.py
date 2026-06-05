@@ -744,6 +744,23 @@ async def list_bookmarks(authorization: Optional[str] = Header(None)):
 
 
 # ---------- Hashtags ----------
+@router.get("/hashtags/trending")
+async def trending_hashtags(authorization: Optional[str] = Header(None)):
+    """Most-used hashtags across recent posts (defined before /hashtags/{tag})."""
+    await get_current_user(authorization)
+    since = datetime.now(timezone.utc) - timedelta(days=30)
+    rows = await db.posts.find(
+        {"hashtags": {"$exists": True, "$ne": []}, "created_at": {"$gte": since}},
+        {"_id": 0, "hashtags": 1},
+    ).sort("created_at", -1).limit(3000).to_list(3000)
+    counts: dict = {}
+    for r in rows:
+        for t in (r.get("hashtags") or []):
+            counts[t] = counts.get(t, 0) + 1
+    top = sorted(counts.items(), key=lambda kv: kv[1], reverse=True)[:15]
+    return {"hashtags": [{"tag": t, "count": n} for t, n in top]}
+
+
 @router.get("/hashtags/{tag}", response_model=List[Post])
 async def posts_for_hashtag(tag: str, authorization: Optional[str] = Header(None)):
     user = await get_current_user(authorization)
