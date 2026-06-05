@@ -120,68 +120,56 @@ export default function MarketplaceScreen() {
         <Text style={styles.title}>Marketplace</Text>
         <View style={{ width: 36 }} />
       </View>
-      <View style={styles.searchPill}>
-        <Ionicons name="search" size={16} color={theme.textSecondary} />
-        <TextInput
-          style={styles.searchInput}
-          placeholder="Search Marketplace"
-          placeholderTextColor={theme.textMuted}
-          value={q}
-          onChangeText={setQ}
-          returnKeyType="search"
-          testID="market-search"
-        />
-        {!!q && (
-          <TouchableOpacity onPress={() => setQ("")}>
-            <Ionicons name="close-circle" size={16} color={theme.textMuted} />
-          </TouchableOpacity>
-        )}
-      </View>
-      <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.chipRow}>
-        {CATEGORIES.map((c) => {
-          const a = c.key === cat;
-          return (
-            <TouchableOpacity
-              key={c.key}
-              onPress={() => setCat(c.key)}
-              style={[styles.chip, a && styles.chipActive]}
-              testID={`market-cat-${c.key}`}
-            >
-              <Text style={[styles.chipText, { color: a ? "#fff" : theme.textSecondary }]}>{c.label}</Text>
+      <View style={styles.searchRow}>
+        <View style={styles.searchPill}>
+          <Ionicons name="search" size={17} color={theme.textMuted} />
+          <TextInput
+            style={styles.searchInput}
+            placeholder="Search Marketplace"
+            placeholderTextColor={theme.textMuted}
+            value={q}
+            onChangeText={setQ}
+            returnKeyType="search"
+            testID="market-search"
+          />
+          {!!q && (
+            <TouchableOpacity onPress={() => setQ("")}>
+              <Ionicons name="close-circle" size={17} color={theme.textMuted} />
             </TouchableOpacity>
-          );
-        })}
-      </ScrollView>
-
-      <View style={styles.controlsRow}>
-        <View style={styles.segment}>
-          <TouchableOpacity onPress={() => setSavedView(false)} style={[styles.segBtn, !savedView && styles.segBtnActive]} testID="market-browse">
-            <Text style={[styles.segText, { color: !savedView ? theme.primary : theme.textMuted }]}>Browse</Text>
-          </TouchableOpacity>
-          <TouchableOpacity onPress={() => setSavedView(true)} style={[styles.segBtn, savedView && styles.segBtnActive]} testID="market-saved">
-            <Text style={[styles.segText, { color: savedView ? theme.primary : theme.textMuted }]}>Saved</Text>
-          </TouchableOpacity>
+          )}
         </View>
-        {!savedView && (
-          <TouchableOpacity style={styles.sortBtn} onPress={() => setSortOpen(true)} testID="market-sort">
-            <Ionicons name="swap-vertical" size={15} color={theme.textSecondary} />
-            <Text style={styles.sortText} numberOfLines={1}>{SORTS.find((s) => s.key === sort)?.label}</Text>
-          </TouchableOpacity>
-        )}
+        <TouchableOpacity
+          style={[styles.filterBtn, (sort !== "recent" || condFilter !== "all") && styles.filterBtnActive]}
+          onPress={() => setSortOpen(true)}
+          testID="market-filters"
+        >
+          <Ionicons name="options-outline" size={20} color={(sort !== "recent" || condFilter !== "all") ? theme.primary : theme.textSecondary} />
+        </TouchableOpacity>
+      </View>
+
+      <View style={styles.tabs}>
+        <TouchableOpacity onPress={() => setSavedView(false)} style={[styles.tab, !savedView && styles.tabActive]} testID="market-browse">
+          <Ionicons name="grid-outline" size={16} color={!savedView ? theme.primary : theme.textMuted} />
+          <Text style={[styles.tabText, { color: !savedView ? theme.primary : theme.textMuted }]}>Browse</Text>
+        </TouchableOpacity>
+        <TouchableOpacity onPress={() => setSavedView(true)} style={[styles.tab, savedView && styles.tabActive]} testID="market-saved">
+          <Ionicons name="bookmark-outline" size={16} color={savedView ? theme.primary : theme.textMuted} />
+          <Text style={[styles.tabText, { color: savedView ? theme.primary : theme.textMuted }]}>Saved</Text>
+        </TouchableOpacity>
       </View>
 
       {!savedView && (
         <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.chipRow}>
-          {[{ key: "all", label: "Any condition" }, ...CONDITIONS].map((c) => {
-            const a = c.key === condFilter;
+          {CATEGORIES.map((c) => {
+            const a = c.key === cat;
             return (
               <TouchableOpacity
                 key={c.key}
-                onPress={() => setCondFilter(c.key)}
-                style={[styles.condChip, a && styles.condChipActive]}
-                testID={`market-cond-${c.key}`}
+                onPress={() => setCat(c.key)}
+                style={[styles.chip, a && styles.chipActive]}
+                testID={`market-cat-${c.key}`}
               >
-                <Text style={[styles.condChipText, { color: a ? theme.primary : theme.textMuted }]}>{c.label}</Text>
+                <Text style={[styles.chipText, { color: a ? "#fff" : theme.textSecondary }]}>{c.label}</Text>
               </TouchableOpacity>
             );
           })}
@@ -195,8 +183,8 @@ export default function MarketplaceScreen() {
           data={listings}
           keyExtractor={(i) => i.id}
           numColumns={2}
-          columnWrapperStyle={{ gap: 10 }}
-          contentContainerStyle={{ padding: 16, paddingBottom: insets.bottom + 100, gap: 10 }}
+          columnWrapperStyle={{ gap: 12 }}
+          contentContainerStyle={{ padding: 14, paddingBottom: insets.bottom + 110, gap: 14 }}
           refreshControl={
             <RefreshControl refreshing={refreshing} onRefresh={() => { setRefreshing(true); load(); }} tintColor={theme.primary} />
           }
@@ -240,7 +228,10 @@ export default function MarketplaceScreen() {
                 </Text>
                 <Text style={styles.tileTitle} numberOfLines={2}>{item.title}</Text>
                 {!!item.locality && (
-                  <Text style={styles.tileLoc} numberOfLines={1}>{item.locality}</Text>
+                  <View style={styles.tileLocRow}>
+                    <Ionicons name="location-outline" size={11} color={theme.textMuted} />
+                    <Text style={styles.tileLoc} numberOfLines={1}>{item.locality}</Text>
+                  </View>
                 )}
               </View>
             </TouchableOpacity>
@@ -366,22 +357,45 @@ export default function MarketplaceScreen() {
         </KeyboardAvoidingView>
       </Modal>
 
-      <Modal visible={sortOpen} transparent animationType="fade" onRequestClose={() => setSortOpen(false)}>
+      <Modal visible={sortOpen} transparent animationType="slide" onRequestClose={() => setSortOpen(false)}>
         <TouchableOpacity style={styles.modalBackdrop} activeOpacity={1} onPress={() => setSortOpen(false)}>
-          <View style={[styles.sheet, { paddingBottom: insets.bottom + 20 }]}>
+          <View style={[styles.sheet, { paddingBottom: insets.bottom + 16 }]}>
             <View style={styles.sheetHandle} />
-            <Text style={styles.sheetTitle}>Sort by</Text>
+            <Text style={styles.sheetTitle}>Sort & filters</Text>
+
+            <Text style={styles.filterLabel}>Sort by</Text>
             {SORTS.map((s) => (
               <TouchableOpacity
                 key={s.key}
                 style={styles.sortRow}
-                onPress={() => { setSort(s.key); setSortOpen(false); }}
+                onPress={() => setSort(s.key)}
                 testID={`market-sort-${s.key}`}
               >
                 <Text style={[styles.sortRowText, sort === s.key && { color: theme.primary, fontWeight: "800" }]}>{s.label}</Text>
                 {sort === s.key && <Ionicons name="checkmark" size={18} color={theme.primary} />}
               </TouchableOpacity>
             ))}
+
+            <Text style={styles.filterLabel}>Condition</Text>
+            <View style={styles.condWrap}>
+              {[{ key: "all", label: "Any" }, ...CONDITIONS].map((c) => {
+                const a = c.key === condFilter;
+                return (
+                  <TouchableOpacity
+                    key={c.key}
+                    onPress={() => setCondFilter(c.key)}
+                    style={[styles.condChip, a && styles.condChipActive]}
+                    testID={`market-cond-${c.key}`}
+                  >
+                    <Text style={[styles.condChipText, { color: a ? theme.primary : theme.textMuted }]}>{c.label}</Text>
+                  </TouchableOpacity>
+                );
+              })}
+            </View>
+
+            <TouchableOpacity style={styles.applyBtn} onPress={() => setSortOpen(false)} testID="market-apply-filters">
+              <Text style={styles.applyText}>Show results</Text>
+            </TouchableOpacity>
           </View>
         </TouchableOpacity>
       </Modal>
@@ -407,21 +421,35 @@ const styles = StyleSheet.create({
   },
   tileImg: { width: "100%", aspectRatio: 1, backgroundColor: theme.surfaceAlt },
   tileImgPlaceholder: { alignItems: "center", justifyContent: "center" },
-  tileBody: { padding: 10, gap: 2 },
-  tilePrice: { color: theme.textPrimary, fontSize: 15, fontWeight: "800" },
-  tileTitle: { color: theme.textSecondary, fontSize: 13, lineHeight: 17 },
-  tileLoc: { color: theme.textMuted, fontSize: 11, marginTop: 2 },
+  tileBody: { paddingHorizontal: 12, paddingVertical: 11, gap: 3 },
+  tilePrice: { color: theme.textPrimary, fontSize: 17, fontWeight: "900", letterSpacing: -0.3 },
+  tileTitle: { color: theme.textPrimary, fontSize: 14, lineHeight: 18 },
+  tileLocRow: { flexDirection: "row", alignItems: "center", gap: 3, marginTop: 1 },
+  tileLoc: { color: theme.textMuted, fontSize: 11.5, flex: 1 },
   soldTag: { position: "absolute", top: 8, left: 8, backgroundColor: theme.error, paddingHorizontal: 8, paddingVertical: 3, borderRadius: 6 },
   soldTagText: { color: "#fff", fontSize: 10, fontWeight: "900", letterSpacing: 0.5 },
   savedTag: { position: "absolute", top: 8, right: 8, width: 24, height: 24, borderRadius: 12, backgroundColor: theme.primary, alignItems: "center", justifyContent: "center" },
 
-  controlsRow: { flexDirection: "row", alignItems: "center", gap: 10, paddingHorizontal: 16, paddingVertical: 6 },
-  segment: { flexDirection: "row", backgroundColor: theme.surface, borderRadius: 12, padding: 3, borderWidth: 1, borderColor: theme.border },
-  segBtn: { paddingHorizontal: 16, paddingVertical: 7, borderRadius: 9 },
-  segBtnActive: { backgroundColor: theme.surfaceAlt },
-  segText: { fontSize: 13, fontWeight: "700" },
-  sortBtn: { flex: 1, flexDirection: "row", alignItems: "center", justifyContent: "flex-end", gap: 6 },
-  sortText: { color: theme.textSecondary, fontSize: 13, fontWeight: "600" },
+  searchRow: { flexDirection: "row", alignItems: "center", gap: 10, paddingHorizontal: 16, paddingTop: 6, paddingBottom: 4 },
+  filterBtn: {
+    width: 44, height: 44, borderRadius: 14,
+    backgroundColor: theme.surface, borderWidth: 1, borderColor: theme.border,
+    alignItems: "center", justifyContent: "center",
+  },
+  filterBtnActive: { borderColor: theme.primary, backgroundColor: theme.surfaceAlt },
+  tabs: {
+    flexDirection: "row", gap: 8,
+    marginHorizontal: 16, marginTop: 6, marginBottom: 2,
+    backgroundColor: theme.surface, borderRadius: 14, padding: 4,
+    borderWidth: 1, borderColor: theme.border,
+  },
+  tab: { flex: 1, flexDirection: "row", alignItems: "center", justifyContent: "center", gap: 6, paddingVertical: 9, borderRadius: 10 },
+  tabActive: { backgroundColor: theme.surfaceAlt },
+  tabText: { fontSize: 13.5, fontWeight: "700" },
+  filterLabel: { color: theme.textMuted, fontSize: 12, fontWeight: "800", textTransform: "uppercase", letterSpacing: 0.5, marginTop: 14, marginBottom: 8 },
+  condWrap: { flexDirection: "row", flexWrap: "wrap", gap: 8 },
+  applyBtn: { marginTop: 20, paddingVertical: 14, borderRadius: 14, backgroundColor: theme.primary, alignItems: "center" },
+  applyText: { color: "#fff", fontWeight: "800", fontSize: 15 },
   condChip: {
     flexShrink: 0, height: 30, paddingHorizontal: 12, borderRadius: 15,
     backgroundColor: theme.surface, borderWidth: 1, borderColor: theme.border,
@@ -446,14 +474,14 @@ const styles = StyleSheet.create({
   sortRow: { flexDirection: "row", alignItems: "center", justifyContent: "space-between", paddingVertical: 14 },
   sortRowText: { color: theme.textPrimary, fontSize: 15, fontWeight: "600" },
   searchPill: {
-    marginHorizontal: 16, marginVertical: 8,
+    flex: 1, height: 44,
     flexDirection: "row", alignItems: "center", gap: 8,
     backgroundColor: theme.surface, borderRadius: 14,
-    paddingHorizontal: 14, paddingVertical: 10,
+    paddingHorizontal: 14,
     borderWidth: 1, borderColor: theme.border,
   },
   searchInput: {
-    flex: 1, color: theme.textPrimary, fontSize: 14,
+    flex: 1, color: theme.textPrimary, fontSize: 15,
     ...(Platform.OS === "web" ? ({ outlineStyle: "none" } as object) : {}),
   },
   chipRow: { gap: 8, paddingHorizontal: 16, paddingVertical: 4 },
