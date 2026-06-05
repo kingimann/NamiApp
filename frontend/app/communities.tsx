@@ -71,7 +71,8 @@ export default function CommunitiesScreen() {
         <FlatList
           data={items}
           keyExtractor={(i) => i.id}
-          contentContainerStyle={{ padding: 16, paddingBottom: insets.bottom + 90, gap: 12 }}
+          style={{ flex: 1 }}
+          contentContainerStyle={{ flexGrow: 1, padding: 16, paddingBottom: insets.bottom + 90, gap: 12 }}
           refreshControl={<RefreshControl refreshing={refreshing} onRefresh={() => { setRefreshing(true); load(); }} tintColor={theme.primary} />}
           ListEmptyComponent={
             <View style={styles.empty}>

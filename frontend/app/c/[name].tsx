@@ -95,7 +95,8 @@ export default function CommunityScreen() {
         <FlatList
           data={posts}
           keyExtractor={(i) => i.id}
-          contentContainerStyle={{ paddingBottom: insets.bottom + 90 }}
+          style={{ flex: 1 }}
+          contentContainerStyle={{ flexGrow: 1, paddingBottom: insets.bottom + 90 }}
           refreshControl={<RefreshControl refreshing={refreshing} onRefresh={() => { setRefreshing(true); load(); }} tintColor={theme.primary} />}
           ListHeaderComponent={
             community ? (
