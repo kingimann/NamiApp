@@ -162,6 +162,10 @@ async def update_me(body: ProfilePatch, authorization: Optional[str] = Header(No
         patch["payout_frequency"] = body.payout_frequency
     if body.payout_threshold is not None:
         patch["payout_threshold"] = max(0.0, round(float(body.payout_threshold), 2))
+    if body.default_comment_policy in ("everyone", "followers", "friends", "nobody"):
+        patch["default_comment_policy"] = body.default_comment_policy
+    if body.default_likes_disabled is not None:
+        patch["default_likes_disabled"] = bool(body.default_likes_disabled)
     if patch:
         await db.users.update_one({"user_id": user["user_id"]}, {"$set": patch})
     updated = await db.users.find_one({"user_id": user["user_id"]}, {"_id": 0})

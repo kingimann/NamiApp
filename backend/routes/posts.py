@@ -6,7 +6,7 @@ import uuid
 from fastapi import APIRouter, Header, HTTPException, Query
 from db import DuplicateKeyError
 
-from core import db, get_current_user, is_mod
+from core import db, get_current_user, is_mod, is_admin
 from models import (
     LinkPreview, Poll, PollOption, Post, PostAuthor, PostCreate, PostMedia,
     PostPatch, PublicUser, ReportCreate, PromoteCreate,
@@ -25,6 +25,28 @@ _HASHTAG_RE = re.compile(r"(?<![A-Za-z0-9_])#([A-Za-z0-9_]{1,50})")
 
 def _extract_hashtags(text: str) -> list:
     return list({m.group(1).lower() for m in _HASHTAG_RE.finditer(text or "")})
+
+
+COMMENT_POLICIES = {"everyone", "followers", "friends", "nobody"}
+
+
+async def _viewer_can_comment(post: dict, viewer_id: Optional[str]) -> bool:
+    """Whether `viewer_id` may comment on `post`, per its comment policy."""
+    author = post.get("user_id")
+    if viewer_id and viewer_id == author:
+        return True   # authors can always reply on their own posts
+    policy = post.get("comment_policy") or "everyone"
+    if policy == "everyone":
+        return True
+    if policy == "nobody" or not viewer_id:
+        return policy == "everyone"
+    if policy == "followers":
+        return bool(await db.follows.find_one(
+            {"follower_id": viewer_id, "followee_id": author}, {"_id": 0, "follower_id": 1}))
+    if policy == "friends":
+        a, b = sorted([viewer_id, author])
+        return bool(await db.friendships.find_one({"a": a, "b": b}, {"_id": 0, "a": 1}))
+    return True
 
 
 def _hydrate_poll(poll_doc: dict, viewer_id: Optional[str], votes: dict) -> Poll:
@@ -155,6 +177,9 @@ async def _hydrate_post(doc: dict, viewer_id: Optional[str]) -> Post:
         quotes_count=doc.get("quotes_count", 0),
         bookmarks_count=doc.get("bookmarks_count", 0),
         views_count=doc.get("views_count", 0),
+        likes_disabled=bool(doc.get("likes_disabled", False)),
+        comment_policy=doc.get("comment_policy") or "everyone",
+        can_comment=await _viewer_can_comment(doc, viewer_id),
         liked_by_me=liked,
         disliked_by_me=disliked,
         reposted_by_me=reposted,
@@ -205,6 +230,8 @@ async def create_post(body: PostCreate, authorization: Optional[str] = Header(No
         parent = await db.posts.find_one({"id": body.parent_id}, {"_id": 0})
         if not parent:
             raise HTTPException(status_code=404, detail="Parent post not found")
+        if not await _viewer_can_comment(parent, user["user_id"]):
+            raise HTTPException(status_code=403, detail="The author has limited who can comment on this post")
         parent_id = body.parent_id
     quote_of = None
     if body.quote_of:
@@ -217,6 +244,15 @@ async def create_post(body: PostCreate, authorization: Optional[str] = Header(No
             if not target:
                 raise HTTPException(status_code=404, detail="Quoted post not found")
         quote_of = target["id"]
+
+    # Privacy: per-post overrides fall back to the author's defaults.
+    likes_disabled = (
+        bool(body.likes_disabled) if body.likes_disabled is not None
+        else bool(user.get("default_likes_disabled", False))
+    )
+    comment_policy = (body.comment_policy or user.get("default_comment_policy") or "everyone")
+    if comment_policy not in COMMENT_POLICIES:
+        comment_policy = "everyone"
 
     hashtags = _extract_hashtags(text)
     poll_doc = None
@@ -249,6 +285,8 @@ async def create_post(body: PostCreate, authorization: Optional[str] = Header(No
         "hashtags": hashtags,
         "community_id": community_id,
         "title": title,
+        "likes_disabled": likes_disabled,
+        "comment_policy": comment_policy,
         "likes_count": 0,
         "replies_count": 0,
         "reposts_count": 0,
@@ -514,6 +552,8 @@ async def toggle_like(post_id: str, authorization: Optional[str] = Header(None))
         await db.post_likes.delete_one({"post_id": post_id, "user_id": user["user_id"]})
         await db.posts.update_one({"id": post_id}, {"$inc": {"likes_count": -1}})
     else:
+        if doc.get("likes_disabled"):
+            raise HTTPException(status_code=403, detail="Likes are turned off for this post")
         # Like and dislike are mutually exclusive — clear any dislike first.
         dis = await db.post_dislikes.find_one({"post_id": post_id, "user_id": user["user_id"]}, {"_id": 0})
         if dis:
@@ -795,6 +835,44 @@ async def record_view(post_id: str, authorization: Optional[str] = Header(None))
         return {"viewed": True}
     except DuplicateKeyError:
         return {"viewed": False}
+
+
+@router.get("/posts/{post_id}/viewers")
+async def post_viewers(post_id: str, authorization: Optional[str] = Header(None)):
+    """List who viewed a post — visible only to the post's author (or a mod)."""
+    user = await get_current_user(authorization)
+    doc = await db.posts.find_one({"id": post_id}, {"_id": 0, "user_id": 1, "views_count": 1})
+    if not doc:
+        raise HTTPException(status_code=404, detail="Post not found")
+    if doc["user_id"] != user["user_id"] and not (is_mod(user) or is_admin(user)):
+        raise HTTPException(status_code=403, detail="Only the author can see who viewed this post")
+    rows = await db.post_views.find(
+        {"post_id": post_id}, {"_id": 0}
+    ).sort("created_at", -1).limit(300).to_list(300)
+    ordered, seen = [], set()
+    for r in rows:
+        vid = r.get("user_id")
+        if not vid or vid == doc["user_id"] or vid in seen:
+            continue
+        seen.add(vid)
+        ordered.append((vid, r.get("created_at")))
+    ids = [v for v, _ in ordered]
+    umap = {}
+    if ids:
+        urows = await db.users.find(
+            {"user_id": {"$in": ids}},
+            {"_id": 0, "user_id": 1, "name": 1, "username": 1, "picture": 1, "verified": 1},
+        ).to_list(len(ids))
+        umap = {u["user_id"]: u for u in urows}
+    viewers = [{
+        "user_id": vid,
+        "name": (umap.get(vid) or {}).get("name", "User"),
+        "username": (umap.get(vid) or {}).get("username"),
+        "picture": (umap.get(vid) or {}).get("picture"),
+        "verified": bool((umap.get(vid) or {}).get("verified", False)),
+        "viewed_at": when,
+    } for vid, when in ordered]
+    return {"count": int(doc.get("views_count", 0) or 0), "unique": len(viewers), "viewers": viewers}
 
 
 @router.post("/posts/{post_id}/report")
