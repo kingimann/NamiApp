@@ -157,6 +157,10 @@ export const api = {
     request<Post>("/posts", { method: "POST", body: JSON.stringify(body) }),
   editPost: (id: string, body: { text?: string; media?: PostMedia[] }) =>
     request<Post>(`/posts/${id}`, { method: "PATCH", body: JSON.stringify(body) }),
+  reportPost: (id: string, reason?: string) =>
+    request<{ ok: boolean }>(`/posts/${id}/report`, {
+      method: "POST", body: JSON.stringify({ reason: reason || "other" }),
+    }),
   deletePost: (id: string) =>
     request<{ ok: boolean }>(`/posts/${id}`, { method: "DELETE" }),
   getPost: (id: string) => request<Post>(`/posts/${id}`),
@@ -200,14 +204,26 @@ export const api = {
   listFriendRequests: () => request<PublicUser[]>(`/friends/requests`),
 
   // Marketplace
-  listListings: (params?: { category?: string; q?: string }) => {
+  listListings: (params?: { category?: string; q?: string; condition?: string; min_price?: number; max_price?: number; sort?: string }) => {
     const qs = new URLSearchParams();
     if (params?.category) qs.set("category", params.category);
     if (params?.q) qs.set("q", params.q);
+    if (params?.condition) qs.set("condition", params.condition);
+    if (params?.min_price != null) qs.set("min_price", String(params.min_price));
+    if (params?.max_price != null) qs.set("max_price", String(params.max_price));
+    if (params?.sort) qs.set("sort", params.sort);
     return request<Listing[]>(`/listings${qs.toString() ? "?" + qs.toString() : ""}`);
   },
+  listSavedListings: () => request<Listing[]>("/listings/saved"),
+  getListing: (id: string) => request<Listing>(`/listings/${id}`),
   createListing: (body: ListingCreate) =>
     request<Listing>("/listings", { method: "POST", body: JSON.stringify(body) }),
+  updateListing: (id: string, body: Partial<ListingCreate> & { status?: string }) =>
+    request<Listing>(`/listings/${id}`, { method: "PATCH", body: JSON.stringify(body) }),
+  saveListing: (id: string) =>
+    request<{ ok: boolean; saved: boolean }>(`/listings/${id}/save`, { method: "POST" }),
+  unsaveListing: (id: string) =>
+    request<{ ok: boolean; saved: boolean }>(`/listings/${id}/save`, { method: "DELETE" }),
   deleteListing: (id: string) =>
     request<{ ok: boolean }>(`/listings/${id}`, { method: "DELETE" }),
   contactSeller: (id: string) =>
@@ -295,14 +311,21 @@ export type Listing = {
   id: string; user_id: string;
   seller: PostAuthor;
   title: string; price: number; currency: string; category: string;
+  condition?: string | null;
   description?: string | null;
   photo_base64?: string | null;
+  photos?: string[];
   longitude?: number | null; latitude?: number | null; locality?: string | null;
-  status: string; created_at: string;
+  status: string;
+  views_count?: number;
+  saved_count?: number;
+  saved_by_me?: boolean;
+  created_at: string;
 };
 export type ListingCreate = {
   title: string; price?: number; currency?: string; category?: string;
-  description?: string; photo_base64?: string;
+  condition?: string;
+  description?: string; photo_base64?: string; photos?: string[];
   longitude?: number; latitude?: number; locality?: string;
 };
 
@@ -394,15 +417,19 @@ export type FsqProfile = {
   photo?: string | null;
   distance?: number | null;
 };
+export type MsgType = "text" | "place" | "media" | "voice" | "post" | "gif" | "file" | "contact";
 export type Message = {
   id: string; conversation_id: string; sender_id: string;
-  type: "text" | "place" | "media" | "voice" | "post"; text?: string;
+  type: MsgType; text?: string;
   place_name?: string; place_address?: string;
   place_longitude?: number; place_latitude?: number;
   media?: PostMedia[];
   audio_base64?: string | null;
   audio_duration_ms?: number | null;
   post_id?: string | null;
+  gif_url?: string | null;
+  file_base64?: string | null; file_name?: string | null; file_size?: number | null; file_mime?: string | null;
+  contact_user_id?: string | null; contact_name?: string | null; contact_picture?: string | null;
   link_preview?: LinkPreview | null;
   deleted?: boolean;
   edited_at?: string | null;
@@ -410,13 +437,16 @@ export type Message = {
   created_at: string;
 };
 export type MessageCreate = {
-  type: "text" | "place" | "media" | "voice" | "post"; text?: string;
+  type: MsgType; text?: string;
   place_name?: string; place_address?: string;
   place_longitude?: number; place_latitude?: number;
   media?: PostMedia[];
   audio_base64?: string;
   audio_duration_ms?: number;
   post_id?: string;
+  gif_url?: string;
+  file_base64?: string; file_name?: string; file_size?: number; file_mime?: string;
+  contact_user_id?: string; contact_name?: string; contact_picture?: string;
 };
 export type ConversationView = {
   id: string;

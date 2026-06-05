@@ -149,7 +149,7 @@ class Review(BaseModel):
 
 
 class MessageCreate(BaseModel):
-    type: Literal["text", "place", "media", "voice", "post"] = "text"
+    type: Literal["text", "place", "media", "voice", "post", "gif", "file", "contact"] = "text"
     text: Optional[str] = ""
     place_name: Optional[str] = None
     place_address: Optional[str] = None
@@ -159,10 +159,22 @@ class MessageCreate(BaseModel):
     audio_base64: Optional[str] = None       # voice note (data URI or raw base64)
     audio_duration_ms: Optional[int] = None  # length of the voice note
     post_id: Optional[str] = None            # shared post (type == "post")
+    gif_url: Optional[str] = None            # type == "gif"
+    file_base64: Optional[str] = None        # type == "file" (data URI)
+    file_name: Optional[str] = None
+    file_size: Optional[int] = None
+    file_mime: Optional[str] = None
+    contact_user_id: Optional[str] = None    # type == "contact" (an app user)
+    contact_name: Optional[str] = None
+    contact_picture: Optional[str] = None
 
 
 class MessageEdit(BaseModel):
     text: str
+
+
+class ReportCreate(BaseModel):
+    reason: Optional[str] = "other"
 
 
 class Message(BaseModel):
@@ -179,6 +191,14 @@ class Message(BaseModel):
     audio_base64: Optional[str] = None       # voice note
     audio_duration_ms: Optional[int] = None  # length of the voice note
     post_id: Optional[str] = None            # shared post (type == "post")
+    gif_url: Optional[str] = None            # type == "gif"
+    file_base64: Optional[str] = None        # type == "file"
+    file_name: Optional[str] = None
+    file_size: Optional[int] = None
+    file_mime: Optional[str] = None
+    contact_user_id: Optional[str] = None    # type == "contact"
+    contact_name: Optional[str] = None
+    contact_picture: Optional[str] = None
     link_preview: Optional[dict] = None      # OpenGraph preview for links in text
     deleted: bool = False                    # soft-deleted tombstone
     reactions: dict = {}              # {user_id: emoji}
@@ -258,8 +278,10 @@ class ListingCreate(BaseModel):
     price: float = 0
     currency: str = "USD"
     category: str = "other"
+    condition: Optional[str] = "used"   # new | like_new | good | fair | used
     description: Optional[str] = ""
-    photo_base64: Optional[str] = None
+    photo_base64: Optional[str] = None   # back-compat single photo
+    photos: Optional[List[str]] = None   # gallery (data URIs)
     longitude: Optional[float] = None
     latitude: Optional[float] = None
     locality: Optional[str] = None
@@ -270,8 +292,10 @@ class ListingPatch(BaseModel):
     price: Optional[float] = None
     currency: Optional[str] = None
     category: Optional[str] = None
+    condition: Optional[str] = None
     description: Optional[str] = None
     photo_base64: Optional[str] = None
+    photos: Optional[List[str]] = None
     status: Optional[Literal["active", "sold"]] = None
 
 
@@ -283,12 +307,17 @@ class Listing(BaseModel):
     price: float
     currency: str = "USD"
     category: str
+    condition: Optional[str] = "used"
     description: Optional[str] = ""
     photo_base64: Optional[str] = None
+    photos: List[str] = []
     longitude: Optional[float] = None
     latitude: Optional[float] = None
     locality: Optional[str] = None
     status: str = "active"
+    views_count: int = 0
+    saved_count: int = 0
+    saved_by_me: bool = False
     created_at: datetime
 
 

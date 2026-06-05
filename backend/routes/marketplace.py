@@ -20,25 +20,57 @@ from services.encryption import encrypt_text, decrypt_text
 router = APIRouter()
 
 
-async def _hydrate_listing(doc: dict) -> Listing:
+async def _hydrate_listing(
+    doc: dict, viewer_id: Optional[str] = None,
+    saved_ids: Optional[set] = None, with_counts: bool = False,
+) -> Listing:
     author_doc = await db.users.find_one({"user_id": doc["user_id"]}, {"_id": 0})
     seller = PostAuthor(
         user_id=doc["user_id"],
         name=author_doc.get("name", "Unknown") if author_doc else "Unknown",
         picture=author_doc.get("picture") if author_doc else None,
     )
+    photos = doc.get("photos") or ([doc["photo_base64"]] if doc.get("photo_base64") else [])
+    if saved_ids is not None:
+        saved_by_me = doc["id"] in saved_ids
+    elif viewer_id:
+        saved_by_me = bool(await db.listing_saves.find_one(
+            {"listing_id": doc["id"], "user_id": viewer_id}, {"_id": 0, "id": 1}))
+    else:
+        saved_by_me = False
+    saved_count = await db.listing_saves.count_documents({"listing_id": doc["id"]}) if with_counts else 0
     return Listing(
         id=doc["id"], user_id=doc["user_id"], seller=seller,
         title=doc["title"], price=doc.get("price", 0),
         currency=doc.get("currency", "USD"),
         category=doc.get("category", "other"),
+        condition=doc.get("condition", "used"),
         description=doc.get("description", ""),
         photo_base64=doc.get("photo_base64"),
+        photos=photos,
         longitude=doc.get("longitude"), latitude=doc.get("latitude"),
         locality=doc.get("locality"),
         status=doc.get("status", "active"),
+        views_count=doc.get("views_count", 0),
+        saved_count=saved_count,
+        saved_by_me=saved_by_me,
         created_at=doc["created_at"],
     )
+
+
+async def _saved_ids_for(user_id: str) -> set:
+    rows = await db.listing_saves.find({"user_id": user_id}, {"_id": 0, "listing_id": 1}).to_list(1000)
+    return {r["listing_id"] for r in rows if r.get("listing_id")}
+
+
+_MEDIA_LIMIT = 8 * 1024 * 1024
+
+
+def _clean_photos(body) -> list:
+    photos = list(body.photos or [])
+    if not photos and getattr(body, "photo_base64", None):
+        photos = [body.photo_base64]
+    return [p for p in photos[:6] if p and len(p) <= _MEDIA_LIMIT]
 
 
 @router.post("/listings", response_model=Listing)
@@ -49,6 +81,7 @@ async def create_listing(body: ListingCreate, authorization: Optional[str] = Hea
         raise HTTPException(status_code=400, detail="Title required")
     if body.price < 0:
         raise HTTPException(status_code=400, detail="Price must be ≥ 0")
+    photos = _clean_photos(body)
     doc = {
         "id": str(uuid.uuid4()),
         "user_id": user["user_id"],
@@ -56,16 +89,19 @@ async def create_listing(body: ListingCreate, authorization: Optional[str] = Hea
         "price": float(body.price),
         "currency": (body.currency or "USD")[:8],
         "category": body.category or "other",
+        "condition": body.condition or "used",
         "description": (body.description or "")[:2000],
-        "photo_base64": body.photo_base64,
+        "photo_base64": photos[0] if photos else None,
+        "photos": photos,
         "longitude": body.longitude,
         "latitude": body.latitude,
         "locality": (body.locality or "")[:120],
         "status": "active",
+        "views_count": 0,
         "created_at": datetime.now(timezone.utc),
     }
     await db.listings.insert_one(doc.copy())
-    return await _hydrate_listing(doc)
+    return await _hydrate_listing(doc, viewer_id=user["user_id"])
 
 
 @router.get("/listings", response_model=List[Listing])
@@ -73,40 +109,104 @@ async def list_listings(
     category: Optional[str] = Query(None),
     q: Optional[str] = Query(None),
     status: Optional[str] = Query("active"),
+    condition: Optional[str] = Query(None),
+    min_price: Optional[float] = Query(None),
+    max_price: Optional[float] = Query(None),
+    sort: Optional[str] = Query("recent"),  # recent | price_low | price_high
     authorization: Optional[str] = Header(None),
 ):
-    await get_current_user(authorization)
+    user = await get_current_user(authorization)
     filt: dict = {}
-    if status:
+    if status and status != "all":
         filt["status"] = status
     if category and category != "all":
         filt["category"] = category
+    if condition and condition != "all":
+        filt["condition"] = condition
+    price_filt: dict = {}
+    if min_price is not None:
+        price_filt["$gte"] = float(min_price)
+    if max_price is not None:
+        price_filt["$lte"] = float(max_price)
+    if price_filt:
+        filt["price"] = price_filt
     if q and q.strip():
         pattern = re.escape(q.strip())
         filt["$or"] = [
             {"title": {"$regex": pattern, "$options": "i"}},
             {"description": {"$regex": pattern, "$options": "i"}},
         ]
-    cursor = db.listings.find(filt, {"_id": 0}).sort("created_at", -1).limit(100)
+    sort_field, sort_dir = "created_at", -1
+    if sort == "price_low":
+        sort_field, sort_dir = "price", 1
+    elif sort == "price_high":
+        sort_field, sort_dir = "price", -1
+    cursor = db.listings.find(filt, {"_id": 0}).sort(sort_field, sort_dir).limit(100)
     docs = await cursor.to_list(100)
-    return [await _hydrate_listing(d) for d in docs]
+    saved_ids = await _saved_ids_for(user["user_id"])
+    return [await _hydrate_listing(d, saved_ids=saved_ids) for d in docs]
+
+
+@router.get("/listings/saved", response_model=List[Listing])
+async def saved_listings(authorization: Optional[str] = Header(None)):
+    user = await get_current_user(authorization)
+    saved = await db.listing_saves.find(
+        {"user_id": user["user_id"]}, {"_id": 0, "listing_id": 1}
+    ).sort("created_at", -1).to_list(200)
+    ids = [s["listing_id"] for s in saved]
+    if not ids:
+        return []
+    docs = await db.listings.find({"id": {"$in": ids}}, {"_id": 0}).to_list(200)
+    order = {lid: i for i, lid in enumerate(ids)}
+    docs.sort(key=lambda d: order.get(d["id"], 1e9))
+    return [await _hydrate_listing(d, viewer_id=user["user_id"]) for d in docs]
 
 
 @router.get("/listings/user/{user_id}", response_model=List[Listing])
 async def listings_by_user(user_id: str, authorization: Optional[str] = Header(None)):
-    await get_current_user(authorization)
+    me = await get_current_user(authorization)
     cursor = db.listings.find({"user_id": user_id}, {"_id": 0}).sort("created_at", -1)
     docs = await cursor.to_list(100)
-    return [await _hydrate_listing(d) for d in docs]
+    saved_ids = await _saved_ids_for(me["user_id"])
+    return [await _hydrate_listing(d, saved_ids=saved_ids) for d in docs]
 
 
 @router.get("/listings/{listing_id}", response_model=Listing)
 async def get_listing(listing_id: str, authorization: Optional[str] = Header(None)):
-    await get_current_user(authorization)
+    user = await get_current_user(authorization)
     doc = await db.listings.find_one({"id": listing_id}, {"_id": 0})
     if not doc:
         raise HTTPException(status_code=404, detail="Listing not found")
-    return await _hydrate_listing(doc)
+    # Count a view (not for the owner).
+    if doc["user_id"] != user["user_id"]:
+        await db.listings.update_one({"id": listing_id}, {"$inc": {"views_count": 1}})
+        doc["views_count"] = doc.get("views_count", 0) + 1
+    return await _hydrate_listing(doc, viewer_id=user["user_id"], with_counts=True)
+
+
+@router.post("/listings/{listing_id}/save")
+async def save_listing(listing_id: str, authorization: Optional[str] = Header(None)):
+    user = await get_current_user(authorization)
+    listing = await db.listings.find_one({"id": listing_id}, {"_id": 0, "id": 1})
+    if not listing:
+        raise HTTPException(status_code=404, detail="Listing not found")
+    existing = await db.listing_saves.find_one(
+        {"listing_id": listing_id, "user_id": user["user_id"]}, {"_id": 0, "id": 1})
+    if not existing:
+        await db.listing_saves.insert_one({
+            "id": str(uuid.uuid4()),
+            "listing_id": listing_id,
+            "user_id": user["user_id"],
+            "created_at": datetime.now(timezone.utc),
+        })
+    return {"ok": True, "saved": True}
+
+
+@router.delete("/listings/{listing_id}/save")
+async def unsave_listing(listing_id: str, authorization: Optional[str] = Header(None)):
+    user = await get_current_user(authorization)
+    await db.listing_saves.delete_one({"listing_id": listing_id, "user_id": user["user_id"]})
+    return {"ok": True, "saved": False}
 
 
 @router.patch("/listings/{listing_id}", response_model=Listing)
@@ -128,16 +228,23 @@ async def patch_listing(
         patch["currency"] = body.currency[:8]
     if body.category is not None:
         patch["category"] = body.category
+    if body.condition is not None:
+        patch["condition"] = body.condition
     if body.description is not None:
         patch["description"] = body.description[:2000]
-    if body.photo_base64 is not None:
+    if body.photos is not None:
+        photos = [p for p in body.photos[:6] if p and len(p) <= _MEDIA_LIMIT]
+        patch["photos"] = photos
+        patch["photo_base64"] = photos[0] if photos else None
+    elif body.photo_base64 is not None:
         patch["photo_base64"] = body.photo_base64
+        patch["photos"] = [body.photo_base64] if body.photo_base64 else []
     if body.status is not None:
         patch["status"] = body.status
     if patch:
         await db.listings.update_one({"id": listing_id}, {"$set": patch})
     updated = await db.listings.find_one({"id": listing_id}, {"_id": 0})
-    return await _hydrate_listing(updated)
+    return await _hydrate_listing(updated, viewer_id=user["user_id"], with_counts=True)
 
 
 @router.delete("/listings/{listing_id}")
