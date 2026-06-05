@@ -208,8 +208,9 @@ class Review(BaseModel):
 
 
 class MessageCreate(BaseModel):
-    type: Literal["text", "place", "media", "voice", "post", "gif", "file", "contact"] = "text"
+    type: Literal["text", "place", "media", "voice", "post", "gif", "file", "contact", "tip"] = "text"
     text: Optional[str] = ""
+    amount: Optional[float] = None           # type == "tip"
     place_name: Optional[str] = None
     place_address: Optional[str] = None
     place_longitude: Optional[float] = None
@@ -276,6 +277,7 @@ class Message(BaseModel):
     contact_user_id: Optional[str] = None    # type == "contact"
     contact_name: Optional[str] = None
     contact_picture: Optional[str] = None
+    amount: Optional[float] = None           # type == "tip"
     link_preview: Optional[dict] = None      # OpenGraph preview for links in text
     deleted: bool = False                    # soft-deleted tombstone
     reactions: dict = {}              # {user_id: emoji}
@@ -437,6 +439,15 @@ class SellerProfile(BaseModel):
     listing_count: int = 0
     listings: List[Listing] = []
     reviewed_by_me: bool = False
+    can_review: bool = False   # viewer has a verified trade with this seller
+
+
+class TradeStart(BaseModel):
+    pass
+
+
+class TradeConfirm(BaseModel):
+    code: str
 
 
 # ---------- Posts (Newsfeed) ----------

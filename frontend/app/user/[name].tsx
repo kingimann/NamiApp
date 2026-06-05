@@ -1,6 +1,6 @@
 import React, { useCallback, useEffect, useState } from "react";
 import {
-  View, Text, StyleSheet, FlatList, TouchableOpacity, Image, ActivityIndicator,
+  View, Text, StyleSheet, FlatList, TouchableOpacity, Image, ActivityIndicator, RefreshControl,
 } from "react-native";
 import { SafeAreaView, useSafeAreaInsets } from "react-native-safe-area-context";
 import { Ionicons } from "@expo/vector-icons";
@@ -11,6 +11,7 @@ import { theme } from "@/src/theme";
 import PostCard from "@/src/components/PostCard";
 import VerifiedBadge from "@/src/components/VerifiedBadge";
 import FakePaymentSheet from "@/src/components/FakePaymentSheet";
+import { withAppleFee, appleFeeNote, isApplePlatform } from "@/src/lib/pricing";
 
 const friendBtnLabel = (s?: FriendStatus): string => {
   switch (s) {
@@ -42,8 +43,14 @@ export default function UserProfileScreen() {
   const [user, setUser] = useState<PublicUser | null>(null);
   const [posts, setPosts] = useState<Post[]>([]);
   const [loading, setLoading] = useState(true);
+  const [refreshing, setRefreshing] = useState(false);
   const [tipOpen, setTipOpen] = useState(false);
   const [subOpen, setSubOpen] = useState(false);
+
+  const goBack = () => {
+    if (router.canGoBack()) router.back();
+    else router.replace("/feed");
+  };
 
   const onSubscribe = async () => {
     if (!user) return;
@@ -60,21 +67,29 @@ export default function UserProfileScreen() {
   const load = useCallback(async () => {
     if (!name) return;
     try {
-      // Resolve by name via search (first hit)
+      // Resolve name → id via search, then fetch the FULL relationship-aware
+      // profile (is_following / friend_status / is_subscribed / stats). Search
+      // results alone omit those, which is why follow/add-friend looked broken.
       const matches = await api.searchUsers(name);
-      const found = matches.find((u) => u.name === name) || matches[0];
-      if (!found) return;
-      const [p] = await Promise.all([
-        api.listUserPosts(found.user_id),
+      let foundId = (matches.find((u) => u.name === name) || matches[0])?.user_id;
+      const fallback = matches.find((u) => u.name === name) || matches[0] || null;
+      // /users/search excludes the current user, so resolve self directly.
+      if (!foundId && me && (me.name === name || me.username === name)) foundId = me.user_id;
+      if (!foundId) return;
+      const [full, p] = await Promise.all([
+        api.getPublicUser(foundId).catch(() => fallback),
+        api.listUserPosts(foundId),
       ]);
-      setUser(found);
+      if (full) setUser(full);
       setPosts(p);
     } catch {} finally {
       setLoading(false);
+      setRefreshing(false);
     }
-  }, [name]);
+  }, [name, me]);
 
   useFocusEffect(useCallback(() => { load(); }, [load]));
+  const onRefresh = () => { setRefreshing(true); load(); };
 
   const onLike = async (p: Post) => {
     setPosts((arr) => arr.map((x) => x.id !== p.id ? x : {
@@ -116,7 +131,7 @@ export default function UserProfileScreen() {
     <SafeAreaView edges={["top"]} style={styles.root} testID="user-profile-screen">
       <Stack.Screen options={{ headerShown: false }} />
       <View style={styles.header}>
-        <TouchableOpacity onPress={() => router.back()} style={styles.backBtn}>
+        <TouchableOpacity onPress={goBack} style={styles.backBtn} hitSlop={10} testID="user-back">
           <Ionicons name="chevron-back" size={22} color={theme.textPrimary} />
         </TouchableOpacity>
         <Text style={styles.title}>@{name}</Text>
@@ -131,6 +146,9 @@ export default function UserProfileScreen() {
           data={posts}
           keyExtractor={(i) => i.id}
           contentContainerStyle={{ padding: 14, paddingBottom: insets.bottom + 24, gap: 10 }}
+          refreshControl={
+            <RefreshControl refreshing={refreshing} onRefresh={onRefresh} tintColor={theme.primary} colors={[theme.primary]} />
+          }
           ListHeaderComponent={
             <View style={styles.profileBlock}>
               <View style={styles.avatar}>
@@ -150,12 +168,8 @@ export default function UserProfileScreen() {
               {!!user.bio && <Text style={styles.bio}>{user.bio}</Text>}
               <View style={styles.statsRow}>
                 <View style={styles.statBox}>
-                  <Text style={styles.statNum}>{user.stats?.places || 0}</Text>
-                  <Text style={styles.statLabel}>Places</Text>
-                </View>
-                <View style={styles.statBox}>
-                  <Text style={styles.statNum}>{user.stats?.guides || 0}</Text>
-                  <Text style={styles.statLabel}>Guides</Text>
+                  <Text style={styles.statNum}>{posts.length}</Text>
+                  <Text style={styles.statLabel}>Posts</Text>
                 </View>
                 <View style={styles.statBox}>
                   <Text style={styles.statNum}>{user.stats?.reviews || 0}</Text>
@@ -222,7 +236,7 @@ export default function UserProfileScreen() {
                   >
                     <Ionicons name={user.is_subscribed ? "checkmark-circle" : "star"} size={15} color={user.is_subscribed ? theme.textPrimary : "#fff"} />
                     <Text style={[styles.actionBtnText, user.is_subscribed && { color: theme.textPrimary }]}>
-                      {user.is_subscribed ? "Subscribed" : `Subscribe · $${(user.sub_price ?? 0).toFixed(2)}/mo`}
+                      {user.is_subscribed ? "Subscribed" : `Subscribe · $${withAppleFee(user.sub_price ?? 0).toFixed(2)}/mo`}
                     </Text>
                   </TouchableOpacity>
                 </View>
@@ -263,7 +277,7 @@ export default function UserProfileScreen() {
           <FakePaymentSheet
             visible={tipOpen}
             title={`Tip ${user.name}`}
-            subtitle="100% goes to the creator"
+            subtitle={isApplePlatform ? `Amount the creator receives — buyer pays ${appleFeeNote}` : "100% goes to the creator"}
             amount={5}
             editableAmount
             allowNote
@@ -275,8 +289,8 @@ export default function UserProfileScreen() {
           <FakePaymentSheet
             visible={subOpen}
             title={`Subscribe to ${user.name}`}
-            subtitle="Monthly subscription — funds go to the creator"
-            amount={user.sub_price ?? 4.99}
+            subtitle={isApplePlatform ? `Monthly — ${user.name} receives $${(user.sub_price ?? 4.99).toFixed(2)} (${appleFeeNote})` : "Monthly subscription — funds go to the creator"}
+            amount={withAppleFee(user.sub_price ?? 4.99)}
             cta="Subscribe"
             successText={`You're subscribed to ${user.name}!`}
             onClose={() => setSubOpen(false)}
