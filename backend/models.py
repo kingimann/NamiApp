@@ -25,6 +25,7 @@ class User(BaseModel):
     verified: bool = False
     role: str = "user"            # user | mod | admin
     sub_price: float = 4.99       # monthly subscription price others pay this user
+    needs_policy_agreement: bool = False  # must accept current ToS/Privacy before use
     created_at: datetime
 
 

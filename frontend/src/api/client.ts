@@ -76,6 +76,8 @@ export const api = {
       "/auth/api-keys", { method: "POST", body: JSON.stringify({ label }) }),
   revokeApiKey: (id: string) =>
     request<{ revoked: boolean }>(`/auth/api-keys/${id}`, { method: "DELETE" }),
+  getPolicies: () => request<{ tos_version: string; privacy_version: string; effective_date: string }>("/policies"),
+  acceptPolicies: () => request<User>("/auth/accept-policies", { method: "POST" }),
   uploadE2EKey: (public_key: string) =>
     request<{ ok: boolean }>("/auth/keys", { method: "POST", body: JSON.stringify({ public_key }) }),
   getUserE2EKey: (user_id: string) =>
@@ -455,6 +457,7 @@ export type User = {
   verified?: boolean;
   role?: string; // user | mod | admin
   sub_price?: number;
+  needs_policy_agreement?: boolean;
 };
 export type ProfilePatch = {
   name?: string; bio?: string; picture?: string;

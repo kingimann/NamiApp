@@ -15,6 +15,8 @@ from core import (
     _user_doc_to_model,
     db,
     get_current_user,
+    TOS_VERSION,
+    PRIVACY_VERSION,
 )
 from models import AuthResponse, ProfilePatch, User
 
@@ -104,6 +106,32 @@ async def root():
 
 
 
+@router.get("/policies")
+async def get_policies():
+    """Current legal policy versions (public)."""
+    return {
+        "tos_version": TOS_VERSION,
+        "privacy_version": PRIVACY_VERSION,
+        "effective_date": TOS_VERSION,
+    }
+
+
+@router.post("/auth/accept-policies", response_model=User)
+async def accept_policies(authorization: Optional[str] = Header(None)):
+    """Record that the user agrees to the current ToS + Privacy Policy."""
+    user = await get_current_user(authorization)
+    await db.users.update_one(
+        {"user_id": user["user_id"]},
+        {"$set": {
+            "tos_version": TOS_VERSION,
+            "privacy_version": PRIVACY_VERSION,
+            "policies_agreed_at": datetime.now(timezone.utc),
+        }},
+    )
+    updated = await db.users.find_one({"user_id": user["user_id"]}, {"_id": 0})
+    return User(**_user_doc_to_model(updated))
+
+
 @router.get("/auth/me", response_model=User)
 async def me(authorization: Optional[str] = Header(None)):
     user = await get_current_user(authorization)
@@ -165,13 +193,17 @@ async def register(body: RegisterRequest):
 
     user_id = f"user_{uuid.uuid4().hex[:12]}"
     try:
+        now = datetime.now(timezone.utc)
         await db.users.insert_one({
             "user_id": user_id, "email": email, "username": username, "name": name,
             "picture": None, "bio": "",
             "hashed_password": _hash_password(body.password),
             "auth_providers": ["local"],
             "failed_login_attempts": 0, "locked_until": None,
-            "created_at": datetime.now(timezone.utc),
+            # Signing up requires agreeing to the current ToS + Privacy Policy.
+            "tos_version": TOS_VERSION, "privacy_version": PRIVACY_VERSION,
+            "policies_agreed_at": now,
+            "created_at": now,
         })
     except DuplicateKeyError:
         raise HTTPException(status_code=400, detail="Email or username taken")
