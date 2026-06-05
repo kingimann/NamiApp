@@ -160,7 +160,7 @@ export default function SellerProfileScreen() {
                   ) : (
                     <View style={[styles.tileImg, styles.tileImgPlaceholder]}><Ionicons name="image-outline" size={24} color={theme.textMuted} /></View>
                   )}
-                  <Text style={styles.tilePrice}>{l.price > 0 ? `${l.currency} ${l.price.toFixed(0)}` : "Free"}</Text>
+                  <Text style={styles.tilePrice}>{l.price > 0 ? `$${l.price.toFixed(0)}` : "Free"}</Text>
                   <Text style={styles.tileTitle} numberOfLines={1}>{l.title}</Text>
                 </TouchableOpacity>
               ))}
