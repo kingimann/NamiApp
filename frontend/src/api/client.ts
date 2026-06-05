@@ -222,6 +222,10 @@ export const api = {
     }),
   markConversationRead: (conv_id: string) =>
     request<{ ok: boolean }>(`/conversations/${conv_id}/read`, { method: "POST" }),
+  setPresence: (conv_id: string, typing: boolean) =>
+    request<{ ok: boolean }>(`/conversations/${conv_id}/presence`, { method: "POST", body: JSON.stringify({ typing }) }),
+  getPresence: (conv_id: string) =>
+    request<{ typing: boolean; active: boolean; typing_ids: string[]; active_ids: string[] }>(`/conversations/${conv_id}/presence`),
   editMessage: (conv_id: string, msg_id: string, text: string) =>
     request<Message>(`/conversations/${conv_id}/messages/${msg_id}`, {
       method: "PATCH", body: JSON.stringify({ text }),
@@ -704,6 +708,7 @@ export type Message = {
   edit_history?: { text: string; edited_at?: string | null }[];
   edited_at?: string | null;
   read_at?: string | null;
+  delivered_at?: string | null;
   created_at: string;
 };
 export type CustomEmoji = { id: string; shortcode: string; image_base64: string; owner_id: string; created_at: string };

@@ -298,6 +298,7 @@ class Message(BaseModel):
     edit_history: list = []                  # [{text, edited_at}] prior versions
     edited_at: Optional[datetime] = None
     read_at: Optional[datetime] = None  # last_read[peer] >= created_at
+    delivered_at: Optional[datetime] = None  # last_delivered[peer] >= created_at
     created_at: datetime
 
 
