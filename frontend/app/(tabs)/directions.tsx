@@ -903,93 +903,86 @@ export default function DirectionsScreen() {
           ) : routeInfo ? (
             navMode ? (
               <View style={styles.navFooter}>
-                <View style={{ flex: 1 }}>
-                  <Text style={styles.footerEta}>{formatDuration(remainingDur ?? routeInfo.duration)}</Text>
-                  <Text style={styles.footerMeta}>
-                    {formatDistance(remainingDist ?? routeInfo.distance)} · arrive {arrivalTime(remainingDur ?? routeInfo.duration)}
-                  </Text>
+                <View style={styles.navStats}>
+                  <View style={styles.navStat}>
+                    <Text style={styles.navStatValue}>{arrivalTime(remainingDur ?? routeInfo.duration)}</Text>
+                    <Text style={styles.navStatLabel}>arrival</Text>
+                  </View>
+                  <View style={styles.navStatDivider} />
+                  <View style={styles.navStat}>
+                    <Text style={styles.navStatValue}>{formatDuration(remainingDur ?? routeInfo.duration)}</Text>
+                    <Text style={styles.navStatLabel}>time</Text>
+                  </View>
+                  <View style={styles.navStatDivider} />
+                  <View style={styles.navStat}>
+                    <Text style={styles.navStatValue}>{formatDistance(remainingDist ?? routeInfo.distance)}</Text>
+                    <Text style={styles.navStatLabel}>distance</Text>
+                  </View>
                 </View>
-                <TouchableOpacity
-                  onPress={() => {
-                    const next = !voiceOn;
-                    setVoiceOn(next);
-                    if (!next) Speech.stop();
-                  }}
-                  style={[styles.iconCircle, voiceOn && { backgroundColor: "rgba(59,130,246,0.18)" }]}
-                  testID="voice-toggle"
-                >
-                  <Ionicons name={voiceOn ? "volume-high" : "volume-mute"} size={18} color={voiceOn ? theme.primary : theme.textMuted} />
-                </TouchableOpacity>
-                <TouchableOpacity
-                  onPress={() => setShowSteps((s) => !s)}
-                  style={styles.iconCircle}
-                  testID="toggle-steps"
-                >
-                  <Ionicons name="list" size={18} color={theme.textSecondary} />
-                </TouchableOpacity>
-                <TouchableOpacity onPress={exitNav} style={styles.endBtn} testID="end-route-btn">
-                  <Text style={styles.endBtnText}>End</Text>
-                </TouchableOpacity>
+                <View style={styles.navControls}>
+                  <TouchableOpacity
+                    onPress={() => {
+                      const next = !voiceOn;
+                      setVoiceOn(next);
+                      if (!next) Speech.stop();
+                    }}
+                    style={[styles.iconCircle, voiceOn && { backgroundColor: "rgba(0,168,132,0.18)", borderColor: theme.primary }]}
+                    testID="voice-toggle"
+                  >
+                    <Ionicons name={voiceOn ? "volume-high" : "volume-mute"} size={18} color={voiceOn ? theme.primary : theme.textMuted} />
+                  </TouchableOpacity>
+                  <TouchableOpacity
+                    onPress={() => setShowSteps((s) => !s)}
+                    style={styles.iconCircle}
+                    testID="toggle-steps"
+                  >
+                    <Ionicons name="list" size={18} color={theme.textSecondary} />
+                  </TouchableOpacity>
+                  <View style={{ flex: 1 }} />
+                  <TouchableOpacity onPress={exitNav} style={styles.endBtn} testID="end-route-btn">
+                    <Text style={styles.endBtnText}>End</Text>
+                  </TouchableOpacity>
+                </View>
               </View>
             ) : (
               <>
-                <TouchableOpacity
-                  style={styles.routeBox}
-                  onPress={() => setShowSteps((s) => !s)}
-                  testID="route-summary"
-                  activeOpacity={0.85}
-                >
-                  <View>
-                    {routes.length <= 1 && (
-                      <Text style={styles.routeDuration}>{formatDuration(routeInfo.duration)}</Text>
-                    )}
-                    <Text style={styles.routeDistance}>
-                      {formatDistance(routeInfo.distance)} · {steps.length} steps · arrive {arrivalTime(routeInfo.duration)}
-                    </Text>
-                  </View>
-                  <View style={{ flexDirection: "row", alignItems: "center", gap: 4 }}>
-                    <Text style={styles.stepsToggleHint}>{showSteps ? "Hide steps" : "Steps"}</Text>
-                    <Ionicons
-                      name={showSteps ? "chevron-down" : "chevron-up"}
-                      size={18}
-                      color={theme.textSecondary}
-                    />
-                  </View>
-                </TouchableOpacity>
-                <View style={{ gap: 10 }}>
+                <View style={styles.goRow}>
                   <TouchableOpacity
-                    style={styles.startBtn}
+                    style={{ flex: 1 }}
+                    onPress={() => setShowSteps((s) => !s)}
+                    testID="route-summary"
+                    activeOpacity={0.7}
+                  >
+                    <Text style={styles.goDur}>{formatDuration(routeInfo.duration)}</Text>
+                    <Text style={styles.goSub}>
+                      {arrivalTime(routeInfo.duration)} ETA · {formatDistance(routeInfo.distance)}
+                      {routes.length > 1 &&
+                      selectedRouteIdx === routes.reduce((m, x, j, arr) => (x.duration < arr[m].duration ? j : m), 0)
+                        ? " · Fastest"
+                        : ""}
+                    </Text>
+                  </TouchableOpacity>
+                  <TouchableOpacity
+                    style={styles.goBtn}
                     onPress={startNavigation}
                     testID="start-nav"
                     activeOpacity={0.85}
                   >
-                    <Ionicons name="navigate" size={18} color="#fff" />
-                    <Text style={styles.startBtnText}>Start Navigation</Text>
+                    <Text style={styles.goText}>GO</Text>
                   </TouchableOpacity>
+                </View>
+                <View style={styles.goLinks}>
+                  <TouchableOpacity onPress={() => setShowSteps((s) => !s)} testID="toggle-steps-link" hitSlop={8}>
+                    <Text style={styles.linkText}>{showSteps ? "Hide steps" : `${steps.length} steps`}</Text>
+                  </TouchableOpacity>
+                  <Text style={styles.linkDot}>·</Text>
                   {!etaShare ? (
-                    <TouchableOpacity
-                      style={styles.secondaryBtn}
-                      onPress={shareEta}
-                      disabled={sharingEta}
-                      testID="share-eta-btn"
-                      activeOpacity={0.85}
-                    >
-                      {sharingEta ? <ActivityIndicator color={theme.primary} /> : (
-                        <>
-                          <Ionicons name="share-social" size={16} color={theme.primary} />
-                          <Text style={styles.secondaryBtnText}>Share live ETA</Text>
-                        </>
-                      )}
+                    <TouchableOpacity onPress={shareEta} disabled={sharingEta} testID="share-eta-btn" hitSlop={8}>
+                      <Text style={styles.linkText}>{sharingEta ? "Sharing…" : "Share live ETA"}</Text>
                     </TouchableOpacity>
                   ) : (
-                    <TouchableOpacity
-                      style={styles.secondaryBtn}
-                      onPress={stopEtaShare}
-                      testID="stop-eta-btn"
-                      activeOpacity={0.85}
-                    >
-                      <Ionicons name="stop-circle" size={16} color={theme.error} />
-                      <Text style={[styles.secondaryBtnText, { color: theme.error }]}>Stop sharing ETA</Text>
+                    <TouchableOpacity onPress={stopEtaShare} testID="stop-eta-btn" hitSlop={8}>
+                      <Text style={[styles.linkText, { color: theme.error }]}>Stop sharing ETA</Text>
                     </TouchableOpacity>
                   )}
                 </View>
@@ -1231,13 +1224,28 @@ const styles = StyleSheet.create({
   },
   secondaryBtnText: { color: theme.primary, fontSize: 14, fontWeight: "700" },
 
-  // Navigation footer
-  navFooter: {
-    flexDirection: "row", alignItems: "center", gap: 10,
-    paddingVertical: 6,
+  // Apple-style GO row
+  goRow: { flexDirection: "row", alignItems: "center", gap: 16 },
+  goDur: { color: theme.textPrimary, fontSize: 27, fontWeight: "800", letterSpacing: -0.6 },
+  goSub: { color: theme.textSecondary, fontSize: 14, marginTop: 2, fontWeight: "500" },
+  goBtn: {
+    width: 74, height: 74, borderRadius: 37,
+    backgroundColor: theme.primary,
+    alignItems: "center", justifyContent: "center",
   },
-  footerEta: { color: theme.textPrimary, fontSize: 22, fontWeight: "800", letterSpacing: -0.5 },
-  footerMeta: { color: theme.textSecondary, fontSize: 12, marginTop: 2 },
+  goText: { color: "#fff", fontSize: 22, fontWeight: "800", letterSpacing: 0.5 },
+  goLinks: { flexDirection: "row", alignItems: "center", gap: 10 },
+  linkText: { color: theme.primary, fontSize: 14, fontWeight: "600" },
+  linkDot: { color: theme.textMuted, fontSize: 14 },
+
+  // Navigation footer
+  navFooter: { gap: 14, paddingTop: 2 },
+  navStats: { flexDirection: "row", alignItems: "center" },
+  navStat: { flex: 1, alignItems: "center" },
+  navStatDivider: { width: 1, height: 30, backgroundColor: theme.border },
+  navStatValue: { color: theme.textPrimary, fontSize: 21, fontWeight: "800", letterSpacing: -0.4 },
+  navStatLabel: { color: theme.textMuted, fontSize: 11.5, marginTop: 3, textTransform: "uppercase", letterSpacing: 0.4 },
+  navControls: { flexDirection: "row", alignItems: "center", gap: 10 },
   iconCircle: {
     width: 44, height: 44, borderRadius: 22,
     backgroundColor: theme.surface, borderWidth: 1, borderColor: theme.border,
