@@ -406,6 +406,23 @@ async def stripe_webhook(request: Request):
                     "amount": net, "status": "active", "source": "stripe",
                     "started_at": now, "renews_at": now + timedelta(days=30), "created_at": now,
                 })
+            # Receipt to the creator (in-app + email).
+            try:
+                from routes.notifications import emit_notification
+                await emit_notification(user_id=creator_id, actor_id=buyer_id,
+                                        ntype="subscribe" if kind == "subscription" else "tip",
+                                        message=f"${net:.2f} {'subscription' if kind == 'subscription' else 'tip'} received")
+            except Exception:
+                pass
+            try:
+                from services.email import send_email
+                cre = await db.users.find_one({"user_id": creator_id}, {"_id": 0, "email": 1, "name": 1})
+                if cre and cre.get("email"):
+                    send_email(cre["email"], f"You received ${net:.2f}",
+                               f"Hi {cre.get('name', 'there')},\n\nYou received a ${net:.2f} "
+                               f"{'subscription' if kind == 'subscription' else 'tip'} on Nami. It's in your balance.")
+            except Exception:
+                pass
             # DM tip → drop an inline tip receipt into the conversation.
             conv_id = meta.get("conversation_id")
             if kind == "tip" and conv_id and buyer_id:

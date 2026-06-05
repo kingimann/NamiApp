@@ -1,7 +1,7 @@
 import React, { useCallback, useEffect, useState } from "react";
 import {
   View, Text, StyleSheet, ScrollView, TouchableOpacity, TextInput,
-  ActivityIndicator, Platform, Linking, Alert,
+  ActivityIndicator, Platform, Linking, Alert, Share,
 } from "react-native";
 import { SafeAreaView, useSafeAreaInsets } from "react-native-safe-area-context";
 import { Ionicons } from "@expo/vector-icons";
@@ -52,6 +52,25 @@ export default function WalletScreen() {
     setRunningPayout(true);
     try { await api.runPayouts(); await load(); } catch {} finally { setRunningPayout(false); }
   };
+  const [exporting, setExporting] = useState(false);
+  const exportCsv = async () => {
+    setExporting(true);
+    try {
+      const { filename, csv } = await api.exportWallet();
+      if (Platform.OS === "web" && typeof document !== "undefined") {
+        const blob = new Blob([csv], { type: "text/csv" });
+        const url = URL.createObjectURL(blob);
+        const a = document.createElement("a");
+        a.href = url; a.download = filename; a.click();
+        URL.revokeObjectURL(url);
+      } else {
+        await Share.share({ message: csv, title: filename });
+      }
+    } catch (e: any) {
+      Alert.alert("Export failed", String(e?.message || e).replace(/^\d{3}:\s*/, ""));
+    } finally { setExporting(false); }
+  };
+
   const saveThreshold = async () => {
     setSavingThreshold(true);
     try { await api.updateMe({ payout_threshold: Math.max(0, Number(threshold) || 0) }); if (typeof refresh === "function") await refresh(); }
@@ -90,7 +109,9 @@ export default function WalletScreen() {
           <Ionicons name="chevron-back" size={24} color={theme.textPrimary} />
         </TouchableOpacity>
         <Text style={styles.title}>Wallet</Text>
-        <View style={{ width: 40 }} />
+        <TouchableOpacity onPress={exportCsv} style={styles.iconBtn} disabled={exporting} testID="wallet-export">
+          {exporting ? <ActivityIndicator color={theme.primary} size="small" /> : <Ionicons name="download-outline" size={22} color={theme.textPrimary} />}
+        </TouchableOpacity>
       </View>
 
       {loading ? (

@@ -290,6 +290,7 @@ export const api = {
     request<Post>(`/posts/${id}/promote`, { method: "POST", body: JSON.stringify({ days, ...(opts || {}) }) }),
   getCampaigns: () => request<{ campaigns: AdCampaign[] }>("/ads/campaigns"),
   getAdRevenue: () => request<AdRevenue>("/admin/ad-revenue"),
+  exportWallet: () => request<{ filename: string; csv: string }>("/wallet/export"),
   getPayouts: () => request<PayoutInfo>("/payouts"),
   runPayouts: () => request<{ payouts_created: number; total_paid: number }>("/payouts/run", { method: "POST" }),
   pinPost: (id: string) =>
