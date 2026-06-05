@@ -16,7 +16,7 @@ from fastapi import APIRouter, Header, HTTPException, Query, Request
 from fastapi.responses import HTMLResponse, RedirectResponse, Response
 from pydantic import BaseModel
 
-from core import db, get_current_user, require_account_age
+from core import db, get_current_user, require_account_age, MONETIZE_MIN_AGE_DAYS
 from routes.ads import bill_link_ad, _seen_recently
 
 router = APIRouter()
@@ -40,7 +40,7 @@ class SiteCreate(BaseModel):
 @router.post("/pub/sites")
 async def create_site(body: SiteCreate, authorization: Optional[str] = Header(None)):
     me = await get_current_user(authorization)
-    require_account_age(me, "monetize a site")
+    require_account_age(me, "monetize a site", MONETIZE_MIN_AGE_DAYS)
     name = (body.name or "").strip()[:120]
     if not name:
         raise HTTPException(status_code=400, detail="Site name is required")

@@ -240,8 +240,9 @@ Messages also support server-side encryption at rest regardless.
 | POST/GET/DELETE | `/ads/links` · `POST /ads/links/{id}/event` | Link ads — advertise your website |
 | POST | `/users/{id}/view` | Profile-view revenue tracking |
 
-> **Account-age gate:** creating a marketplace listing, a link ad, or a publisher
-> site requires an account **≥ 30 days old** (admins exempt) — `403 account_too_new`.
+> **Account-age gates** (env-tunable, admins exempt) — `403 account_too_new`:
+> selling on the marketplace needs **≥ 30 days**; monetizing (link ads, publisher
+> sites, ad earnings) needs **≥ 60 days**.
 
 **Publisher network** (display Nami ads on your own site & earn): `POST/GET/DELETE
 /pub/sites` (manage sites, get a `site_key`) · public `GET /pub/ad?site=` (JSON ad) ·

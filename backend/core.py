@@ -90,9 +90,11 @@ def account_age_days(d: dict) -> int:
         return 0
 
 
-# Trust gate: selling on the marketplace and any monetization (link ads,
-# publisher sites, ad earnings) require an account at least this old.
-MIN_ACCOUNT_AGE_DAYS = 30
+# Trust gates (env-tunable). Selling on the marketplace and monetizing (link
+# ads, publisher sites, ad earnings) each require a minimum account age.
+MARKETPLACE_MIN_AGE_DAYS = int(os.environ.get("MARKETPLACE_MIN_AGE_DAYS", "30") or 30)
+MONETIZE_MIN_AGE_DAYS = int(os.environ.get("MONETIZE_MIN_AGE_DAYS", "60") or 60)
+MIN_ACCOUNT_AGE_DAYS = MARKETPLACE_MIN_AGE_DAYS  # back-compat default
 
 
 def require_account_age(user: dict, action: str, days: int = MIN_ACCOUNT_AGE_DAYS):
