@@ -8,6 +8,7 @@ import { SafeAreaView, useSafeAreaInsets } from "react-native-safe-area-context"
 import { Ionicons } from "@expo/vector-icons";
 import { useFocusEffect, useRouter } from "expo-router";
 import * as ImagePicker from "expo-image-picker";
+import * as Location from "expo-location";
 import { api, Listing } from "@/src/api/client";
 import { useAuth } from "@/src/context/AuthContext";
 import { theme } from "@/src/theme";
@@ -33,11 +34,34 @@ const CONDITIONS = [
 
 const SORTS = [
   { key: "recent", label: "Most recent" },
+  { key: "nearby", label: "Nearest first" },
   { key: "price_low", label: "Price: low to high" },
   { key: "price_high", label: "Price: high to low" },
 ];
 
+const RADII = [
+  { km: 2, label: "2 km" },
+  { km: 5, label: "5 km" },
+  { km: 10, label: "10 km" },
+  { km: 25, label: "25 km" },
+  { km: 50, label: "50 km" },
+  { km: 100, label: "100 km" },
+  { km: 0, label: "Any distance" },
+];
+
+const DELIVERY = [
+  { key: "pickup", label: "Pickup", icon: "walk-outline" as const },
+  { key: "shipping", label: "Shipping", icon: "cube-outline" as const },
+  { key: "both", label: "Both", icon: "swap-horizontal-outline" as const },
+];
+
 const MAX_PHOTOS = 6;
+
+const EMPTY_DRAFT = {
+  title: "", price: "", category: "other", condition: "used", description: "",
+  photos: [] as string[], brand: "", quantity: "1", negotiable: false,
+  delivery: "pickup", lng: null as number | null, lat: null as number | null, locality: "",
+};
 
 export default function MarketplaceScreen() {
   const router = useRouter();
@@ -55,10 +79,45 @@ export default function MarketplaceScreen() {
   const [savedView, setSavedView] = useState(false);
   const [filtersOpen, setFiltersOpen] = useState(false);
   const [composeOpen, setComposeOpen] = useState(false);
-  const [draft, setDraft] = useState({ title: "", price: "", category: "other", condition: "used", description: "", photos: [] as string[] });
+  const [draft, setDraft] = useState({ ...EMPTY_DRAFT });
   const [posting, setPosting] = useState(false);
+  // Location + radius (Facebook-Marketplace style).
+  const [coords, setCoords] = useState<[number, number] | null>(null);
+  const [locality, setLocality] = useState("");
+  const [radius, setRadius] = useState(0); // km; 0 = any distance
+  const [radiusOpen, setRadiusOpen] = useState(false);
+  const [locating, setLocating] = useState(false);
 
   const filtersActive = cat !== "all" || condFilter !== "all" || sort !== "recent" || !!minPrice || !!maxPrice;
+
+  // Resolve the device location + a human-readable locality.
+  const detectLocation = useCallback(async (prompt = true): Promise<{ coords: [number, number]; locality: string } | null> => {
+    try {
+      let { status } = await Location.getForegroundPermissionsAsync();
+      if (status !== "granted") {
+        if (!prompt) return null;  // don't prompt on first mount — only on tap
+        const req = await Location.requestForegroundPermissionsAsync();
+        status = req.status;
+      }
+      if (status !== "granted") return null;
+      const pos = await Location.getCurrentPositionAsync({ accuracy: Location.Accuracy.Balanced });
+      const c: [number, number] = [pos.coords.longitude, pos.coords.latitude];
+      let loc = "";
+      try {
+        const places = await Location.reverseGeocodeAsync({ latitude: c[1], longitude: c[0] });
+        const p = places?.[0];
+        if (p) loc = [p.city || p.subregion || p.district, p.region].filter(Boolean).join(", ");
+      } catch {}
+      return { coords: c, locality: loc };
+    } catch { return null; }
+  }, []);
+
+  const useMyLocation = useCallback(async () => {
+    setLocating(true);
+    const r = await detectLocation();
+    if (r) { setCoords(r.coords); setLocality(r.locality); }
+    setLocating(false);
+  }, [detectLocation]);
 
   const load = useCallback(async () => {
     try {
@@ -69,14 +128,26 @@ export default function MarketplaceScreen() {
             condition: condFilter === "all" ? undefined : condFilter,
             min_price: minPrice ? Number(minPrice) : undefined,
             max_price: maxPrice ? Number(maxPrice) : undefined,
+            lat: coords ? coords[1] : undefined,
+            lng: coords ? coords[0] : undefined,
+            radius_km: coords && radius > 0 ? radius : undefined,
           });
       setListings(list);
     } catch {} finally { setLoading(false); setRefreshing(false); }
-  }, [cat, q, sort, condFilter, minPrice, maxPrice, savedView]);
+  }, [cat, q, sort, condFilter, minPrice, maxPrice, savedView, coords, radius]);
 
   const resetFilters = () => {
     setCat("all"); setCondFilter("all"); setSort("recent"); setMinPrice(""); setMaxPrice("");
   };
+
+  // On first mount, use the location only if permission is already granted —
+  // no prompt. Tapping "Set your location" / "Use my location" prompts.
+  useEffect(() => {
+    (async () => {
+      const r = await detectLocation(false);
+      if (r) { setCoords(r.coords); setLocality(r.locality); }
+    })();
+  }, [detectLocation]);
 
   useFocusEffect(useCallback(() => { load(); }, [load]));
   useEffect(() => { setLoading(true); load(); }, [load]);
@@ -101,6 +172,17 @@ export default function MarketplaceScreen() {
     setDraft((d) => ({ ...d, photos: [...d.photos, ...added].slice(0, MAX_PHOTOS) }));
   };
 
+  const detectDraftLocation = async () => {
+    const r = await detectLocation();
+    if (r) setDraft((d) => ({ ...d, lng: r.coords[0], lat: r.coords[1], locality: r.locality }));
+  };
+
+  const openCompose = () => {
+    // Prefill the listing location from the browse location when available.
+    setDraft((d) => (d.lat == null && coords ? { ...d, lng: coords[0], lat: coords[1], locality } : d));
+    setComposeOpen(true);
+  };
+
   const submit = async () => {
     const title = draft.title.trim();
     if (!title) return;
@@ -113,9 +195,16 @@ export default function MarketplaceScreen() {
         condition: draft.condition,
         description: draft.description.trim(),
         photos: draft.photos,
+        brand: draft.brand.trim() || undefined,
+        quantity: Math.max(1, Number(draft.quantity) || 1),
+        negotiable: draft.negotiable,
+        delivery: draft.delivery,
+        longitude: draft.lng ?? undefined,
+        latitude: draft.lat ?? undefined,
+        locality: draft.locality || undefined,
       });
       setListings((x) => [p, ...x]);
-      setDraft({ title: "", price: "", category: "other", condition: "used", description: "", photos: [] });
+      setDraft({ ...EMPTY_DRAFT });
       setComposeOpen(false);
     } catch {} finally { setPosting(false); }
   };
@@ -167,6 +256,29 @@ export default function MarketplaceScreen() {
         )}
       </View>
 
+      {!savedView && (
+        <View style={styles.locBar}>
+          <TouchableOpacity style={styles.locChip} onPress={useMyLocation} disabled={locating} testID="market-locate">
+            {locating
+              ? <ActivityIndicator size="small" color={theme.primary} />
+              : <Ionicons name="location" size={15} color={theme.primary} />}
+            <Text style={styles.locText} numberOfLines={1}>
+              {locality || (coords ? "Near you" : "Set your location")}
+            </Text>
+          </TouchableOpacity>
+          <TouchableOpacity
+            style={[styles.radiusChip, coords && radius > 0 && styles.radiusChipActive]}
+            onPress={() => setRadiusOpen(true)}
+            testID="market-radius"
+          >
+            <Ionicons name="resize" size={14} color={coords && radius > 0 ? theme.primary : theme.textSecondary} />
+            <Text style={[styles.radiusText, coords && radius > 0 && { color: theme.primary }]}>
+              {radius > 0 ? `${radius} km` : "Any"}
+            </Text>
+          </TouchableOpacity>
+        </View>
+      )}
+
       {loading ? (
         <View style={styles.center}><ActivityIndicator color={theme.primary} /></View>
       ) : (
@@ -209,14 +321,21 @@ export default function MarketplaceScreen() {
                 )}
               </View>
               <View style={styles.tileBody}>
-                <Text style={styles.tilePrice}>
-                  {item.price > 0 ? `${item.currency} ${item.price.toFixed(0)}` : "Free"}
-                </Text>
+                <View style={styles.tilePriceRow}>
+                  <Text style={styles.tilePrice}>
+                    {item.price > 0 ? `${item.currency} ${item.price.toFixed(0)}` : "Free"}
+                  </Text>
+                  {item.negotiable && <Text style={styles.oboTag}>OBO</Text>}
+                </View>
                 <Text style={styles.tileTitle} numberOfLines={2}>{item.title}</Text>
-                {!!item.locality && (
+                {(item.distance_km != null || !!item.locality) && (
                   <View style={styles.tileLocRow}>
                     <Ionicons name="location-outline" size={11} color={theme.textMuted} />
-                    <Text style={styles.tileLoc} numberOfLines={1}>{item.locality}</Text>
+                    <Text style={styles.tileLoc} numberOfLines={1}>
+                      {item.distance_km != null
+                        ? `${item.distance_km} km away${item.locality ? ` · ${item.locality}` : ""}`
+                        : item.locality}
+                    </Text>
                   </View>
                 )}
               </View>
@@ -227,7 +346,7 @@ export default function MarketplaceScreen() {
 
       <TouchableOpacity
         style={[styles.fab, { bottom: 16 }]}
-        onPress={() => setComposeOpen(true)}
+        onPress={openCompose}
         testID="new-listing-fab"
       >
         <Ionicons name="add" size={26} color="#fff" />
@@ -319,6 +438,78 @@ export default function MarketplaceScreen() {
                   })}
                 </View>
               </ScrollView>
+              <Text style={styles.label}>Brand (optional)</Text>
+              <TextInput
+                style={styles.input}
+                placeholder="e.g. Apple, IKEA, Nike"
+                placeholderTextColor={theme.textMuted}
+                value={draft.brand}
+                onChangeText={(t) => setDraft({ ...draft, brand: t })}
+                maxLength={80}
+                testID="listing-brand-input"
+              />
+
+              <View style={styles.row2}>
+                <View style={{ flex: 1 }}>
+                  <Text style={styles.label}>Quantity</Text>
+                  <View style={styles.stepper}>
+                    <TouchableOpacity
+                      style={styles.stepBtn}
+                      onPress={() => setDraft((d) => ({ ...d, quantity: String(Math.max(1, (Number(d.quantity) || 1) - 1)) }))}
+                      testID="listing-qty-minus"
+                    >
+                      <Ionicons name="remove" size={18} color={theme.textPrimary} />
+                    </TouchableOpacity>
+                    <Text style={styles.stepVal}>{draft.quantity || "1"}</Text>
+                    <TouchableOpacity
+                      style={styles.stepBtn}
+                      onPress={() => setDraft((d) => ({ ...d, quantity: String((Number(d.quantity) || 1) + 1) }))}
+                      testID="listing-qty-plus"
+                    >
+                      <Ionicons name="add" size={18} color={theme.textPrimary} />
+                    </TouchableOpacity>
+                  </View>
+                </View>
+                <View style={{ flex: 1 }}>
+                  <Text style={styles.label}>Price</Text>
+                  <TouchableOpacity
+                    style={[styles.negChip, draft.negotiable && styles.negChipOn]}
+                    onPress={() => setDraft((d) => ({ ...d, negotiable: !d.negotiable }))}
+                    testID="listing-negotiable"
+                  >
+                    <Ionicons name={draft.negotiable ? "checkmark-circle" : "ellipse-outline"} size={18} color={draft.negotiable ? theme.primary : theme.textMuted} />
+                    <Text style={[styles.negChipText, draft.negotiable && { color: theme.primary }]}>{draft.negotiable ? "Negotiable" : "Firm price"}</Text>
+                  </TouchableOpacity>
+                </View>
+              </View>
+
+              <Text style={styles.label}>Delivery</Text>
+              <View style={styles.segment}>
+                {DELIVERY.map((d) => {
+                  const a = d.key === draft.delivery;
+                  return (
+                    <TouchableOpacity
+                      key={d.key}
+                      style={[styles.segBtn, a && styles.segBtnOn]}
+                      onPress={() => setDraft((dr) => ({ ...dr, delivery: d.key }))}
+                      testID={`listing-delivery-${d.key}`}
+                    >
+                      <Ionicons name={d.icon} size={15} color={a ? "#fff" : theme.textSecondary} />
+                      <Text style={[styles.segText, { color: a ? "#fff" : theme.textSecondary }]}>{d.label}</Text>
+                    </TouchableOpacity>
+                  );
+                })}
+              </View>
+
+              <Text style={styles.label}>Location</Text>
+              <TouchableOpacity style={styles.locInput} onPress={detectDraftLocation} testID="listing-location">
+                <Ionicons name="location" size={16} color={draft.lat != null ? theme.primary : theme.textMuted} />
+                <Text style={[styles.locInputText, draft.lat != null && { color: theme.textPrimary }]} numberOfLines={1}>
+                  {draft.locality || (draft.lat != null ? "Pinned to your location" : "Tap to use my current location")}
+                </Text>
+                <Ionicons name="chevron-forward" size={16} color={theme.textMuted} />
+              </TouchableOpacity>
+
               <Text style={styles.label}>Description (optional)</Text>
               <TextInput
                 style={[styles.input, { minHeight: 80, textAlignVertical: "top" }]}
@@ -417,6 +608,37 @@ export default function MarketplaceScreen() {
           </View>
         </View>
       </Modal>
+
+      <Modal visible={radiusOpen} transparent animationType="slide" onRequestClose={() => setRadiusOpen(false)}>
+        <View style={styles.modalBackdrop}>
+          <TouchableOpacity style={StyleSheet.absoluteFill} activeOpacity={1} onPress={() => setRadiusOpen(false)} />
+          <View style={[styles.sheet, { paddingBottom: insets.bottom + 16, maxHeight: "75%" }]}>
+            <View style={styles.sheetHandle} />
+            <Text style={styles.sheetTitle}>Distance</Text>
+            <TouchableOpacity style={styles.locateRow} onPress={useMyLocation} disabled={locating} testID="radius-use-location">
+              <Ionicons name="navigate" size={16} color={theme.primary} />
+              <Text style={styles.locateRowText} numberOfLines={1}>
+                {locality ? `Using: ${locality}` : "Use my current location"}
+              </Text>
+              {locating && <ActivityIndicator size="small" color={theme.primary} />}
+            </TouchableOpacity>
+            {!coords && (
+              <Text style={styles.radiusHint}>Set your location to filter listings by distance.</Text>
+            )}
+            {RADII.map((r) => (
+              <TouchableOpacity
+                key={r.km}
+                style={styles.sortRow}
+                onPress={() => { setRadius(r.km); setRadiusOpen(false); }}
+                testID={`radius-${r.km}`}
+              >
+                <Text style={[styles.sortRowText, radius === r.km && { color: theme.primary, fontWeight: "800" }]}>{r.label}</Text>
+                {radius === r.km && <Ionicons name="checkmark" size={18} color={theme.primary} />}
+              </TouchableOpacity>
+            ))}
+          </View>
+        </View>
+      </Modal>
     </SafeAreaView>
   );
 }
@@ -446,6 +668,12 @@ const styles = StyleSheet.create({
   tileImg: { width: "100%", aspectRatio: 1, backgroundColor: theme.surfaceAlt },
   tileImgPlaceholder: { alignItems: "center", justifyContent: "center" },
   tileBody: { paddingHorizontal: 13, paddingVertical: 13, gap: 4 },
+  tilePriceRow: { flexDirection: "row", alignItems: "center", gap: 6 },
+  oboTag: {
+    color: theme.primary, fontSize: 9.5, fontWeight: "900", letterSpacing: 0.3,
+    backgroundColor: theme.surfaceAlt, borderRadius: 5, paddingHorizontal: 5, paddingVertical: 2,
+    overflow: "hidden",
+  },
   tilePrice: { color: theme.textPrimary, fontSize: 18, fontWeight: "900", letterSpacing: -0.3 },
   tileTitle: { color: theme.textPrimary, fontSize: 14.5, lineHeight: 19 },
   tileLocRow: { flexDirection: "row", alignItems: "center", gap: 3, marginTop: 1 },
@@ -563,4 +791,59 @@ const styles = StyleSheet.create({
     backgroundColor: theme.primary, alignItems: "center",
   },
   postBtnText: { color: "#fff", fontWeight: "700", fontSize: 15 },
+
+  // Location + radius bar (browse)
+  locBar: { flexDirection: "row", alignItems: "center", gap: 8, paddingHorizontal: 16, paddingBottom: 8 },
+  locChip: {
+    flex: 1, flexDirection: "row", alignItems: "center", gap: 7, height: 38,
+    backgroundColor: theme.surface, borderRadius: 12, borderWidth: 1, borderColor: theme.border,
+    paddingHorizontal: 12,
+  },
+  locText: { flex: 1, color: theme.textPrimary, fontSize: 13.5, fontWeight: "600" },
+  radiusChip: {
+    flexDirection: "row", alignItems: "center", gap: 6, height: 38,
+    backgroundColor: theme.surface, borderRadius: 12, borderWidth: 1, borderColor: theme.border,
+    paddingHorizontal: 12,
+  },
+  radiusChipActive: { borderColor: theme.primary, backgroundColor: theme.surfaceAlt },
+  radiusText: { color: theme.textSecondary, fontSize: 13, fontWeight: "700" },
+  locateRow: {
+    flexDirection: "row", alignItems: "center", gap: 10,
+    backgroundColor: theme.surfaceAlt, borderRadius: 12, borderWidth: 1, borderColor: theme.border,
+    paddingHorizontal: 14, paddingVertical: 12, marginBottom: 6,
+  },
+  locateRowText: { flex: 1, color: theme.textPrimary, fontSize: 14, fontWeight: "700" },
+  radiusHint: { color: theme.textMuted, fontSize: 12, marginBottom: 4, paddingHorizontal: 2 },
+
+  // Composer advanced fields
+  row2: { flexDirection: "row", gap: 14 },
+  stepper: {
+    flexDirection: "row", alignItems: "center", justifyContent: "space-between",
+    backgroundColor: theme.surface, borderRadius: 12, borderWidth: 1, borderColor: theme.border,
+    paddingHorizontal: 6, height: 46,
+  },
+  stepBtn: { width: 34, height: 34, borderRadius: 8, alignItems: "center", justifyContent: "center", backgroundColor: theme.surfaceAlt },
+  stepVal: { color: theme.textPrimary, fontSize: 16, fontWeight: "800" },
+  negChip: {
+    flexDirection: "row", alignItems: "center", justifyContent: "center", gap: 7, height: 46,
+    backgroundColor: theme.surface, borderRadius: 12, borderWidth: 1, borderColor: theme.border,
+  },
+  negChipOn: { borderColor: theme.primary, backgroundColor: theme.surfaceAlt },
+  negChipText: { color: theme.textSecondary, fontSize: 13.5, fontWeight: "700" },
+  segment: {
+    flexDirection: "row", gap: 6, backgroundColor: theme.surface,
+    borderRadius: 12, borderWidth: 1, borderColor: theme.border, padding: 5,
+  },
+  segBtn: {
+    flex: 1, flexDirection: "row", alignItems: "center", justifyContent: "center", gap: 6,
+    paddingVertical: 10, borderRadius: 9,
+  },
+  segBtnOn: { backgroundColor: theme.primary },
+  segText: { fontSize: 13, fontWeight: "700" },
+  locInput: {
+    flexDirection: "row", alignItems: "center", gap: 10,
+    backgroundColor: theme.surface, borderWidth: 1, borderColor: theme.border,
+    borderRadius: 12, paddingHorizontal: 14, paddingVertical: 13,
+  },
+  locInputText: { flex: 1, color: theme.textMuted, fontSize: 14 },
 });

@@ -1,7 +1,8 @@
 """Marketplace listings + contact seller."""
+import math
 import re
 from datetime import datetime, timezone
-from typing import List, Optional
+from typing import List, Optional, Tuple
 import uuid
 
 from fastapi import APIRouter, Header, HTTPException, Query
@@ -23,9 +24,31 @@ from services.encryption import encrypt_text, decrypt_text
 router = APIRouter()
 
 
+def _haversine_km(a: Tuple[float, float], b: Tuple[float, float]) -> float:
+    """Great-circle distance in km between (lng, lat) points."""
+    (lng1, lat1), (lng2, lat2) = a, b
+    r = 6371.0
+    p1, p2 = math.radians(lat1), math.radians(lat2)
+    dphi = math.radians(lat2 - lat1)
+    dlmb = math.radians(lng2 - lng1)
+    h = math.sin(dphi / 2) ** 2 + math.cos(p1) * math.cos(p2) * math.sin(dlmb / 2) ** 2
+    return 2 * r * math.asin(min(1.0, math.sqrt(h)))
+
+
+def _doc_coords(doc: dict) -> Optional[Tuple[float, float]]:
+    lng, lat = doc.get("longitude"), doc.get("latitude")
+    if lng is None or lat is None:
+        return None
+    try:
+        return (float(lng), float(lat))
+    except (TypeError, ValueError):
+        return None
+
+
 async def _hydrate_listing(
     doc: dict, viewer_id: Optional[str] = None,
     saved_ids: Optional[set] = None, with_counts: bool = False,
+    viewer_coords: Optional[Tuple[float, float]] = None,
 ) -> Listing:
     author_doc = await db.users.find_one({"user_id": doc["user_id"]}, {"_id": 0})
     seller = PostAuthor(
@@ -42,6 +65,11 @@ async def _hydrate_listing(
     else:
         saved_by_me = False
     saved_count = await db.listing_saves.count_documents({"listing_id": doc["id"]}) if with_counts else 0
+    distance_km = None
+    if viewer_coords is not None:
+        coords = _doc_coords(doc)
+        if coords is not None:
+            distance_km = round(_haversine_km(viewer_coords, coords), 1)
     return Listing(
         id=doc["id"], user_id=doc["user_id"], seller=seller,
         title=doc["title"], price=doc.get("price", 0),
@@ -53,6 +81,11 @@ async def _hydrate_listing(
         photos=photos,
         longitude=doc.get("longitude"), latitude=doc.get("latitude"),
         locality=doc.get("locality"),
+        negotiable=bool(doc.get("negotiable", False)),
+        quantity=int(doc.get("quantity", 1) or 1),
+        brand=doc.get("brand"),
+        delivery=doc.get("delivery", "pickup"),
+        distance_km=distance_km,
         status=doc.get("status", "active"),
         views_count=doc.get("views_count", 0),
         saved_count=saved_count,
@@ -99,6 +132,10 @@ async def create_listing(body: ListingCreate, authorization: Optional[str] = Hea
         "longitude": body.longitude,
         "latitude": body.latitude,
         "locality": (body.locality or "")[:120],
+        "negotiable": bool(body.negotiable),
+        "quantity": max(1, int(body.quantity or 1)),
+        "brand": (body.brand or "").strip()[:80] or None,
+        "delivery": body.delivery if body.delivery in ("pickup", "shipping", "both") else "pickup",
         "status": "active",
         "views_count": 0,
         "created_at": datetime.now(timezone.utc),
@@ -115,7 +152,10 @@ async def list_listings(
     condition: Optional[str] = Query(None),
     min_price: Optional[float] = Query(None),
     max_price: Optional[float] = Query(None),
-    sort: Optional[str] = Query("recent"),  # recent | price_low | price_high
+    sort: Optional[str] = Query("recent"),  # recent | price_low | price_high | nearby
+    lat: Optional[float] = Query(None),
+    lng: Optional[float] = Query(None),
+    radius_km: Optional[float] = Query(None),
     authorization: Optional[str] = Header(None),
 ):
     user = await get_current_user(authorization)
@@ -144,10 +184,30 @@ async def list_listings(
         sort_field, sort_dir = "price", 1
     elif sort == "price_high":
         sort_field, sort_dir = "price", -1
-    cursor = db.listings.find(filt, {"_id": 0}).sort(sort_field, sort_dir).limit(100)
-    docs = await cursor.to_list(100)
+    # Pull a wider candidate set when filtering by distance, since many get
+    # dropped for being out of range or having no coordinates.
+    viewer_coords: Optional[Tuple[float, float]] = (
+        (float(lng), float(lat)) if lat is not None and lng is not None else None
+    )
+    want_distance = viewer_coords is not None and (radius_km is not None or sort == "nearby")
+    cap = 400 if want_distance else 100
+    cursor = db.listings.find(filt, {"_id": 0}).sort(sort_field, sort_dir).limit(cap)
+    docs = await cursor.to_list(cap)
+    if want_distance and radius_km is not None:
+        kept = []
+        for d in docs:
+            c = _doc_coords(d)
+            if c is not None and _haversine_km(viewer_coords, c) <= float(radius_km):
+                kept.append(d)
+        docs = kept
     saved_ids = await _saved_ids_for(user["user_id"])
-    return [await _hydrate_listing(d, saved_ids=saved_ids) for d in docs]
+    listings = [
+        await _hydrate_listing(d, saved_ids=saved_ids, viewer_coords=viewer_coords)
+        for d in docs
+    ]
+    if sort == "nearby" and viewer_coords is not None:
+        listings.sort(key=lambda x: (x.distance_km is None, x.distance_km or 0.0))
+    return listings[:100]
 
 
 @router.get("/listings/saved", response_model=List[Listing])
@@ -244,6 +304,20 @@ async def patch_listing(
         patch["photos"] = [body.photo_base64] if body.photo_base64 else []
     if body.status is not None:
         patch["status"] = body.status
+    if body.locality is not None:
+        patch["locality"] = body.locality[:120]
+    if body.longitude is not None:
+        patch["longitude"] = body.longitude
+    if body.latitude is not None:
+        patch["latitude"] = body.latitude
+    if body.negotiable is not None:
+        patch["negotiable"] = bool(body.negotiable)
+    if body.quantity is not None:
+        patch["quantity"] = max(1, int(body.quantity))
+    if body.brand is not None:
+        patch["brand"] = (body.brand or "").strip()[:80] or None
+    if body.delivery is not None and body.delivery in ("pickup", "shipping", "both"):
+        patch["delivery"] = body.delivery
     if patch:
         await db.listings.update_one({"id": listing_id}, {"$set": patch})
     updated = await db.listings.find_one({"id": listing_id}, {"_id": 0})
