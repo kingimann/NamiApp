@@ -23,6 +23,7 @@ export const SIDEBAR_CATALOG: SidebarItem[] = [
   { id: "favorites", label: "Saved Places", icon: "location", route: "/(tabs)/favorites", color: "#22C55E" },
   { id: "settings", label: "Settings", icon: "settings", route: "/settings", color: "#64748B" },
   { id: "advertise", label: "Advertise", icon: "megaphone", route: "/advertise", color: "#F97316" },
+  { id: "wallet", label: "Wallet", icon: "wallet", route: "/wallet", color: "#10B981" },
   { id: "people", label: "Find People", icon: "person-add", route: "/people", color: "#0EA5E9" },
   { id: "feed", label: "Feed", icon: "home", route: "/(tabs)/feed", color: "#3B82F6" },
   { id: "map", label: "Map", icon: "map", route: "/(tabs)", color: "#14B8A6" },

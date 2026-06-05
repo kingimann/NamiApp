@@ -10,6 +10,7 @@ import { useAuth } from "@/src/context/AuthContext";
 import { theme } from "@/src/theme";
 import PostCard from "@/src/components/PostCard";
 import VerifiedBadge from "@/src/components/VerifiedBadge";
+import FakePaymentSheet from "@/src/components/FakePaymentSheet";
 
 const friendBtnLabel = (s?: FriendStatus): string => {
   switch (s) {
@@ -41,6 +42,20 @@ export default function UserProfileScreen() {
   const [user, setUser] = useState<PublicUser | null>(null);
   const [posts, setPosts] = useState<Post[]>([]);
   const [loading, setLoading] = useState(true);
+  const [tipOpen, setTipOpen] = useState(false);
+  const [subOpen, setSubOpen] = useState(false);
+
+  const onSubscribe = async () => {
+    if (!user) return;
+    if (user.is_subscribed) {
+      try {
+        await api.unsubscribeUser(user.user_id);
+        setUser((p) => (p ? { ...p, is_subscribed: false, subscriber_count: Math.max(0, (p.subscriber_count || 1) - 1) } : p));
+      } catch {}
+    } else {
+      setSubOpen(true);
+    }
+  };
 
   const load = useCallback(async () => {
     if (!name) return;
@@ -194,6 +209,24 @@ export default function UserProfileScreen() {
                   </TouchableOpacity>
                 </View>
               )}
+              {user.user_id !== me?.user_id && (
+                <View style={styles.actionRow}>
+                  <TouchableOpacity style={[styles.actionBtn, styles.actionBtnGhost]} onPress={() => setTipOpen(true)} testID="profile-tip">
+                    <Ionicons name="cash-outline" size={15} color={theme.textPrimary} />
+                    <Text style={[styles.actionBtnText, { color: theme.textPrimary }]}>Tip</Text>
+                  </TouchableOpacity>
+                  <TouchableOpacity
+                    style={[styles.actionBtn, user.is_subscribed && styles.actionBtnGhost]}
+                    onPress={onSubscribe}
+                    testID="profile-subscribe"
+                  >
+                    <Ionicons name={user.is_subscribed ? "checkmark-circle" : "star"} size={15} color={user.is_subscribed ? theme.textPrimary : "#fff"} />
+                    <Text style={[styles.actionBtnText, user.is_subscribed && { color: theme.textPrimary }]}>
+                      {user.is_subscribed ? "Subscribed" : `Subscribe · $${(user.sub_price ?? 0).toFixed(2)}/mo`}
+                    </Text>
+                  </TouchableOpacity>
+                </View>
+              )}
               {me?.role === "admin" && user.user_id !== me?.user_id && (
                 <View style={styles.adminRow}>
                   <TouchableOpacity style={styles.adminBtn} onPress={() => doAdmin({ verified: !user.verified })} testID="admin-verify">
@@ -223,6 +256,36 @@ export default function UserProfileScreen() {
             />
           )}
         />
+      )}
+
+      {user && (
+        <>
+          <FakePaymentSheet
+            visible={tipOpen}
+            title={`Tip ${user.name}`}
+            subtitle="100% goes to the creator"
+            amount={5}
+            editableAmount
+            allowNote
+            cta="Send"
+            successText={`Your tip was sent to ${user.name}.`}
+            onClose={() => setTipOpen(false)}
+            onPaid={async (amount, note) => { await api.tipUser(user.user_id, amount, note); }}
+          />
+          <FakePaymentSheet
+            visible={subOpen}
+            title={`Subscribe to ${user.name}`}
+            subtitle="Monthly subscription — funds go to the creator"
+            amount={user.sub_price ?? 4.99}
+            cta="Subscribe"
+            successText={`You're subscribed to ${user.name}!`}
+            onClose={() => setSubOpen(false)}
+            onPaid={async () => {
+              await api.subscribeUser(user.user_id);
+              setUser((p) => (p ? { ...p, is_subscribed: true, subscriber_count: (p.subscriber_count || 0) + 1 } : p));
+            }}
+          />
+        </>
       )}
     </SafeAreaView>
   );

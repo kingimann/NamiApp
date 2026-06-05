@@ -78,6 +78,13 @@ export const api = {
   getPublicUser: (id: string) => request<PublicUser>(`/users/${id}/public`),
   adminPatchUser: (userId: string, body: { verified?: boolean; role?: string }) =>
     request<PublicUser>(`/admin/users/${userId}`, { method: "PATCH", body: JSON.stringify(body) }),
+  tipUser: (userId: string, amount: number, message?: string) =>
+    request<{ id: string }>(`/users/${userId}/tip`, { method: "POST", body: JSON.stringify({ amount, message: message || "" }) }),
+  subscribeUser: (userId: string) =>
+    request<{ subscribed: boolean }>(`/users/${userId}/subscribe`, { method: "POST" }),
+  unsubscribeUser: (userId: string) =>
+    request<{ subscribed: boolean }>(`/users/${userId}/subscribe`, { method: "DELETE" }),
+  getWallet: () => request<WalletSummary>("/wallet"),
 
   listPlaces: () => request<Place[]>("/places"),
   getPlace: (id: string) => request<Place>(`/places/${id}`),
@@ -425,11 +432,18 @@ export type User = {
   work_latitude?: number | null;
   verified?: boolean;
   role?: string; // user | mod | admin
+  sub_price?: number;
 };
 export type ProfilePatch = {
   name?: string; bio?: string; picture?: string;
   home_name?: string | null; home_longitude?: number | null; home_latitude?: number | null;
   work_name?: string | null; work_longitude?: number | null; work_latitude?: number | null;
+  sub_price?: number;
+};
+export type WalletTxn = { id: string; kind: string; amount: number; from_user_id: string; from_name: string; created_at: string };
+export type WalletSummary = {
+  currency: string; total_earned: number; tips_total: number; subs_total: number;
+  tips_count: number; active_subscribers: number; sub_price: number; recent: WalletTxn[];
 };
 export type FriendStatus = "none" | "request_sent" | "request_received" | "friends";
 export type PublicUser = {
@@ -440,6 +454,9 @@ export type PublicUser = {
   bio?: string;
   verified?: boolean;
   role?: string;
+  sub_price?: number;
+  is_subscribed?: boolean;
+  subscriber_count?: number;
   stats?: { places?: number; guides?: number; reviews?: number; followers?: number; following?: number; friends?: number };
   is_following?: boolean;
   is_followed_by?: boolean;
