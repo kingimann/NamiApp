@@ -40,6 +40,7 @@ export default function PostComposer({
   const [text, setText] = useState("");
   const [media, setMedia] = useState<PostMedia[]>([]);
   const [submitting, setSubmitting] = useState(false);
+  const [processing, setProcessing] = useState(false);
   const [showPoll, setShowPoll] = useState(false);
   const [pollOptions, setPollOptions] = useState<string[]>(["", ""]);
   const [pollHours, setPollHours] = useState(24);
@@ -86,6 +87,8 @@ export default function PostComposer({
         videoMaxDuration: 60,
       });
       if (result.canceled) return;
+      // Reading a video into base64 can take a few seconds — show a spinner.
+      setProcessing(true);
       const toAdd: PostMedia[] = [];
       for (const a of result.assets || []) {
         const isVideo = a.type === "video";
@@ -132,6 +135,8 @@ export default function PostComposer({
       if (toAdd.length) setMedia((arr) => [...arr, ...toAdd].slice(0, MAX_MEDIA));
     } catch (e) {
       Alert.alert("Couldn't attach media", String(e));
+    } finally {
+      setProcessing(false);
     }
   };
 
@@ -216,10 +221,10 @@ export default function PostComposer({
             </Text>
             <TouchableOpacity
               onPress={submit}
-              disabled={submitting || (!text.trim() && media.length === 0 && !quoting && !(showPoll && pollOptions.filter((o) => o.trim()).length >= 2))}
+              disabled={submitting || processing || (!text.trim() && media.length === 0 && !quoting && !(showPoll && pollOptions.filter((o) => o.trim()).length >= 2))}
               style={[
                 styles.postBtn,
-                (submitting || (!text.trim() && media.length === 0 && !quoting && !(showPoll && pollOptions.filter((o) => o.trim()).length >= 2))) && { opacity: 0.4 },
+                (submitting || processing || (!text.trim() && media.length === 0 && !quoting && !(showPoll && pollOptions.filter((o) => o.trim()).length >= 2))) && { opacity: 0.4 },
               ]}
               testID="composer-submit"
             >
@@ -255,8 +260,16 @@ export default function PostComposer({
               testID="composer-text"
             />
 
-            {media.length > 0 && (
+            {(media.length > 0 || processing) && (
               <View style={styles.mediaRow}>
+                {processing && (
+                  <View style={styles.mediaChip}>
+                    <View style={[StyleSheet.absoluteFill, styles.processingTile]}>
+                      <ActivityIndicator color={theme.primary} />
+                      <Text style={styles.processingText}>Processing…</Text>
+                    </View>
+                  </View>
+                )}
                 {media.map((m, idx) => (
                   <View key={idx} style={styles.mediaChip}>
                     {m.type === "video" ? (
@@ -346,11 +359,13 @@ export default function PostComposer({
             <View style={{ flexDirection: "row", gap: 6 }}>
               <TouchableOpacity
                 onPress={pickMedia}
-                disabled={media.length >= MAX_MEDIA}
-                style={[styles.toolBtn, media.length >= MAX_MEDIA && { opacity: 0.3 }]}
+                disabled={media.length >= MAX_MEDIA || processing}
+                style={[styles.toolBtn, (media.length >= MAX_MEDIA || processing) && { opacity: 0.3 }]}
                 testID="composer-attach"
               >
-                <Ionicons name="image-outline" size={22} color={theme.primary} />
+                {processing
+                  ? <ActivityIndicator color={theme.primary} size="small" />
+                  : <Ionicons name="image-outline" size={22} color={theme.primary} />}
               </TouchableOpacity>
               <TouchableOpacity
                 onPress={takePhoto}
@@ -374,6 +389,15 @@ export default function PostComposer({
               {remaining}
             </Text>
           </View>
+
+          {submitting && (
+            <View style={styles.uploadingOverlay} testID="composer-uploading">
+              <ActivityIndicator color={theme.primary} size="large" />
+              <Text style={styles.uploadingText}>
+                {media.some((m) => m.type === "video") ? "Uploading video…" : "Posting…"}
+              </Text>
+            </View>
+          )}
         </View>
       </KeyboardAvoidingView>
     </Modal>
@@ -409,6 +433,14 @@ const styles = StyleSheet.create({
     ...(Platform.OS === "web" ? ({ outlineStyle: "none" } as object) : {}),
   },
   mediaRow: { flexDirection: "row", flexWrap: "wrap", gap: 8, marginTop: 8, paddingBottom: 12 },
+  processingTile: { backgroundColor: theme.surfaceAlt, alignItems: "center", justifyContent: "center", gap: 6 },
+  processingText: { color: theme.textSecondary, fontSize: 11, fontWeight: "600" },
+  uploadingOverlay: {
+    ...StyleSheet.absoluteFillObject,
+    backgroundColor: "rgba(10,10,10,0.78)",
+    alignItems: "center", justifyContent: "center", gap: 12,
+  },
+  uploadingText: { color: theme.textPrimary, fontSize: 15, fontWeight: "700" },
   mediaChip: {
     width: 88, height: 88, borderRadius: 12, overflow: "hidden",
     backgroundColor: theme.surface, position: "relative",
