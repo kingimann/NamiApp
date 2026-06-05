@@ -134,6 +134,7 @@ def _user_doc_to_model(d: dict) -> dict:
         "work_latitude": d.get("work_latitude"),
         "verified": bool(d.get("verified", False)),
         "role": _effective_role(d),
+        "sub_price": float(d.get("sub_price", 4.99) or 0),
         "created_at": d["created_at"],
     }
 
@@ -177,6 +178,14 @@ async def _public_user(user_id: str, viewer_id: Optional[str] = None):
             {"$or": [{"a": user_id}, {"b": user_id}]}
         ),
     }
+    subscriber_count = await db.subscriptions.count_documents(
+        {"creator_id": user_id, "status": "active"}
+    )
+    is_subscribed = False
+    if viewer_id and viewer_id != user_id:
+        is_subscribed = bool(await db.subscriptions.find_one(
+            {"subscriber_id": viewer_id, "creator_id": user_id, "status": "active"}, {"_id": 0}
+        ))
     is_following = False
     is_followed_by = False
     friend_status = "none"
@@ -209,6 +218,9 @@ async def _public_user(user_id: str, viewer_id: Optional[str] = None):
         bio=u.get("bio", ""),
         verified=bool(u.get("verified", False)),
         role=_effective_role(u),
+        sub_price=float(u.get("sub_price", 4.99) or 0),
+        is_subscribed=is_subscribed,
+        subscriber_count=subscriber_count,
         stats=stats,
         is_following=is_following,
         is_followed_by=is_followed_by,

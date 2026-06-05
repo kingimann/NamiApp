@@ -91,15 +91,7 @@ export default function SettingsScreen() {
           <Row icon="location-outline" label="Saved places" color="#22C55E" onPress={() => router.push("/(tabs)/favorites")} last />
         </View>
 
-        <Text style={styles.groupTitle}>About</Text>
-        <View style={styles.group}>
-          <View style={styles.aboutRow}><Ionicons name="map" size={18} color={theme.primary} /><Text style={styles.aboutText}>Powered by Mapbox</Text></View>
-          <View style={styles.aboutRow}><Ionicons name="navigate" size={18} color={theme.primary} /><Text style={styles.aboutText}>Turn-by-turn navigation</Text></View>
-          <View style={styles.aboutRow}><Ionicons name="bookmarks" size={18} color={theme.primary} /><Text style={styles.aboutText}>Shareable public guides</Text></View>
-          <View style={styles.aboutRow}><Ionicons name="chatbubbles" size={18} color={theme.primary} /><Text style={styles.aboutText}>Chat with friends &amp; share places</Text></View>
-        </View>
-
-        <View style={styles.group}>
+        <View style={[styles.group, { marginTop: 24 }]}>
           <Row icon="log-out-outline" label="Sign out" danger onPress={onSignOut} last />
         </View>
 

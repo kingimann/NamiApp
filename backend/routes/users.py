@@ -1,13 +1,19 @@
 """User search and public profile endpoints."""
 import re
-from datetime import datetime, timezone
+import uuid
+from datetime import datetime, timezone, timedelta
 from typing import List, Optional
 
 from fastapi import APIRouter, Header, HTTPException, Query
 from db import DuplicateKeyError
 
 from core import _public_user, db, get_current_user, is_admin
-from models import AdminUserPatch, PublicUser
+from models import AdminUserPatch, PublicUser, Tip, TipCreate, WalletSummary, WalletTxn
+
+try:
+    from routes.notifications import emit_notification  # type: ignore
+except Exception:  # pragma: no cover
+    emit_notification = None  # type: ignore
 
 router = APIRouter()
 
@@ -248,3 +254,122 @@ async def list_friend_requests(authorization: Optional[str] = Header(None)):
         {"to_id": me["user_id"], "status": "pending"}, {"_id": 0},
     ).sort("created_at", -1).limit(200).to_list(200)
     return [await _public_user(r["from_id"], me["user_id"]) for r in rows]
+
+
+# ───────── Monetization: tips, subscriptions, wallet (fake payments) ─────────
+async def _credit(to_user_id: str, amount: float, kind: str, frm: dict):
+    """Record an earning for the recipient (all money goes to the creator)."""
+    await db.earnings.insert_one({
+        "id": str(uuid.uuid4()),
+        "user_id": to_user_id,
+        "amount": round(float(amount), 2),
+        "kind": kind,
+        "from_user_id": frm["user_id"],
+        "from_name": frm.get("name", "Someone"),
+        "created_at": datetime.now(timezone.utc),
+    })
+
+
+@router.post("/users/{user_id}/tip", response_model=Tip)
+async def tip_user(user_id: str, body: TipCreate, authorization: Optional[str] = Header(None)):
+    me = await get_current_user(authorization)
+    if user_id == me["user_id"]:
+        raise HTTPException(status_code=400, detail="You can't tip yourself")
+    target = await db.users.find_one({"user_id": user_id}, {"_id": 0})
+    if not target:
+        raise HTTPException(status_code=404, detail="User not found")
+    amount = round(float(body.amount or 0), 2)
+    if amount <= 0:
+        raise HTTPException(status_code=400, detail="Amount must be greater than 0")
+    now = datetime.now(timezone.utc)
+    tip = {
+        "id": str(uuid.uuid4()),
+        "from_user_id": me["user_id"],
+        "from_name": me.get("name", "Someone"),
+        "to_user_id": user_id,
+        "amount": amount,
+        "currency": "USD",
+        "message": (body.message or "")[:200],
+        "created_at": now,
+    }
+    await db.tips.insert_one(tip.copy())
+    await _credit(user_id, amount, "tip", me)
+    if emit_notification:
+        try:
+            await emit_notification(user_id=user_id, actor_id=me["user_id"], ntype="tip",
+                                    message=f"sent you a ${amount:.2f} tip")
+        except Exception:
+            pass
+    return Tip(**tip)
+
+
+@router.post("/users/{user_id}/subscribe")
+async def subscribe_user(user_id: str, authorization: Optional[str] = Header(None)):
+    me = await get_current_user(authorization)
+    if user_id == me["user_id"]:
+        raise HTTPException(status_code=400, detail="You can't subscribe to yourself")
+    target = await db.users.find_one({"user_id": user_id}, {"_id": 0})
+    if not target:
+        raise HTTPException(status_code=404, detail="User not found")
+    existing = await db.subscriptions.find_one(
+        {"subscriber_id": me["user_id"], "creator_id": user_id, "status": "active"}, {"_id": 0}
+    )
+    if existing:
+        return {"subscribed": True}
+    price = round(float(target.get("sub_price", 4.99) or 0), 2)
+    now = datetime.now(timezone.utc)
+    await db.subscriptions.insert_one({
+        "id": str(uuid.uuid4()),
+        "subscriber_id": me["user_id"],
+        "creator_id": user_id,
+        "amount": price,
+        "status": "active",
+        "started_at": now,
+        "renews_at": now + timedelta(days=30),
+        "created_at": now,
+    })
+    if price > 0:
+        await _credit(user_id, price, "subscription", me)
+    if emit_notification:
+        try:
+            await emit_notification(user_id=user_id, actor_id=me["user_id"], ntype="subscribe",
+                                    message="subscribed to you")
+        except Exception:
+            pass
+    return {"subscribed": True}
+
+
+@router.delete("/users/{user_id}/subscribe")
+async def unsubscribe_user(user_id: str, authorization: Optional[str] = Header(None)):
+    me = await get_current_user(authorization)
+    await db.subscriptions.update_many(
+        {"subscriber_id": me["user_id"], "creator_id": user_id, "status": "active"},
+        {"$set": {"status": "cancelled"}},
+    )
+    return {"subscribed": False}
+
+
+@router.get("/wallet", response_model=WalletSummary)
+async def my_wallet(authorization: Optional[str] = Header(None)):
+    me = await get_current_user(authorization)
+    uid = me["user_id"]
+    rows = await db.earnings.find({"user_id": uid}, {"_id": 0}).sort("created_at", -1).limit(500).to_list(500)
+    tips_total = sum(r["amount"] for r in rows if r.get("kind") == "tip")
+    subs_total = sum(r["amount"] for r in rows if r.get("kind") == "subscription")
+    tips_count = sum(1 for r in rows if r.get("kind") == "tip")
+    active_subscribers = await db.subscriptions.count_documents({"creator_id": uid, "status": "active"})
+    recent = [
+        WalletTxn(id=r["id"], kind=r.get("kind", "tip"), amount=r["amount"],
+                  from_user_id=r.get("from_user_id", ""), from_name=r.get("from_name", "Someone"),
+                  created_at=r["created_at"])
+        for r in rows[:30]
+    ]
+    return WalletSummary(
+        total_earned=round(tips_total + subs_total, 2),
+        tips_total=round(tips_total, 2),
+        subs_total=round(subs_total, 2),
+        tips_count=tips_count,
+        active_subscribers=active_subscribers,
+        sub_price=round(float(me.get("sub_price", 4.99) or 0), 2),
+        recent=recent,
+    )

@@ -22,6 +22,7 @@ class User(BaseModel):
     work_latitude: Optional[float] = None
     verified: bool = False
     role: str = "user"            # user | mod | admin
+    sub_price: float = 4.99       # monthly subscription price others pay this user
     created_at: datetime
 
 
@@ -33,6 +34,9 @@ class PublicUser(BaseModel):
     bio: Optional[str] = ""
     verified: bool = False
     role: str = "user"
+    sub_price: float = 4.99
+    is_subscribed: bool = False    # is the viewer subscribed to this user?
+    subscriber_count: int = 0
     stats: dict = {}
     is_following: bool = False
     is_followed_by: bool = False
@@ -59,6 +63,43 @@ class ProfilePatch(BaseModel):
     work_name: Optional[str] = None
     work_longitude: Optional[float] = None
     work_latitude: Optional[float] = None
+    sub_price: Optional[float] = None
+
+
+class TipCreate(BaseModel):
+    amount: float
+    message: Optional[str] = ""
+
+
+class Tip(BaseModel):
+    id: str
+    from_user_id: str
+    from_name: str
+    to_user_id: str
+    amount: float
+    currency: str = "USD"
+    message: Optional[str] = ""
+    created_at: datetime
+
+
+class WalletTxn(BaseModel):
+    id: str
+    kind: str                 # tip | subscription
+    amount: float
+    from_user_id: str
+    from_name: str
+    created_at: datetime
+
+
+class WalletSummary(BaseModel):
+    currency: str = "USD"
+    total_earned: float = 0
+    tips_total: float = 0
+    subs_total: float = 0
+    tips_count: int = 0
+    active_subscribers: int = 0
+    sub_price: float = 4.99
+    recent: List[WalletTxn] = []
 
 
 class PlaceCreate(BaseModel):
