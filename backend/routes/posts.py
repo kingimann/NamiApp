@@ -60,10 +60,13 @@ def _normalize_media(items: Optional[list]) -> list:
             d = m.model_dump()
         else:
             d = dict(m)
+        url = d.get("url") or ""
         b = d.get("base64") or ""
-        if not b:
+        # A CDN URL (Cloudinary) is preferred and has no size cap; base64 is the
+        # inline fallback and is still bounded so we don't bloat the DB row.
+        if not url and not b:
             continue
-        if len(b) > MAX_MEDIA_BYTES_EACH:
+        if not url and len(b) > MAX_MEDIA_BYTES_EACH:
             raise HTTPException(status_code=413, detail="Media too large (25MB limit)")
         d["type"] = d.get("type") or "image"
         out.append(d)

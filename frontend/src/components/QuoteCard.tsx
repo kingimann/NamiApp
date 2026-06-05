@@ -2,7 +2,7 @@ import React from "react";
 import { View, Text, StyleSheet, TouchableOpacity, Image } from "react-native";
 import { Ionicons } from "@expo/vector-icons";
 import { useRouter } from "expo-router";
-import { Post } from "@/src/api/client";
+import { Post, mediaUri } from "@/src/api/client";
 import { theme } from "@/src/theme";
 import RichText from "./RichText";
 
@@ -41,7 +41,7 @@ export default function QuoteCard({ post }: { post: Post }) {
           </View>
         ) : (
           <Image
-            source={{ uri: post.media[0].base64 }}
+            source={{ uri: mediaUri(post.media[0]) }}
             style={styles.preview}
             resizeMode="cover"
           />

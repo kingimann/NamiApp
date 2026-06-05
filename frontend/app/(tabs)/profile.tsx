@@ -9,7 +9,7 @@ import { LinearGradient } from "expo-linear-gradient";
 import * as ImagePicker from "expo-image-picker";
 import { useFocusEffect, useRouter } from "expo-router";
 import { useAuth } from "@/src/context/AuthContext";
-import { api, Post } from "@/src/api/client";
+import { api, Post, mediaUri } from "@/src/api/client";
 import { theme } from "@/src/theme";
 import { SidebarMenuButton } from "@/src/components/LeftSidebar";
 import PostCard from "@/src/components/PostCard";
@@ -339,7 +339,7 @@ export default function ProfileScreen() {
                         <Ionicons name="play" size={22} color="#fff" />
                       </View>
                     ) : (
-                      <Image source={{ uri: m.base64 }} style={StyleSheet.absoluteFill} resizeMode="cover" />
+                      <Image source={{ uri: mediaUri(m) }} style={StyleSheet.absoluteFill} resizeMode="cover" />
                     )}
                   </TouchableOpacity>
                 ))}
