@@ -365,7 +365,12 @@ export const api = {
   setMoneySecurity: (body: { question: string; answer: string; current_answer?: string }) =>
     request<{ ok: boolean; question: string }>("/money/security", { method: "POST", body: JSON.stringify(body) }),
   sendMoney: (body: { to_user_id: string; amount: number; note?: string; answer: string }) =>
-    request<{ ok: boolean; amount: number }>("/money/send", { method: "POST", body: JSON.stringify(body) }),
+    request<{ ok: boolean; amount: number; status?: string }>("/money/send", { method: "POST", body: JSON.stringify(body) }),
+  listMoneyTransfers: () => request<{ incoming: MoneyRequest[]; outgoing: MoneyRequest[] }>("/money/transfers"),
+  acceptMoneyTransfer: (id: string) =>
+    request<{ ok: boolean; amount: number }>(`/money/transfers/${id}/accept`, { method: "POST" }),
+  declineMoneyTransfer: (id: string) =>
+    request<{ ok: boolean }>(`/money/transfers/${id}/decline`, { method: "POST" }),
   requestMoney: (body: { to_user_id: string; amount: number; note?: string }) =>
     request<MoneyRequest>("/money/request", { method: "POST", body: JSON.stringify(body) }),
   listMoneyRequests: () => request<{ incoming: MoneyRequest[]; outgoing: MoneyRequest[] }>("/money/requests"),
@@ -760,7 +765,8 @@ export type Notification = {
   id: string;
   user_id: string;
   type: "like" | "repost" | "reply" | "message" | "group_invite" | "group_message" | "follow" | "poke"
-    | "money_request" | "money_received" | "money_request_paid" | "money_request_declined";
+    | "money_request" | "money_received" | "money_request_paid" | "money_request_declined"
+    | "money_accepted" | "money_declined";
   actor_id?: string | null;
   actor_name?: string | null;
   actor_picture?: string | null;

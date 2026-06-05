@@ -23,6 +23,8 @@ const ICON: Record<Notification["type"], { name: any; color: string }> = {
   money_received:        { name: "cash",        color: "#22C55E" },
   money_request_paid:    { name: "checkmark-circle", color: "#22C55E" },
   money_request_declined:{ name: "close-circle", color: "#EF4444" },
+  money_accepted:        { name: "checkmark-circle", color: "#22C55E" },
+  money_declined:        { name: "close-circle", color: "#EF4444" },
 };
 
 const VERB: Record<Notification["type"], string> = {
@@ -38,6 +40,8 @@ const VERB: Record<Notification["type"], string> = {
   money_received: "sent you money",
   money_request_paid: "paid your request",
   money_request_declined: "declined your request",
+  money_accepted: "accepted your money",
+  money_declined: "declined your money",
 };
 
 export default function NotificationsScreen() {
