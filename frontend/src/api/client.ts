@@ -28,10 +28,6 @@ async function request<T>(path: string, opts: RequestInit = {}): Promise<T> {
 }
 
 export const api = {
-  exchangeSession: (session_id: string) =>
-    request<{ session_token: string; user: User }>("/auth/session", {
-      method: "POST", body: JSON.stringify({ session_id }),
-    }),
   me: () => request<User>("/auth/me"),
   updateMe: (p: ProfilePatch) =>
     request<User>("/auth/me", { method: "PATCH", body: JSON.stringify(p) }),

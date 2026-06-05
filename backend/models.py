@@ -35,10 +35,6 @@ class PublicUser(BaseModel):
     friend_status: str = "none"  # none | request_sent | request_received | friends
 
 
-class SessionRequest(BaseModel):
-    session_id: str
-
-
 class AuthResponse(BaseModel):
     session_token: str
     user: User

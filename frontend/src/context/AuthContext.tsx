@@ -15,7 +15,7 @@ type AuthState = {
   loading: boolean;
   user: User | null;
   signOut: () => Promise<void>;
-  processSessionId: (sessionId: string) => Promise<boolean>;
+  applySessionToken: (token: string) => Promise<boolean>;
   refresh: () => Promise<void>;
   loginLocal: (identifier: string, password: string) => Promise<void>;
   registerLocal: (email: string, password: string, name: string, username: string) => Promise<void>;
@@ -44,14 +44,15 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({
     }
   }, []);
 
-  const processSessionId = useCallback(
-    async (sessionId: string): Promise<boolean> => {
+  const applySessionToken = useCallback(
+    async (token: string): Promise<boolean> => {
       try {
-        const { session_token, user: u } = await api.exchangeSession(sessionId);
-        await storage.secureSet(SESSION_TOKEN_KEY, session_token);
-        setUser(u);
+        await storage.secureSet(SESSION_TOKEN_KEY, token);
+        const me = await api.me();
+        setUser(me);
         return true;
       } catch {
+        await storage.secureRemove(SESSION_TOKEN_KEY);
         return false;
       }
     },
@@ -80,33 +81,33 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({
     setUser(u);
   }, []);
 
-  // Parse session_id from URL (web) or initial deep link (mobile)
+  // Parse session_token from URL (web) or deep link (mobile) after Google OAuth
   const handleUrl = useCallback(
     async (url: string | null) => {
       if (!url) return false;
-      let sid: string | null = null;
+      let tok: string | null = null;
       try {
-        // Support both ?session_id=... and #session_id=...
+        // Support both ?session_token=... and #session_token=...
         const u = new URL(url);
-        sid = u.searchParams.get("session_id");
-        if (!sid && u.hash) {
+        tok = u.searchParams.get("session_token");
+        if (!tok && u.hash) {
           const params = new URLSearchParams(u.hash.replace(/^#/, ""));
-          sid = params.get("session_id");
+          tok = params.get("session_token");
         }
       } catch {
         // Fallback regex parse
-        const match = url.match(/[?#&]session_id=([^&]+)/);
-        if (match) sid = decodeURIComponent(match[1]);
+        const match = url.match(/[?#&]session_token=([^&]+)/);
+        if (match) tok = decodeURIComponent(match[1]);
       }
-      if (!sid) return false;
+      if (!tok) return false;
 
-      const ok = await processSessionId(sid);
+      const ok = await applySessionToken(tok);
       if (ok && Platform.OS === "web" && typeof window !== "undefined") {
         window.history.replaceState(null, "", window.location.pathname);
       }
       return ok;
     },
-    [processSessionId],
+    [applySessionToken],
   );
 
   useEffect(() => {
@@ -137,12 +138,12 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({
       loading,
       user,
       signOut,
-      processSessionId,
+      applySessionToken,
       refresh: checkSession,
       loginLocal,
       registerLocal,
     }),
-    [loading, user, signOut, processSessionId, checkSession, loginLocal, registerLocal],
+    [loading, user, signOut, applySessionToken, checkSession, loginLocal, registerLocal],
   );
 
   return <Ctx.Provider value={value}>{children}</Ctx.Provider>;

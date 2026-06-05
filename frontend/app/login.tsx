@@ -18,7 +18,7 @@ type Mode = "signin" | "signup";
 
 export default function LoginScreen() {
   const router = useRouter();
-  const { user, processSessionId, loginLocal, registerLocal } = useAuth();
+  const { user, applySessionToken, loginLocal, registerLocal } = useAuth();
   const [mode, setMode] = useState<Mode>("signin");
   const [busy, setBusy] = useState(false);
   const [identifier, setIdentifier] = useState("");
@@ -29,11 +29,23 @@ export default function LoginScreen() {
 
   useEffect(() => { if (user) router.replace("/(tabs)"); }, [user, router]);
 
+  const extractToken = (url: string): string | null => {
+    const m = url.match(/[?#&]session_token=([^&]+)/);
+    return m ? decodeURIComponent(m[1]) : null;
+  };
+
   const onGoogle = async () => {
     setBusy(true);
     try {
-      const redirectUrl = Platform.OS === "web" ? window.location.origin + "/" : Linking.createURL("auth");
-      const authUrl = `https://auth.emergentagent.com/?redirect=${encodeURIComponent(redirectUrl)}`;
+      const apiBase =
+        Platform.OS === "web"
+          ? window.location.origin
+          : (process.env.EXPO_PUBLIC_BACKEND_URL as string) || "";
+      const redirectUrl =
+        Platform.OS === "web" ? window.location.origin + "/" : Linking.createURL("/");
+      const authUrl =
+        `${apiBase}/api/auth/google/login?redirect=${encodeURIComponent(redirectUrl)}`;
+
       if (Platform.OS === "web") {
         const popup = window.open(authUrl, "_blank", "width=500,height=640,left=200,top=80");
         if (!popup) { window.location.href = authUrl; return; }
@@ -41,22 +53,22 @@ export default function LoginScreen() {
           if (popup.closed) { clearInterval(timer); setBusy(false); return; }
           try {
             const url = popup.location.href;
-            if (url && url.includes("session_id=")) {
+            const tok = url ? extractToken(url) : null;
+            if (tok) {
               popup.close();
               clearInterval(timer);
-              const params = new URL(url).searchParams;
-              const sid = params.get("session_id");
-              if (sid) await processSessionId(decodeURIComponent(sid));
+              await applySessionToken(tok);
               setBusy(false);
             }
-          } catch {} // cross-origin — ignore until redirect lands on our origin
+          } catch {} // cross-origin — ignore until redirect lands back on our origin
         }, 400);
         return;
       }
+
       const res = await WebBrowser.openAuthSessionAsync(authUrl, redirectUrl);
       if (res.type === "success") {
-        const sid = res.url.split("session_id=")[1]?.split("&")[0];
-        if (sid) await processSessionId(decodeURIComponent(sid));
+        const tok = extractToken(res.url);
+        if (tok) await applySessionToken(tok);
       }
     } catch (e) { Alert.alert("Sign in failed", String(e)); }
     finally { setBusy(false); }
