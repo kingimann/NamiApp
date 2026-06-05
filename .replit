@@ -55,10 +55,10 @@ outputType = "console"
 name = "Start frontend"
 author = "agent"
 
-[[workflows.workflow.tasks]]
-task = "shell.exec"
-args = "cd frontend && EXPO_PUBLIC_BACKEND_URL=https://3eaa8c9d-23d4-47c8-b4a7-519fe26eef5c-00-1if31mt60e650.worf.replit.dev npx expo start --web --port 5000"
-waitForPort = 5000
-
 [workflows.workflow.metadata]
 outputType = "webview"
+
+[[workflows.workflow.tasks]]
+task = "shell.exec"
+args = "cd frontend && npx expo start --web --port 5000 --tunnel"
+waitForPort = 5000
