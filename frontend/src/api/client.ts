@@ -237,7 +237,7 @@ export const api = {
   listFriendRequests: () => request<PublicUser[]>(`/friends/requests`),
 
   // Marketplace
-  listListings: (params?: { category?: string; q?: string; condition?: string; min_price?: number; max_price?: number; sort?: string }) => {
+  listListings: (params?: { category?: string; q?: string; condition?: string; min_price?: number; max_price?: number; sort?: string; lat?: number; lng?: number; radius_km?: number }) => {
     const qs = new URLSearchParams();
     if (params?.category) qs.set("category", params.category);
     if (params?.q) qs.set("q", params.q);
@@ -245,6 +245,9 @@ export const api = {
     if (params?.min_price != null) qs.set("min_price", String(params.min_price));
     if (params?.max_price != null) qs.set("max_price", String(params.max_price));
     if (params?.sort) qs.set("sort", params.sort);
+    if (params?.lat != null) qs.set("lat", String(params.lat));
+    if (params?.lng != null) qs.set("lng", String(params.lng));
+    if (params?.radius_km != null) qs.set("radius_km", String(params.radius_km));
     return request<Listing[]>(`/listings${qs.toString() ? "?" + qs.toString() : ""}`);
   },
   listSavedListings: () => request<Listing[]>("/listings/saved"),
@@ -357,6 +360,11 @@ export type Listing = {
   photo_base64?: string | null;
   photos?: string[];
   longitude?: number | null; latitude?: number | null; locality?: string | null;
+  negotiable?: boolean;
+  quantity?: number;
+  brand?: string | null;
+  delivery?: string | null;
+  distance_km?: number | null;
   status: string;
   views_count?: number;
   saved_count?: number;
@@ -368,6 +376,7 @@ export type ListingCreate = {
   condition?: string;
   description?: string; photo_base64?: string; photos?: string[];
   longitude?: number; latitude?: number; locality?: string;
+  negotiable?: boolean; quantity?: number; brand?: string; delivery?: string;
 };
 export type MarketplaceReview = {
   id: string; subject_user_id: string;

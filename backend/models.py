@@ -291,6 +291,10 @@ class ListingCreate(BaseModel):
     longitude: Optional[float] = None
     latitude: Optional[float] = None
     locality: Optional[str] = None
+    negotiable: bool = False
+    quantity: int = 1
+    brand: Optional[str] = None
+    delivery: Optional[str] = "pickup"   # pickup | shipping | both
 
 
 class ListingPatch(BaseModel):
@@ -303,6 +307,13 @@ class ListingPatch(BaseModel):
     photo_base64: Optional[str] = None
     photos: Optional[List[str]] = None
     status: Optional[Literal["active", "sold"]] = None
+    locality: Optional[str] = None
+    longitude: Optional[float] = None
+    latitude: Optional[float] = None
+    negotiable: Optional[bool] = None
+    quantity: Optional[int] = None
+    brand: Optional[str] = None
+    delivery: Optional[str] = None
 
 
 class Listing(BaseModel):
@@ -320,6 +331,11 @@ class Listing(BaseModel):
     longitude: Optional[float] = None
     latitude: Optional[float] = None
     locality: Optional[str] = None
+    negotiable: bool = False
+    quantity: int = 1
+    brand: Optional[str] = None
+    delivery: Optional[str] = "pickup"
+    distance_km: Optional[float] = None   # set when the viewer shares a location
     status: str = "active"
     views_count: int = 0
     saved_count: int = 0
