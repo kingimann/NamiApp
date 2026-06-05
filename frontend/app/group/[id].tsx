@@ -10,6 +10,7 @@ import * as ImagePicker from "expo-image-picker";
 import { api, Group, Post } from "@/src/api/client";
 import { useAuth } from "@/src/context/AuthContext";
 import { theme } from "@/src/theme";
+import AdSlot from "@/src/components/AdSlot";
 import PostCard from "@/src/components/PostCard";
 import PostComposer from "@/src/components/PostComposer";
 
@@ -345,6 +346,9 @@ export default function GroupDetailScreen() {
               </View>
             )}
 
+            <View style={{ paddingHorizontal: 16, marginTop: 12 }}>
+              <AdSlot placement="group" />
+            </View>
             {posts.length > 0 && (
               <View style={styles.feedHeader}>
                 <Text style={styles.feedHeaderText}>Group feed</Text>
