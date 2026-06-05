@@ -20,12 +20,35 @@ async function request<T>(path: string, opts: RequestInit = {}): Promise<T> {
     ...((opts.headers as Record<string, string>) || {}),
   };
   if (token) headers.Authorization = `Bearer ${token}`;
-  const res = await fetch(`${BASE_URL}/api${path}`, { ...opts, headers });
-  if (!res.ok) {
-    const text = await res.text();
-    throw new Error(`${res.status}: ${text}`);
+  const url = `${BASE_URL}/api${path}`;
+  let res: Response;
+  try {
+    res = await fetch(url, { ...opts, headers });
+  } catch (e: any) {
+    // Network/DNS/CORS failure before we even got a response.
+    throw new Error(
+      BASE_URL
+        ? `Can't reach the server (${BASE_URL}). ${e?.message || e}`
+        : `Can't reach the server — the app has no backend URL configured (EXPO_PUBLIC_BACKEND_URL is not set for this build).`,
+    );
   }
-  return (await res.json()) as T;
+  const respBody = await res.text();
+  if (!res.ok) {
+    // Surface FastAPI's { detail } message when present, else the raw body.
+    let msg = respBody;
+    try { msg = JSON.parse(respBody)?.detail ?? respBody; } catch {}
+    throw new Error(`${res.status}: ${msg}`);
+  }
+  if (!respBody) return undefined as T; // some endpoints reply 200 with no body
+  try {
+    return JSON.parse(respBody) as T;
+  } catch {
+    throw new Error(
+      !BASE_URL
+        ? "Got HTML instead of data: EXPO_PUBLIC_BACKEND_URL isn't set for this web build, so the app is calling itself instead of the API."
+        : `Unexpected non-JSON response from ${url}.`,
+    );
+  }
 }
 
 export const api = {
