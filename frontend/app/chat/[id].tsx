@@ -36,6 +36,7 @@ export default function ChatScreen() {
   const audioRecorder = useAudioRecorder(RecordingPresets.HIGH_QUALITY);
   const [recording, setRecording] = useState(false);
   const [sharingLocation, setSharingLocation] = useState(false);
+  const [attachOpen, setAttachOpen] = useState(false);
   const recordStartRef = useRef<number>(0);
 
   // Generate / load our keypair and publish public key. Then fetch peer's key.
@@ -206,6 +207,7 @@ export default function ChatScreen() {
   // Begin recording a voice note.
   const startRecording = async () => {
     if (!id || sending || recording) return;
+    setAttachOpen(false);
     try {
       const perm = await AudioModule.requestRecordingPermissionsAsync();
       if (!perm.granted) return;
@@ -369,80 +371,115 @@ export default function ChatScreen() {
           />
         )}
 
-        <View style={[styles.composer, { paddingBottom: insets.bottom + 10 }]}>
-          {recording ? (
+        <View>
+          {/* Attachment menu (tap the + button). WhatsApp-style popup. */}
+          {attachOpen && !recording && (
             <>
               <TouchableOpacity
-                style={styles.attachBtn}
-                onPress={() => stopRecording(true)}
-                testID="voice-cancel-btn"
-              >
-                <Ionicons name="trash-outline" size={22} color={theme.error} />
-              </TouchableOpacity>
-              <View style={styles.recordingPill}>
-                <View style={styles.recDot} />
-                <Text style={styles.recText}>Recording… release to send</Text>
-              </View>
-              <TouchableOpacity
-                style={styles.sendBtn}
-                onPress={() => stopRecording(false)}
-                testID="voice-send-btn"
-              >
-                <Ionicons name="send" size={18} color="#fff" />
-              </TouchableOpacity>
-            </>
-          ) : (
-            <>
-              <TouchableOpacity
-                style={styles.attachBtn}
-                onPress={shareLocation}
-                disabled={sending || sharingLocation}
-                testID="location-btn"
-              >
-                {sharingLocation ? (
-                  <ActivityIndicator size="small" color={theme.primary} />
-                ) : (
-                  <Ionicons name="location-outline" size={22} color={theme.primary} />
-                )}
-              </TouchableOpacity>
-              <TouchableOpacity
-                style={styles.attachBtn}
-                onPress={sendMedia}
-                disabled={sending}
-                testID="attach-btn"
-              >
-                <Ionicons name="image-outline" size={22} color={theme.primary} />
-              </TouchableOpacity>
-              <TextInput
-                style={styles.composerInput}
-                placeholder="Message..."
-                placeholderTextColor={theme.textMuted}
-                value={text}
-                onChangeText={setText}
-                multiline
-                testID="msg-input"
+                style={styles.attachBackdrop}
+                activeOpacity={1}
+                onPress={() => setAttachOpen(false)}
+                testID="attach-backdrop"
               />
-              {text.trim() ? (
+              <View style={[styles.attachMenu, { bottom: insets.bottom + 66 }]}>
                 <TouchableOpacity
-                  style={[styles.sendBtn, sending && { opacity: 0.5 }]}
-                  onPress={send}
+                  style={styles.attachItem}
+                  onPress={() => { setAttachOpen(false); sendMedia(); }}
                   disabled={sending}
-                  testID="send-btn"
+                  testID="attach-photo"
+                >
+                  <View style={[styles.attachItemIcon, { backgroundColor: "#8E5CF7" }]}>
+                    <Ionicons name="image" size={20} color="#fff" />
+                  </View>
+                  <Text style={styles.attachItemLabel}>Photo &amp; Video</Text>
+                </TouchableOpacity>
+                <TouchableOpacity
+                  style={styles.attachItem}
+                  onPress={() => { setAttachOpen(false); shareLocation(); }}
+                  disabled={sending || sharingLocation}
+                  testID="attach-location"
+                >
+                  <View style={[styles.attachItemIcon, { backgroundColor: "#23B26D" }]}>
+                    {sharingLocation ? (
+                      <ActivityIndicator size="small" color="#fff" />
+                    ) : (
+                      <Ionicons name="location" size={20} color="#fff" />
+                    )}
+                  </View>
+                  <Text style={styles.attachItemLabel}>Location</Text>
+                </TouchableOpacity>
+              </View>
+            </>
+          )}
+
+          <View style={[styles.composer, { paddingBottom: insets.bottom + 10 }]}>
+            {recording ? (
+              <>
+                <TouchableOpacity
+                  style={styles.attachBtn}
+                  onPress={() => stopRecording(true)}
+                  testID="voice-cancel-btn"
+                >
+                  <Ionicons name="trash-outline" size={22} color={theme.error} />
+                </TouchableOpacity>
+                <View style={styles.recordingPill}>
+                  <View style={styles.recDot} />
+                  <Text style={styles.recText}>Recording… release to send</Text>
+                </View>
+                <TouchableOpacity
+                  style={styles.sendBtn}
+                  onPress={() => stopRecording(false)}
+                  testID="voice-send-btn"
                 >
                   <Ionicons name="send" size={18} color="#fff" />
                 </TouchableOpacity>
-              ) : (
+              </>
+            ) : (
+              <>
                 <TouchableOpacity
-                  style={[styles.sendBtn, sending && { opacity: 0.5 }]}
-                  onPress={startRecording}
+                  style={styles.attachBtn}
+                  onPress={() => setAttachOpen((o) => !o)}
                   disabled={sending}
-                  testID="mic-btn"
+                  testID="attach-btn"
                 >
-                  <Ionicons name="mic" size={20} color="#fff" />
+                  <Ionicons
+                    name={attachOpen ? "close" : "add"}
+                    size={26}
+                    color={theme.primary}
+                  />
                 </TouchableOpacity>
-              )}
-            </>
-          )}
+                <TextInput
+                  style={styles.composerInput}
+                  placeholder="Message..."
+                  placeholderTextColor={theme.textMuted}
+                  value={text}
+                  onChangeText={setText}
+                  onFocus={() => setAttachOpen(false)}
+                  multiline
+                  testID="msg-input"
+                />
+                {text.trim() ? (
+                  <TouchableOpacity
+                    style={[styles.sendBtn, sending && { opacity: 0.5 }]}
+                    onPress={send}
+                    disabled={sending}
+                    testID="send-btn"
+                  >
+                    <Ionicons name="send" size={18} color="#fff" />
+                  </TouchableOpacity>
+                ) : (
+                  <TouchableOpacity
+                    style={[styles.sendBtn, sending && { opacity: 0.5 }]}
+                    onPress={startRecording}
+                    disabled={sending}
+                    testID="mic-btn"
+                  >
+                    <Ionicons name="mic" size={20} color="#fff" />
+                  </TouchableOpacity>
+                )}
+              </>
+            )}
+          </View>
         </View>
       </KeyboardAvoidingView>
     </SafeAreaView>
@@ -510,6 +547,26 @@ const styles = StyleSheet.create({
     backgroundColor: theme.surface, borderWidth: 1, borderColor: theme.border,
     alignItems: "center", justifyContent: "center",
   },
+  attachBackdrop: {
+    position: "absolute", left: 0, right: 0, bottom: 0, top: -1000,
+  },
+  attachMenu: {
+    position: "absolute", left: 12,
+    backgroundColor: theme.surface,
+    borderWidth: 1, borderColor: theme.border,
+    borderRadius: 16, paddingVertical: 6, minWidth: 200,
+    shadowColor: "#000", shadowOpacity: 0.18, shadowRadius: 16,
+    shadowOffset: { width: 0, height: 6 }, elevation: 8,
+  },
+  attachItem: {
+    flexDirection: "row", alignItems: "center", gap: 12,
+    paddingHorizontal: 14, paddingVertical: 10,
+  },
+  attachItemIcon: {
+    width: 36, height: 36, borderRadius: 18,
+    alignItems: "center", justifyContent: "center",
+  },
+  attachItemLabel: { color: theme.textPrimary, fontSize: 15, fontWeight: "600" },
   recordingPill: {
     flex: 1, flexDirection: "row", alignItems: "center", gap: 8,
     backgroundColor: theme.surface, borderWidth: 1, borderColor: theme.border,
