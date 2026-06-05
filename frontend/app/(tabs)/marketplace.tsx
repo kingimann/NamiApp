@@ -51,7 +51,6 @@ export default function MarketplaceScreen() {
   const [sort, setSort] = useState("recent");
   const [condFilter, setCondFilter] = useState("all");
   const [savedView, setSavedView] = useState(false);
-  const [sortOpen, setSortOpen] = useState(false);
   const [composeOpen, setComposeOpen] = useState(false);
   const [draft, setDraft] = useState({ title: "", price: "", category: "other", condition: "used", description: "", photos: [] as string[] });
   const [posting, setPosting] = useState(false);
@@ -117,45 +116,32 @@ export default function MarketplaceScreen() {
     <SafeAreaView edges={["top"]} style={styles.root} testID="marketplace-screen">
       <View style={styles.header}>
         <SidebarMenuButton />
-        <Text style={styles.title}>Marketplace</Text>
-        <View style={{ width: 36 }} />
-      </View>
-      <View style={styles.searchRow}>
-        <View style={styles.searchPill}>
-          <Ionicons name="search" size={17} color={theme.textMuted} />
-          <TextInput
-            style={styles.searchInput}
-            placeholder="Search Marketplace"
-            placeholderTextColor={theme.textMuted}
-            value={q}
-            onChangeText={setQ}
-            returnKeyType="search"
-            testID="market-search"
-          />
-          {!!q && (
-            <TouchableOpacity onPress={() => setQ("")}>
-              <Ionicons name="close-circle" size={17} color={theme.textMuted} />
-            </TouchableOpacity>
-          )}
-        </View>
+        <Text style={styles.title}>{savedView ? "Saved" : "Marketplace"}</Text>
         <TouchableOpacity
-          style={[styles.filterBtn, (sort !== "recent" || condFilter !== "all") && styles.filterBtnActive]}
-          onPress={() => setSortOpen(true)}
-          testID="market-filters"
+          onPress={() => setSavedView((v) => !v)}
+          style={[styles.headerIconBtn, savedView && styles.headerIconBtnActive]}
+          testID="market-saved-toggle"
         >
-          <Ionicons name="options-outline" size={20} color={(sort !== "recent" || condFilter !== "all") ? theme.primary : theme.textSecondary} />
+          <Ionicons name={savedView ? "bookmark" : "bookmark-outline"} size={20} color={savedView ? theme.primary : theme.textPrimary} />
         </TouchableOpacity>
       </View>
 
-      <View style={styles.tabs}>
-        <TouchableOpacity onPress={() => setSavedView(false)} style={[styles.tab, !savedView && styles.tabActive]} testID="market-browse">
-          <Ionicons name="grid-outline" size={16} color={!savedView ? theme.primary : theme.textMuted} />
-          <Text style={[styles.tabText, { color: !savedView ? theme.primary : theme.textMuted }]}>Browse</Text>
-        </TouchableOpacity>
-        <TouchableOpacity onPress={() => setSavedView(true)} style={[styles.tab, savedView && styles.tabActive]} testID="market-saved">
-          <Ionicons name="bookmark-outline" size={16} color={savedView ? theme.primary : theme.textMuted} />
-          <Text style={[styles.tabText, { color: savedView ? theme.primary : theme.textMuted }]}>Saved</Text>
-        </TouchableOpacity>
+      <View style={styles.searchPill}>
+        <Ionicons name="search" size={17} color={theme.textMuted} />
+        <TextInput
+          style={styles.searchInput}
+          placeholder="Search Marketplace"
+          placeholderTextColor={theme.textMuted}
+          value={q}
+          onChangeText={setQ}
+          returnKeyType="search"
+          testID="market-search"
+        />
+        {!!q && (
+          <TouchableOpacity onPress={() => setQ("")}>
+            <Ionicons name="close-circle" size={17} color={theme.textMuted} />
+          </TouchableOpacity>
+        )}
       </View>
 
       {!savedView && (
@@ -235,7 +221,7 @@ export default function MarketplaceScreen() {
       )}
 
       <TouchableOpacity
-        style={[styles.fab, { bottom: insets.bottom + 80 }]}
+        style={[styles.fab, { bottom: insets.bottom + 70 }]}
         onPress={() => setComposeOpen(true)}
         testID="new-listing-fab"
       >
@@ -352,48 +338,6 @@ export default function MarketplaceScreen() {
         </KeyboardAvoidingView>
       </Modal>
 
-      <Modal visible={sortOpen} transparent animationType="slide" onRequestClose={() => setSortOpen(false)}>
-        <TouchableOpacity style={styles.modalBackdrop} activeOpacity={1} onPress={() => setSortOpen(false)}>
-          <View style={[styles.sheet, { paddingBottom: insets.bottom + 16 }]}>
-            <View style={styles.sheetHandle} />
-            <Text style={styles.sheetTitle}>Sort & filters</Text>
-
-            <Text style={styles.filterLabel}>Sort by</Text>
-            {SORTS.map((s) => (
-              <TouchableOpacity
-                key={s.key}
-                style={styles.sortRow}
-                onPress={() => setSort(s.key)}
-                testID={`market-sort-${s.key}`}
-              >
-                <Text style={[styles.sortRowText, sort === s.key && { color: theme.primary, fontWeight: "800" }]}>{s.label}</Text>
-                {sort === s.key && <Ionicons name="checkmark" size={18} color={theme.primary} />}
-              </TouchableOpacity>
-            ))}
-
-            <Text style={styles.filterLabel}>Condition</Text>
-            <View style={styles.condWrap}>
-              {[{ key: "all", label: "Any" }, ...CONDITIONS].map((c) => {
-                const a = c.key === condFilter;
-                return (
-                  <TouchableOpacity
-                    key={c.key}
-                    onPress={() => setCondFilter(c.key)}
-                    style={[styles.condChip, a && styles.condChipActive]}
-                    testID={`market-cond-${c.key}`}
-                  >
-                    <Text style={[styles.condChipText, { color: a ? theme.primary : theme.textMuted }]}>{c.label}</Text>
-                  </TouchableOpacity>
-                );
-              })}
-            </View>
-
-            <TouchableOpacity style={styles.applyBtn} onPress={() => setSortOpen(false)} testID="market-apply-filters">
-              <Text style={styles.applyText}>Show results</Text>
-            </TouchableOpacity>
-          </View>
-        </TouchableOpacity>
-      </Modal>
     </SafeAreaView>
   );
 }
@@ -405,6 +349,12 @@ const styles = StyleSheet.create({
     paddingHorizontal: 16, paddingTop: 12, paddingBottom: 8, gap: 10,
   },
   title: { color: theme.textPrimary, fontSize: 24, fontWeight: "800", letterSpacing: -0.4, flex: 1, textAlign: "center" },
+  headerIconBtn: {
+    width: 40, height: 40, borderRadius: 20,
+    backgroundColor: theme.surface, borderWidth: 1, borderColor: theme.border,
+    alignItems: "center", justifyContent: "center",
+  },
+  headerIconBtnActive: { borderColor: theme.primary, backgroundColor: theme.surfaceAlt },
   sectionLabel: {
     color: theme.textMuted, fontSize: 11, fontWeight: "800",
     textTransform: "uppercase", letterSpacing: 0.6,
@@ -469,7 +419,7 @@ const styles = StyleSheet.create({
   sortRow: { flexDirection: "row", alignItems: "center", justifyContent: "space-between", paddingVertical: 14 },
   sortRowText: { color: theme.textPrimary, fontSize: 15, fontWeight: "600" },
   searchPill: {
-    flex: 1, height: 44,
+    marginHorizontal: 16, marginTop: 8, marginBottom: 4, height: 44,
     flexDirection: "row", alignItems: "center", gap: 8,
     backgroundColor: theme.surface, borderRadius: 14,
     paddingHorizontal: 14,

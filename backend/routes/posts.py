@@ -685,16 +685,10 @@ def _has_playable_video(doc: dict) -> bool:
 async def reels_feed(
     focus: Optional[str] = Query(None), authorization: Optional[str] = Header(None)
 ):
-    """Vertical video feed: playable video posts the viewer hasn't watched yet,
-    de-duplicated and personalized. A `focus` post is always included (so
-    tapping a feed video opens it even if already seen)."""
+    """Vertical video feed: every playable video post (watched or not),
+    de-duplicated and personalized. A `focus` post is pinned first."""
     user = await get_current_user(authorization)
     uid = user["user_id"]
-    viewed_rows = await db.post_views.find(
-        {"user_id": uid}, {"_id": 0, "post_id": 1}
-    ).to_list(3000)
-    viewed = {r["post_id"] for r in viewed_rows}
-    viewed.discard(focus or "")
     cursor = (
         db.posts.find(
             {"parent_id": None, "media": {"$elemMatch": {"type": "video"}}},
@@ -703,17 +697,14 @@ async def reels_feed(
     )
     docs = await cursor.to_list(250)
     seen: set = set()
-    fresh: list = []
+    playable: list = []
     for d in docs:
         if d["id"] in seen:
             continue
         seen.add(d["id"])
-        if not _has_playable_video(d):
-            continue
-        if d["id"] in viewed and d["id"] != focus:
-            continue
-        fresh.append(d)
-    ranked = await _rank_docs(fresh, uid, 50)
+        if _has_playable_video(d):
+            playable.append(d)
+    ranked = await _rank_docs(playable, uid, 60)
     if focus:
         ranked.sort(key=lambda d: 0 if d["id"] == focus else 1)
     return [await _hydrate_post(d, uid) for d in ranked]
