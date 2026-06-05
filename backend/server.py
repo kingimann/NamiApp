@@ -133,8 +133,31 @@ async def _ws_eta(websocket: WebSocket, share_id: str):
     await eta_routes.ws_eta(websocket, share_id)
 
 
+async def _keepalive_loop():
+    """Ping our own /health every ~10 min so Render's free tier doesn't spin the
+    service down (which causes slow 30-60s cold-start logins). No-op locally."""
+    import asyncio
+    import httpx
+    base = os.environ.get("RENDER_EXTERNAL_URL", "")
+    if not base:
+        return
+    url = base.rstrip("/") + "/health"
+    while True:
+        await asyncio.sleep(600)
+        try:
+            async with httpx.AsyncClient(timeout=20) as c:
+                await c.get(url)
+        except Exception:
+            pass
+
+
 @app.on_event("startup")
 async def startup():
+    import asyncio
     await init_pool()
     payouts_routes.start_scheduler()   # hourly auto-payout loop (best-effort)
+    try:
+        asyncio.create_task(_keepalive_loop())   # keep the free instance warm
+    except Exception:
+        pass
     logger.info("Startup complete")
