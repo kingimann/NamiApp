@@ -134,6 +134,7 @@ export default function DirectionsScreen() {
   const [routeCoords, setRouteCoords] = useState<[number, number][]>([]);
   const [steps, setSteps] = useState<Step[]>([]);
   const [showSteps, setShowSteps] = useState(false);
+  const [showAdvanced, setShowAdvanced] = useState(false);
   const [loadingRoute, setLoadingRoute] = useState(false);
   const [mapReady, setMapReady] = useState(false);
   const [navMode, setNavMode] = useState(false);
@@ -675,16 +676,24 @@ export default function DirectionsScreen() {
                   <Ionicons name="add" size={16} color={theme.primary} />
                   <Text style={styles.addStopText}>Add stop</Text>
                 </TouchableOpacity>
-                {!!routeInfo && (
-                  <TouchableOpacity style={styles.addStopBtn} onPress={clearRoute} testID="clear-route">
-                    <Ionicons name="close" size={16} color={theme.textMuted} />
-                    <Text style={[styles.addStopText, { color: theme.textMuted }]}>Clear</Text>
-                  </TouchableOpacity>
-                )}
+                <View style={{ flexDirection: "row", alignItems: "center" }}>
+                  {profile.startsWith("driving") && (
+                    <TouchableOpacity style={styles.addStopBtn} onPress={() => setShowAdvanced((v) => !v)} testID="toggle-options">
+                      <Ionicons name="options-outline" size={16} color={showAdvanced ? theme.primary : theme.textMuted} />
+                      <Text style={[styles.addStopText, { color: showAdvanced ? theme.primary : theme.textMuted }]}>Options</Text>
+                    </TouchableOpacity>
+                  )}
+                  {!!routeInfo && (
+                    <TouchableOpacity style={styles.addStopBtn} onPress={clearRoute} testID="clear-route">
+                      <Ionicons name="close" size={16} color={theme.textMuted} />
+                      <Text style={[styles.addStopText, { color: theme.textMuted }]}>Clear</Text>
+                    </TouchableOpacity>
+                  )}
+                </View>
               </View>
             </View>
 
-            {profile.startsWith("driving") && (
+            {profile.startsWith("driving") && showAdvanced && (
               <ScrollView
                 horizontal
                 showsHorizontalScrollIndicator={false}
@@ -958,16 +967,21 @@ export default function DirectionsScreen() {
                   activeOpacity={0.85}
                 >
                   <View>
-                    <Text style={styles.routeDuration}>{formatDuration(routeInfo.duration)}</Text>
+                    {routes.length <= 1 && (
+                      <Text style={styles.routeDuration}>{formatDuration(routeInfo.duration)}</Text>
+                    )}
                     <Text style={styles.routeDistance}>
                       {formatDistance(routeInfo.distance)} · {steps.length} steps · arrive {arrivalTime(routeInfo.duration)}
                     </Text>
                   </View>
-                  <Ionicons
-                    name={showSteps ? "chevron-down" : "chevron-up"}
-                    size={20}
-                    color={theme.textSecondary}
-                  />
+                  <View style={{ flexDirection: "row", alignItems: "center", gap: 4 }}>
+                    <Text style={styles.stepsToggleHint}>{showSteps ? "Hide steps" : "Steps"}</Text>
+                    <Ionicons
+                      name={showSteps ? "chevron-down" : "chevron-up"}
+                      size={18}
+                      color={theme.textSecondary}
+                    />
+                  </View>
                 </TouchableOpacity>
                 <View style={{ gap: 10 }}>
                   <TouchableOpacity
@@ -1222,9 +1236,10 @@ const styles = StyleSheet.create({
   routeBox: {
     flexDirection: "row", justifyContent: "space-between", alignItems: "center",
     backgroundColor: theme.surface, borderRadius: 16,
-    paddingHorizontal: 18, paddingVertical: 16,
-    borderWidth: 1, borderColor: theme.border, minHeight: 78,
+    paddingHorizontal: 18, paddingVertical: 15,
+    borderWidth: 1, borderColor: theme.border,
   },
+  stepsToggleHint: { color: theme.textSecondary, fontSize: 12.5, fontWeight: "600" },
   routeDuration: { color: theme.textPrimary, fontSize: 22, fontWeight: "800", letterSpacing: -0.5 },
   routeDistance: { color: theme.textSecondary, fontSize: 13, marginTop: 2 },
   placeholderText: { color: theme.textMuted, fontSize: 13 },
