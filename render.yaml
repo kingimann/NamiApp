@@ -51,11 +51,12 @@ services:
       # Expo SDK 54 requires Node >= 20.19.4.
       - key: NODE_VERSION
         value: "20.19.4"
-      # Baked into the web build. Paste your backend's URL once it's live
-      # (e.g. https://nampo-backend.onrender.com — no trailing slash, no /api)
-      # and a Mapbox PUBLIC token. Both are bundled, so use a public token.
+      # Baked into the web build at export time. The backend URL is not secret,
+      # so hardcode it here (the API service is named nampo-backend). If you
+      # rename the API service, update this. The Mapbox PUBLIC token is bundled
+      # too; paste it in the dashboard (sync:false) since it shouldn't live in git.
       - key: EXPO_PUBLIC_BACKEND_URL
-        sync: false
+        value: https://nampo-backend.onrender.com
       - key: EXPO_PUBLIC_MAPBOX_TOKEN
         sync: false
     routes:
