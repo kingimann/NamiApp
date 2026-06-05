@@ -233,6 +233,14 @@ export const api = {
     request<{ ok: boolean }>(`/listings/${id}`, { method: "DELETE" }),
   contactSeller: (id: string) =>
     request<ConversationView>(`/listings/${id}/contact`, { method: "POST" }),
+  getSellerProfile: (userId: string) =>
+    request<SellerProfile>(`/marketplace/users/${userId}`),
+  listSellerReviews: (userId: string) =>
+    request<MarketplaceReview[]>(`/marketplace/users/${userId}/reviews`),
+  addSellerReview: (userId: string, rating: number, text: string) =>
+    request<MarketplaceReview>(`/marketplace/users/${userId}/reviews`, {
+      method: "POST", body: JSON.stringify({ rating, text }),
+    }),
 
   // Groups
   listGroupsAll: () => request<Group[]>("/groups"),
@@ -332,6 +340,16 @@ export type ListingCreate = {
   condition?: string;
   description?: string; photo_base64?: string; photos?: string[];
   longitude?: number; latitude?: number; locality?: string;
+};
+export type MarketplaceReview = {
+  id: string; subject_user_id: string;
+  reviewer: PostAuthor;
+  rating: number; text?: string | null; created_at: string;
+};
+export type SellerProfile = {
+  user: PublicUser;
+  rating: number; review_count: number; listing_count: number;
+  listings: Listing[]; reviewed_by_me: boolean;
 };
 
 export async function fetchPublicEta(share_id: string): Promise<EtaShare | null> {

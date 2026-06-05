@@ -147,7 +147,7 @@ export default function ListingDetailScreen() {
             <Text style={styles.sectionTitle}>Seller</Text>
             <TouchableOpacity
               style={styles.sellerRow}
-              onPress={() => router.push({ pathname: "/user/[name]", params: { name: listing.seller.name } })}
+              onPress={() => router.push({ pathname: "/seller/[id]", params: { id: listing.user_id, name: listing.seller.name } })}
               testID="listing-seller"
             >
               <View style={styles.sellerAvatar}>

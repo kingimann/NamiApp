@@ -226,7 +226,7 @@ export default function MarketplaceScreen() {
       )}
 
       <TouchableOpacity
-        style={[styles.fab, { bottom: insets.bottom + 66 }]}
+        style={[styles.fab, { bottom: insets.bottom + 58 }]}
         onPress={() => setComposeOpen(true)}
         testID="new-listing-fab"
       >
