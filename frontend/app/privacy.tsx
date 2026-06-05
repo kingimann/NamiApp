@@ -1,0 +1,114 @@
+import React, { useState } from "react";
+import {
+  View, Text, StyleSheet, ScrollView, TouchableOpacity, ActivityIndicator,
+} from "react-native";
+import { SafeAreaView, useSafeAreaInsets } from "react-native-safe-area-context";
+import { Ionicons } from "@expo/vector-icons";
+import { Stack, useRouter } from "expo-router";
+import { api } from "@/src/api/client";
+import { useAuth } from "@/src/context/AuthContext";
+import { theme } from "@/src/theme";
+
+const POLICIES = [
+  { k: "everyone", label: "Everyone", icon: "earth-outline" },
+  { k: "followers", label: "Followers", icon: "person-add-outline" },
+  { k: "friends", label: "Friends", icon: "people-outline" },
+  { k: "nobody", label: "No one", icon: "lock-closed-outline" },
+] as const;
+
+export default function PrivacyScreen() {
+  const router = useRouter();
+  const insets = useSafeAreaInsets();
+  const { user, refresh } = useAuth() as any;
+  const [policy, setPolicy] = useState<string>(user?.default_comment_policy || "everyone");
+  const [likesOff, setLikesOff] = useState<boolean>(!!user?.default_likes_disabled);
+  const [savingPolicy, setSavingPolicy] = useState(false);
+  const [savingLikes, setSavingLikes] = useState(false);
+
+  const savePolicy = async (k: string) => {
+    setPolicy(k); setSavingPolicy(true);
+    try { await api.updateMe({ default_comment_policy: k }); if (typeof refresh === "function") await refresh(); }
+    catch {} finally { setSavingPolicy(false); }
+  };
+  const toggleLikes = async () => {
+    const next = !likesOff; setLikesOff(next); setSavingLikes(true);
+    try { await api.updateMe({ default_likes_disabled: next }); if (typeof refresh === "function") await refresh(); }
+    catch {} finally { setSavingLikes(false); }
+  };
+
+  return (
+    <SafeAreaView edges={["top"]} style={styles.root} testID="privacy-screen">
+      <Stack.Screen options={{ headerShown: false }} />
+      <View style={styles.header}>
+        <TouchableOpacity onPress={() => router.back()} style={styles.backBtn} testID="privacy-back">
+          <Ionicons name="chevron-back" size={24} color={theme.textPrimary} />
+        </TouchableOpacity>
+        <Text style={styles.title}>Privacy</Text>
+        <View style={{ width: 40 }} />
+      </View>
+
+      <ScrollView contentContainerStyle={{ padding: 16, paddingBottom: insets.bottom + 40 }}>
+        <View style={styles.sectionHead}>
+          <Text style={styles.section}>Who can comment on your posts</Text>
+          {savingPolicy && <ActivityIndicator color={theme.primary} size="small" />}
+        </View>
+        <Text style={styles.note}>This is the default for new posts. You can still change it per post when you write one.</Text>
+        <View style={styles.card}>
+          {POLICIES.map((p, i) => {
+            const on = policy === p.k;
+            return (
+              <TouchableOpacity
+                key={p.k}
+                style={[styles.optRow, i < POLICIES.length - 1 && styles.optDivider]}
+                onPress={() => savePolicy(p.k)}
+                testID={`privacy-comment-${p.k}`}
+              >
+                <Ionicons name={p.icon as any} size={18} color={on ? theme.primary : theme.textMuted} />
+                <Text style={[styles.optLabel, on && { color: theme.primary }]}>{p.label}</Text>
+                <Ionicons name={on ? "radio-button-on" : "radio-button-off"} size={20} color={on ? theme.primary : theme.textMuted} />
+              </TouchableOpacity>
+            );
+          })}
+        </View>
+
+        <Text style={styles.section}>Likes</Text>
+        <View style={styles.card}>
+          <TouchableOpacity style={styles.optRow} onPress={toggleLikes} testID="privacy-likes">
+            <Ionicons name="heart-outline" size={18} color={theme.textMuted} />
+            <View style={{ flex: 1 }}>
+              <Text style={styles.optLabel}>Turn off likes on new posts</Text>
+              <Text style={styles.optSub}>Hides the like button on posts you create.</Text>
+            </View>
+            {savingLikes ? <ActivityIndicator color={theme.primary} size="small" /> : (
+              <View style={[styles.switch, likesOff && styles.switchOn]}>
+                <View style={[styles.knob, likesOff && styles.knobOn]} />
+              </View>
+            )}
+          </TouchableOpacity>
+        </View>
+
+        <Text style={styles.footer}>You can always see who viewed your own posts by tapping the view count.</Text>
+      </ScrollView>
+    </SafeAreaView>
+  );
+}
+
+const styles = StyleSheet.create({
+  root: { flex: 1, backgroundColor: theme.bg },
+  header: { flexDirection: "row", alignItems: "center", paddingHorizontal: 12, paddingVertical: 8, borderBottomWidth: StyleSheet.hairlineWidth, borderBottomColor: theme.border },
+  backBtn: { width: 40, height: 40, borderRadius: 20, alignItems: "center", justifyContent: "center" },
+  title: { flex: 1, color: theme.textPrimary, fontSize: 18, fontWeight: "800", textAlign: "center" },
+  sectionHead: { flexDirection: "row", alignItems: "center", justifyContent: "space-between", marginTop: 8 },
+  section: { color: theme.textMuted, fontSize: 12, fontWeight: "800", textTransform: "uppercase", letterSpacing: 0.5, marginTop: 22, marginBottom: 10 },
+  note: { color: theme.textSecondary, fontSize: 12.5, lineHeight: 18, marginBottom: 10, marginTop: -4 },
+  card: { backgroundColor: theme.surface, borderRadius: 16, borderWidth: 1, borderColor: theme.border, overflow: "hidden" },
+  optRow: { flexDirection: "row", alignItems: "center", gap: 12, paddingHorizontal: 16, paddingVertical: 16 },
+  optDivider: { borderBottomWidth: StyleSheet.hairlineWidth, borderBottomColor: theme.border },
+  optLabel: { flex: 1, color: theme.textPrimary, fontSize: 15, fontWeight: "700" },
+  optSub: { color: theme.textMuted, fontSize: 12, marginTop: 2 },
+  switch: { width: 46, height: 28, borderRadius: 14, backgroundColor: theme.surfaceAlt, borderWidth: 1, borderColor: theme.border, padding: 2, justifyContent: "center" },
+  switchOn: { backgroundColor: theme.primary, borderColor: theme.primary },
+  knob: { width: 22, height: 22, borderRadius: 11, backgroundColor: "#fff" },
+  knobOn: { alignSelf: "flex-end" },
+  footer: { color: theme.textMuted, fontSize: 12, lineHeight: 18, marginTop: 18, textAlign: "center" },
+});

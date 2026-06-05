@@ -269,6 +269,8 @@ def _user_doc_to_model(d: dict) -> dict:
         "payout_frequency": d.get("payout_frequency") or "monthly",
         "payout_threshold": float(d.get("payout_threshold", 0) or 0),
         "ad_balance": round(float(d.get("ad_balance", 0) or 0), 2),
+        "default_comment_policy": d.get("default_comment_policy") or "everyone",
+        "default_likes_disabled": bool(d.get("default_likes_disabled", False)),
         "created_at": d["created_at"],
     }
 

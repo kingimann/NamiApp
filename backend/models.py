@@ -28,6 +28,9 @@ class User(BaseModel):
     payout_frequency: str = "monthly"  # biweekly | monthly
     payout_threshold: float = 0   # hold earnings until balance reaches this
     ad_balance: float = 0         # prepaid ad-account balance (funds campaigns)
+    # Privacy defaults applied to new posts.
+    default_comment_policy: str = "everyone"   # everyone | followers | friends | nobody
+    default_likes_disabled: bool = False       # turn off likes on new posts by default
     needs_policy_agreement: bool = False  # must accept current ToS/Privacy before use
     created_at: datetime
 
@@ -72,6 +75,8 @@ class ProfilePatch(BaseModel):
     sub_price: Optional[float] = None
     payout_frequency: Optional[str] = None   # biweekly | monthly
     payout_threshold: Optional[float] = None
+    default_comment_policy: Optional[str] = None  # everyone | followers | friends | nobody
+    default_likes_disabled: Optional[bool] = None
 
 
 class TipCreate(BaseModel):
@@ -505,6 +510,8 @@ class PostCreate(BaseModel):
     poll: Optional[PollCreate] = None  # NEW
     community_id: Optional[str] = None  # forum: post belongs to a community
     title: Optional[str] = None         # forum thread title
+    likes_disabled: Optional[bool] = None              # turn off likes for this post
+    comment_policy: Optional[str] = None               # everyone | followers | friends | nobody
 
 
 class CommunityCreate(BaseModel):
@@ -567,6 +574,9 @@ class Post(BaseModel):
     quotes_count: int = 0
     bookmarks_count: int = 0
     views_count: int = 0
+    likes_disabled: bool = False
+    comment_policy: str = "everyone"   # everyone | followers | friends | nobody
+    can_comment: bool = True           # may the current viewer comment?
     liked_by_me: bool = False
     disliked_by_me: bool = False
     bookmarked_by_me: bool = False

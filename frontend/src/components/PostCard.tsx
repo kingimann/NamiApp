@@ -16,6 +16,7 @@ import PollCard from "./PollCard";
 import QuoteCard from "./QuoteCard";
 import LikersModal from "./LikersModal";
 import ShareToChatSheet from "./ShareToChatSheet";
+import PostViewersModal from "./PostViewersModal";
 import VerifiedBadge from "./VerifiedBadge";
 
 type Props = {
@@ -53,6 +54,7 @@ export default function PostCard({
   const router = useRouter();
   const [likers, setLikers] = useState<{ open: boolean; kind: "likers" | "reposters" }>({ open: false, kind: "likers" });
   const [shareOpen, setShareOpen] = useState(false);
+  const [viewersOpen, setViewersOpen] = useState(false);
   // If this entry is a pure repost (no text, has repost_of), render the original
   // with a "X reposted" banner.
   const isRepost = !!post.repost_of && post.reposted_post;
@@ -219,10 +221,15 @@ export default function PostCard({
       <View style={styles.actionsRow}>
         <TouchableOpacity
           style={styles.actionBtn}
-          onPress={(e) => { e.stopPropagation?.(); onCommentPress(); }}
+          disabled={display.can_comment === false}
+          onPress={(e) => { e.stopPropagation?.(); if (display.can_comment === false) return; onCommentPress(); }}
           testID={`reply-${post.id}`}
         >
-          <Ionicons name="chatbubble-outline" size={17} color={theme.textSecondary} />
+          <Ionicons
+            name={display.can_comment === false ? "lock-closed-outline" : "chatbubble-outline"}
+            size={17}
+            color={display.can_comment === false ? theme.textMuted : theme.textSecondary}
+          />
           <Text style={styles.actionText}>{display.replies_count || 0}</Text>
         </TouchableOpacity>
 
@@ -243,22 +250,24 @@ export default function PostCard({
           </Text>
         </TouchableOpacity>
 
-        <TouchableOpacity
-          style={styles.actionBtn}
-          onPress={(e) => { e.stopPropagation?.(); onLike(display); }}
-          onLongPress={() => setLikers({ open: true, kind: "likers" })}
-          delayLongPress={350}
-          testID={`like-${post.id}`}
-        >
-          <Ionicons
-            name={display.liked_by_me ? "heart" : "heart-outline"}
-            size={18}
-            color={display.liked_by_me ? "#EF4444" : theme.textSecondary}
-          />
-          <Text style={[styles.actionText, display.liked_by_me && { color: "#EF4444" }]}>
-            {display.likes_count}
-          </Text>
-        </TouchableOpacity>
+        {!display.likes_disabled && (
+          <TouchableOpacity
+            style={styles.actionBtn}
+            onPress={(e) => { e.stopPropagation?.(); onLike(display); }}
+            onLongPress={() => setLikers({ open: true, kind: "likers" })}
+            delayLongPress={350}
+            testID={`like-${post.id}`}
+          >
+            <Ionicons
+              name={display.liked_by_me ? "heart" : "heart-outline"}
+              size={18}
+              color={display.liked_by_me ? "#EF4444" : theme.textSecondary}
+            />
+            <Text style={[styles.actionText, display.liked_by_me && { color: "#EF4444" }]}>
+              {display.likes_count}
+            </Text>
+          </TouchableOpacity>
+        )}
 
         {onDislike && (
           <TouchableOpacity
@@ -299,10 +308,21 @@ export default function PostCard({
           <Ionicons name="paper-plane-outline" size={17} color={theme.textSecondary} />
         </TouchableOpacity>
         {!!display.views_count && display.views_count > 0 && (
-          <View style={styles.actionBtn}>
-            <Ionicons name="eye-outline" size={17} color={theme.textMuted} />
-            <Text style={styles.actionText}>{display.views_count}</Text>
-          </View>
+          isOwner ? (
+            <TouchableOpacity
+              style={styles.actionBtn}
+              onPress={(e) => { e.stopPropagation?.(); setViewersOpen(true); }}
+              testID={`views-${post.id}`}
+            >
+              <Ionicons name="eye-outline" size={17} color={theme.textMuted} />
+              <Text style={styles.actionText}>{display.views_count}</Text>
+            </TouchableOpacity>
+          ) : (
+            <View style={styles.actionBtn}>
+              <Ionicons name="eye-outline" size={17} color={theme.textMuted} />
+              <Text style={styles.actionText}>{display.views_count}</Text>
+            </View>
+          )
         )}
       </View>
 
@@ -314,6 +334,8 @@ export default function PostCard({
       />
 
       <ShareToChatSheet visible={shareOpen} post={display} onClose={() => setShareOpen(false)} />
+
+      <PostViewersModal visible={viewersOpen} postId={display.id} onClose={() => setViewersOpen(false)} />
     </TouchableOpacity>
   );
 }

@@ -285,6 +285,7 @@ export const api = {
   deletePost: (id: string) =>
     request<{ ok: boolean }>(`/posts/${id}`, { method: "DELETE" }),
   getPost: (id: string) => request<Post>(`/posts/${id}`),
+  getPostViewers: (id: string) => request<PostViewers>(`/posts/${id}/viewers`),
   listReplies: (id: string) => request<Post[]>(`/posts/${id}/replies`),
   postThread: (id: string) => request<Post[]>(`/posts/${id}/thread`),
   // Communities (forum)
@@ -540,6 +541,8 @@ export type User = {
   sub_price?: number;
   payout_frequency?: string; // biweekly | monthly
   payout_threshold?: number;
+  default_comment_policy?: string; // everyone | followers | friends | nobody
+  default_likes_disabled?: boolean;
   needs_policy_agreement?: boolean;
 };
 export type ProfilePatch = {
@@ -549,6 +552,8 @@ export type ProfilePatch = {
   sub_price?: number;
   payout_frequency?: string;
   payout_threshold?: number;
+  default_comment_policy?: string;
+  default_likes_disabled?: boolean;
 };
 export type SubTier = { id: string; name: string; price: number };
 export type WalletTxn = { id: string; kind: string; amount: number; from_user_id: string; from_name: string; source?: string; created_at: string };
@@ -792,6 +797,9 @@ export type Post = {
   quotes_count?: number;
   bookmarks_count?: number;
   views_count?: number;
+  likes_disabled?: boolean;
+  comment_policy?: string;
+  can_comment?: boolean;
   liked_by_me: boolean; disliked_by_me?: boolean; reposted_by_me?: boolean; bookmarked_by_me?: boolean;
   promoted?: boolean; promoted_until?: string | null;
   pinned?: boolean;
@@ -799,6 +807,8 @@ export type Post = {
   edited_at?: string | null;
   created_at: string;
 };
+export type PostViewer = { user_id: string; name: string; username?: string | null; picture?: string | null; verified?: boolean; viewed_at?: string };
+export type PostViewers = { count: number; unique: number; viewers: PostViewer[] };
 export type PostCreate = {
   text?: string; parent_id?: string;
   quote_of?: string;
@@ -806,6 +816,8 @@ export type PostCreate = {
   media?: PostMedia[];
   poll?: PollCreate;
   community_id?: string; title?: string;
+  likes_disabled?: boolean;
+  comment_policy?: string;
 };
 
 export type Community = {

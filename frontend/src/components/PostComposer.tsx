@@ -45,6 +45,11 @@ export default function PostComposer({
   const [showPoll, setShowPoll] = useState(false);
   const [pollOptions, setPollOptions] = useState<string[]>(["", ""]);
   const [pollHours, setPollHours] = useState(24);
+  const [likesOff, setLikesOff] = useState(false);
+  const [commentPolicy, setCommentPolicy] = useState<"everyone" | "followers" | "friends" | "nobody">("everyone");
+
+  // Privacy controls only make sense for a brand-new top-level (non-group) post.
+  const showPrivacy = !editing && !replyTo && !quoting && !groupId;
 
   useEffect(() => {
     if (visible) {
@@ -57,6 +62,8 @@ export default function PostComposer({
       setShowPoll(false);
       setPollOptions(["", ""]);
       setPollHours(24);
+      setLikesOff(false);
+      setCommentPolicy("everyone");
     }
   }, [visible, editing]);
 
@@ -211,6 +218,7 @@ export default function PostComposer({
             options: pollOptions.map((o) => o.trim()).filter(Boolean),
             duration_hours: pollHours,
           } : undefined,
+          ...(showPrivacy ? { likes_disabled: likesOff, comment_policy: commentPolicy } : {}),
         });
       }
       onPosted(p);
@@ -372,6 +380,50 @@ export default function PostComposer({
                 </View>
               </View>
             )}
+
+            {showPrivacy && (
+              <View style={styles.privacy}>
+                <View style={styles.privacyRow}>
+                  <View style={styles.privacyLabelWrap}>
+                    <Ionicons name="heart-outline" size={16} color={theme.textSecondary} />
+                    <Text style={styles.privacyLabel}>Likes</Text>
+                  </View>
+                  <TouchableOpacity
+                    style={[styles.toggle, !likesOff && styles.toggleOn]}
+                    onPress={() => setLikesOff((v) => !v)}
+                    testID="composer-likes-toggle"
+                  >
+                    <Text style={[styles.toggleText, !likesOff && { color: "#fff" }]}>{likesOff ? "Off" : "On"}</Text>
+                  </TouchableOpacity>
+                </View>
+                <View style={[styles.privacyRow, { alignItems: "flex-start" }]}>
+                  <View style={[styles.privacyLabelWrap, { paddingTop: 6 }]}>
+                    <Ionicons name="chatbubble-outline" size={16} color={theme.textSecondary} />
+                    <Text style={styles.privacyLabel}>Who can comment</Text>
+                  </View>
+                  <View style={styles.policyChips}>
+                    {([
+                      { k: "everyone", label: "Everyone" },
+                      { k: "followers", label: "Followers" },
+                      { k: "friends", label: "Friends" },
+                      { k: "nobody", label: "No one" },
+                    ] as const).map((o) => {
+                      const on = commentPolicy === o.k;
+                      return (
+                        <TouchableOpacity
+                          key={o.k}
+                          style={[styles.policyChip, on && styles.policyChipOn]}
+                          onPress={() => setCommentPolicy(o.k)}
+                          testID={`composer-comment-${o.k}`}
+                        >
+                          <Text style={[styles.policyChipText, on && { color: "#fff" }]}>{o.label}</Text>
+                        </TouchableOpacity>
+                      );
+                    })}
+                  </View>
+                </View>
+              </View>
+            )}
           </ScrollView>
 
           <View style={styles.toolbar}>
@@ -514,4 +566,18 @@ const styles = StyleSheet.create({
   },
   durationChipActive: { backgroundColor: theme.primary, borderColor: theme.primary },
   durationChipText: { color: theme.textSecondary, fontSize: 11, fontWeight: "700" },
+  privacy: {
+    marginTop: 12, padding: 12, borderRadius: 14,
+    borderWidth: 1, borderColor: theme.border, backgroundColor: theme.surfaceAlt, gap: 12,
+  },
+  privacyRow: { flexDirection: "row", alignItems: "center", justifyContent: "space-between", gap: 10 },
+  privacyLabelWrap: { flexDirection: "row", alignItems: "center", gap: 6 },
+  privacyLabel: { color: theme.textPrimary, fontSize: 13, fontWeight: "700" },
+  toggle: { paddingHorizontal: 14, height: 30, borderRadius: 999, alignItems: "center", justifyContent: "center", backgroundColor: theme.surface, borderWidth: 1, borderColor: theme.border },
+  toggleOn: { backgroundColor: theme.primary, borderColor: theme.primary },
+  toggleText: { color: theme.textSecondary, fontSize: 12, fontWeight: "800" },
+  policyChips: { flex: 1, flexDirection: "row", flexWrap: "wrap", gap: 6, justifyContent: "flex-end" },
+  policyChip: { paddingHorizontal: 10, paddingVertical: 6, borderRadius: 999, borderWidth: 1, borderColor: theme.border, backgroundColor: theme.surface },
+  policyChipOn: { backgroundColor: theme.primary, borderColor: theme.primary },
+  policyChipText: { color: theme.textSecondary, fontSize: 11.5, fontWeight: "700" },
 });
