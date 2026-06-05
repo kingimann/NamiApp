@@ -112,9 +112,14 @@ export default function WalletScreen() {
           <Ionicons name="chevron-back" size={24} color={theme.textPrimary} />
         </TouchableOpacity>
         <Text style={styles.title}>Wallet</Text>
-        <TouchableOpacity onPress={exportCsv} style={styles.iconBtn} disabled={exporting} testID="wallet-export">
-          {exporting ? <ActivityIndicator color={theme.primary} size="small" /> : <Ionicons name="download-outline" size={22} color={theme.textPrimary} />}
-        </TouchableOpacity>
+        <View style={{ flexDirection: "row" }}>
+          <TouchableOpacity onPress={() => router.push("/money")} style={styles.iconBtn} testID="wallet-money">
+            <Ionicons name="swap-horizontal" size={22} color={theme.textPrimary} />
+          </TouchableOpacity>
+          <TouchableOpacity onPress={exportCsv} style={styles.iconBtn} disabled={exporting} testID="wallet-export">
+            {exporting ? <ActivityIndicator color={theme.primary} size="small" /> : <Ionicons name="download-outline" size={22} color={theme.textPrimary} />}
+          </TouchableOpacity>
+        </View>
       </View>
 
       {loading ? (

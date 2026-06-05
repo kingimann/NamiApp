@@ -19,6 +19,10 @@ const ICON: Record<Notification["type"], { name: any; color: string }> = {
   group_message: { name: "chatbubbles",      color: "#7C3AED" },
   follow:        { name: "person-add",       color: "#0EA5E9" },
   poke:          { name: "hand-left",        color: "#F59E0B" },
+  money_request:         { name: "cash",        color: "#22C55E" },
+  money_received:        { name: "cash",        color: "#22C55E" },
+  money_request_paid:    { name: "checkmark-circle", color: "#22C55E" },
+  money_request_declined:{ name: "close-circle", color: "#EF4444" },
 };
 
 const VERB: Record<Notification["type"], string> = {
@@ -30,6 +34,10 @@ const VERB: Record<Notification["type"], string> = {
   group_message: "messaged a group",
   follow: "followed you",
   poke: "poked you 👈",
+  money_request: "requested money",
+  money_received: "sent you money",
+  money_request_paid: "paid your request",
+  money_request_declined: "declined your request",
 };
 
 export default function NotificationsScreen() {
@@ -56,7 +64,9 @@ export default function NotificationsScreen() {
       try { await api.markNotificationRead(n.id); } catch {}
       setItems((arr) => arr.map((x) => x.id === n.id ? { ...x, read: true } : x));
     }
-    if (n.conversation_id) {
+    if (n.type.startsWith("money")) {
+      router.push("/money");
+    } else if (n.conversation_id) {
       router.push({ pathname: "/chat/[id]", params: { id: n.conversation_id } });
     } else if ((n.type === "poke" || n.type === "follow") && n.actor_name) {
       router.push({ pathname: "/user/[name]", params: { name: n.actor_name } });

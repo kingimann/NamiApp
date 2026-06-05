@@ -341,6 +341,21 @@ export const api = {
     request<{ following: boolean }>(`/users/${uid}/follow`, { method: "POST" }),
   pokeUser: (uid: string) =>
     request<{ ok: boolean; already?: boolean }>(`/users/${uid}/poke`, { method: "POST" }),
+  // ── Money: send / request, gated by the sender's security question ──
+  getMoneySecurity: () => request<{ is_set: boolean; question?: string | null }>("/money/security"),
+  setMoneySecurity: (body: { question: string; answer: string; current_answer?: string }) =>
+    request<{ ok: boolean; question: string }>("/money/security", { method: "POST", body: JSON.stringify(body) }),
+  sendMoney: (body: { to_user_id: string; amount: number; note?: string; answer: string }) =>
+    request<{ ok: boolean; amount: number }>("/money/send", { method: "POST", body: JSON.stringify(body) }),
+  requestMoney: (body: { to_user_id: string; amount: number; note?: string }) =>
+    request<MoneyRequest>("/money/request", { method: "POST", body: JSON.stringify(body) }),
+  listMoneyRequests: () => request<{ incoming: MoneyRequest[]; outgoing: MoneyRequest[] }>("/money/requests"),
+  payMoneyRequest: (rid: string, answer: string) =>
+    request<{ ok: boolean; amount: number }>(`/money/requests/${rid}/pay`, { method: "POST", body: JSON.stringify({ answer }) }),
+  declineMoneyRequest: (rid: string) =>
+    request<{ ok: boolean }>(`/money/requests/${rid}/decline`, { method: "POST" }),
+  cancelMoneyRequest: (rid: string) =>
+    request<{ ok: boolean }>(`/money/requests/${rid}/cancel`, { method: "POST" }),
   listFollowers: (uid: string) => request<PublicUser[]>(`/users/${uid}/followers`),
   listFollowing: (uid: string) => request<PublicUser[]>(`/users/${uid}/following`),
   sendFriendRequest: (uid: string) =>
@@ -594,6 +609,12 @@ export type DevWebhook = { id: string; url: string; events: string[]; active: bo
 export type OveragePack = { id: string; name: string; requests: number; price: number };
 export type ApiUsage = { plan?: string | null; used: number; quota: number; extra_credits: number; limit: number; resets_at?: string | null; packs: OveragePack[]; stripe_enabled: boolean };
 export type FriendStatus = "none" | "request_sent" | "request_received" | "friends";
+export type MoneyRequest = {
+  id: string; from_user_id: string; to_user_id: string; amount: number; note: string;
+  status: "pending" | "paid" | "declined" | "cancelled"; direction: "incoming" | "outgoing";
+  other_user: { user_id: string; name: string; username?: string | null; picture?: string | null; verified?: boolean };
+  created_at?: string;
+};
 export type PublicUser = {
   user_id: string;
   name: string;
@@ -713,7 +734,8 @@ export type ConversationView = {
 export type Notification = {
   id: string;
   user_id: string;
-  type: "like" | "repost" | "reply" | "message" | "group_invite" | "group_message" | "follow" | "poke";
+  type: "like" | "repost" | "reply" | "message" | "group_invite" | "group_message" | "follow" | "poke"
+    | "money_request" | "money_received" | "money_request_paid" | "money_request_declined";
   actor_id?: string | null;
   actor_name?: string | null;
   actor_picture?: string | null;
