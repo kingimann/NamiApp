@@ -8,6 +8,7 @@ from fastapi import APIRouter, Header, HTTPException, Query
 from db import DuplicateKeyError
 
 from core import _public_user, db, get_current_user, is_admin
+from services.email import send_email
 from models import AdminUserPatch, PublicUser, Tip, TipCreate, WalletSummary, WalletTxn
 
 try:
@@ -300,6 +301,13 @@ async def tip_user(user_id: str, body: TipCreate, authorization: Optional[str] =
                                     message=f"sent you a ${amount:.2f} tip")
         except Exception:
             pass
+    try:
+        if target.get("email"):
+            send_email(target["email"], f"You received a ${amount:.2f} tip",
+                       f"Hi {target.get('name', 'there')},\n\n{me.get('name', 'Someone')} sent you a "
+                       f"${amount:.2f} tip on Nami.\n\nIt's been added to your balance.")
+    except Exception:
+        pass
     return Tip(**tip)
 
 
@@ -336,6 +344,13 @@ async def subscribe_user(user_id: str, authorization: Optional[str] = Header(Non
                                     message="subscribed to you")
         except Exception:
             pass
+    try:
+        if target.get("email"):
+            send_email(target["email"], f"New subscriber: {me.get('name', 'Someone')}",
+                       f"Hi {target.get('name', 'there')},\n\n{me.get('name', 'Someone')} just subscribed to you "
+                       f"for ${price:.2f}/mo on Nami.\n\nIt's been added to your balance.")
+    except Exception:
+        pass
     return {"subscribed": True}
 
 
@@ -414,3 +429,29 @@ async def my_wallet(authorization: Optional[str] = Header(None)):
         subscriptions_count=len(paid_subs),
         sent=sent,
     )
+
+
+@router.get("/wallet/export")
+async def export_wallet(authorization: Optional[str] = Header(None)):
+    """A CSV of all earnings + payouts for the creator's records/taxes."""
+    me = await get_current_user(authorization)
+    uid = me["user_id"]
+    earnings = await db.earnings.find({"user_id": uid}, {"_id": 0}).sort("created_at", -1).to_list(20000)
+    payouts = await db.payouts.find({"user_id": uid}, {"_id": 0}).sort("created_at", -1).to_list(20000)
+
+    def esc(v) -> str:
+        s = "" if v is None else str(v)
+        return f'"{s.replace(chr(34), chr(34) + chr(34))}"' if ("," in s or '"' in s) else s
+
+    lines = ["date,type,category,amount,counterparty,status"]
+    for e in earnings:
+        lines.append(",".join([
+            esc(e.get("created_at")), "earning", esc(e.get("kind", "tip")),
+            f'{float(e.get("amount", 0) or 0):.2f}', esc(e.get("from_name", "")), "received",
+        ]))
+    for p in payouts:
+        lines.append(",".join([
+            esc(p.get("created_at")), "payout", esc(p.get("frequency", "")),
+            f'-{float(p.get("amount", 0) or 0):.2f}', "", esc(p.get("status", "")),
+        ]))
+    return {"filename": f"nami-earnings-{uid}.csv", "csv": "\n".join(lines)}
