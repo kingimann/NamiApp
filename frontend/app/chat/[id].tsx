@@ -206,11 +206,11 @@ export default function ChatScreen() {
     api.markConversationRead(id).catch(() => {});
   }, [id]);
 
-  // poll for new messages every 3s — detect new/edited/deleted/read changes,
-  // not just count changes, so the peer's edits and deletions show up.
+  // poll for new messages every 3s — detect new/edited/deleted/read/delivered
+  // changes, not just count changes.
   const msgSigRef = useRef("");
   const msgSig = (arr: Message[]) =>
-    arr.map((x) => `${x.id}:${x.edited_at || ""}:${x.deleted ? 1 : 0}:${x.read_at || ""}`).join("|");
+    arr.map((x) => `${x.id}:${x.edited_at || ""}:${x.deleted ? 1 : 0}:${x.read_at || ""}:${x.delivered_at || ""}`).join("|");
   useEffect(() => {
     if (!id) return;
     const t = setInterval(async () => {
@@ -222,6 +222,36 @@ export default function ChatScreen() {
     }, 3000);
     return () => clearInterval(t);
   }, [id]);
+
+  // Presence: heartbeat that I'm here (and whether I'm typing), and poll the
+  // peer's state to drive "active now" / "writing…" (Snapchat-style).
+  const [presence, setPresence] = useState<{ typing: boolean; active: boolean }>({ typing: false, active: false });
+  const typingRef = useRef(false);
+  const lastTypeBeatRef = useRef(0);
+  useEffect(() => {
+    if (!id) return;
+    const beat = async () => {
+      try { await api.setPresence(id, typingRef.current); } catch {}
+      try { setPresence(await api.getPresence(id)); } catch {}
+    };
+    beat();
+    const t = setInterval(beat, 3000);
+    return () => { clearInterval(t); api.setPresence(id, false).catch(() => {}); };
+  }, [id]);
+
+  const onChangeText = (v: string) => {
+    setText(v);
+    const typing = v.trim().length > 0;
+    typingRef.current = typing;
+    const now = Date.now();
+    if (id && now - lastTypeBeatRef.current > 1200) {
+      lastTypeBeatRef.current = now;
+      api.setPresence(id, typing).catch(() => {});
+    }
+  };
+
+  // The most recent message I sent (Snapchat shows status only under it).
+  const lastMineId = [...messages].reverse().find((m) => m.sender_id === user?.user_id && !m.deleted)?.id;
 
   useEffect(() => {
     if (messages.length > 0) {
@@ -473,6 +503,8 @@ export default function ChatScreen() {
     const replyId = replyTo?.id;
     setText("");
     setReplyTo(null);
+    typingRef.current = false;
+    if (id) api.setPresence(id, false).catch(() => {});
     try {
       // Encrypt the body to the recipient(s) before sending when E2E is available.
       const payload = groupE2E ? await encryptForRecipients(draft, groupRecipients)
@@ -644,12 +676,21 @@ export default function ChatScreen() {
         </TouchableOpacity>
         <View style={{ flex: 1, alignItems: "center" }}>
           <Text style={styles.title} numberOfLines={1}>{name || "Chat"}</Text>
-          <View style={styles.encRow}>
-            <Ionicons name={(peerKey || groupE2E) ? "lock-closed" : "lock-closed-outline"} size={10} color={(peerKey || groupE2E) ? theme.primary : theme.textMuted} />
-            <Text style={[styles.encText, (peerKey || groupE2E) && { color: theme.primary }]}>
-              {(peerKey || groupE2E) ? "End-to-end encrypted" : "Encrypted"}
-            </Text>
-          </View>
+          {presence.typing ? (
+            <Text style={[styles.encText, { color: theme.primary }]}>writing…</Text>
+          ) : presence.active ? (
+            <View style={styles.encRow}>
+              <View style={styles.activeDot} />
+              <Text style={[styles.encText, { color: "#22C55E" }]}>active now</Text>
+            </View>
+          ) : (
+            <View style={styles.encRow}>
+              <Ionicons name={(peerKey || groupE2E) ? "lock-closed" : "lock-closed-outline"} size={10} color={(peerKey || groupE2E) ? theme.primary : theme.textMuted} />
+              <Text style={[styles.encText, (peerKey || groupE2E) && { color: theme.primary }]}>
+                {(peerKey || groupE2E) ? "End-to-end encrypted" : "Encrypted"}
+              </Text>
+            </View>
+          )}
         </View>
         <View style={{ width: 40 }} />
       </View>
@@ -836,11 +877,17 @@ export default function ChatScreen() {
                       <Ionicons name="lock-closed" size={10} color={theme.textMuted} />
                     )}
                     {mine && !item.deleted && (
-                      <Ionicons
-                        name={item.read_at ? "checkmark-done" : "checkmark"}
-                        size={14}
-                        color={item.read_at ? "#53BDEB" : theme.textMuted}
-                      />
+                      item.id === lastMineId ? (
+                        <Text style={[styles.statusLabel, item.read_at && { color: "#53BDEB" }]}>
+                          {item.read_at ? "Read" : item.delivered_at ? "Delivered" : "Sent"}
+                        </Text>
+                      ) : (
+                        <Ionicons
+                          name={(item.read_at || item.delivered_at) ? "checkmark-done" : "checkmark"}
+                          size={14}
+                          color={item.read_at ? "#53BDEB" : theme.textMuted}
+                        />
+                      )
                     )}
                   </View>
                 </View>
@@ -1012,7 +1059,7 @@ export default function ChatScreen() {
                   placeholder="Message..."
                   placeholderTextColor={theme.textMuted}
                   value={text}
-                  onChangeText={setText}
+                  onChangeText={onChangeText}
                   onFocus={() => setAttachOpen(false)}
                   multiline
                   testID="msg-input"
@@ -1169,6 +1216,8 @@ const styles = StyleSheet.create({
   bubbleRow: { flexDirection: "row" },
   metaRow: { flexDirection: "row", alignItems: "center", gap: 5, marginTop: 4, paddingHorizontal: 4 },
   metaTime: { color: theme.textMuted, fontSize: 11, fontWeight: "500" },
+  statusLabel: { color: theme.textMuted, fontSize: 10.5, fontWeight: "700", textTransform: "uppercase", letterSpacing: 0.3 },
+  activeDot: { width: 7, height: 7, borderRadius: 4, backgroundColor: "#22C55E" },
   editedLink: { textDecorationLine: "underline" },
   historyTitle: { color: theme.textPrimary, fontSize: 16, fontWeight: "800", marginBottom: 10, paddingHorizontal: 4 },
   historyRow: { backgroundColor: theme.surfaceAlt, borderRadius: 12, padding: 12, marginBottom: 8 },

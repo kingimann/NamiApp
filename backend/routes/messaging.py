@@ -16,13 +16,14 @@ their `cleared_at` so old messages are hidden from them. Sending a new
 message OR receiving one re-surfaces the conversation (removes them
 from `deleted_by`).
 """
-from datetime import datetime, timezone
+from datetime import datetime, timezone, timedelta
 from typing import List, Optional
 import uuid
 
 from fastapi import APIRouter, Header, HTTPException
+from pydantic import BaseModel
 
-from core import _conv_key, _public_user, db, get_current_user, is_admin
+from core import _conv_key, _public_user, db, get_current_user, is_admin, _norm_dt
 from models import (
     ConversationCreate,
     ConversationView,
@@ -333,22 +334,83 @@ async def list_messages(
         .limit(200)
     )
     docs = await cursor.to_list(200)
-    # Compute read receipts (WhatsApp ✓/✓✓ style).
-    # A message is "read" when EVERY non-sender participant's last_read
-    # timestamp is >= message.created_at. For 1:1 chats that's just the peer.
+    # Fetching messages = they're delivered to this viewer. Record it so the
+    # sender can show Sent → Delivered → Read (Snapchat-style).
+    now = datetime.now(timezone.utc)
+    await db.conversations.update_one(
+        {"id": conv_id}, {"$set": {f"last_delivered.{user['user_id']}": now}}
+    )
     last_read = conv.get("last_read") or {}
+    last_delivered = conv.get("last_delivered") or {}
+    last_delivered[user["user_id"]] = now  # reflect this fetch immediately
     out: List[Message] = []
     for d in docs:
         plain = _decrypt_msg(d)
         sender_id = plain.get("sender_id")
         others = [p for p in conv["participant_ids"] if p != sender_id]
         if others:
-            timestamps = [last_read.get(p) for p in others]
-            if all(t is not None and t >= plain["created_at"] for t in timestamps):
-                # Soonest moment when the LAST recipient read this message
-                plain["read_at"] = max(timestamps)  # type: ignore[arg-type]
+            reads = [last_read.get(p) for p in others]
+            if all(t is not None and t >= plain["created_at"] for t in reads):
+                plain["read_at"] = max(reads)  # type: ignore[arg-type]
+            delivers = [last_delivered.get(p) for p in others]
+            if all(t is not None and t >= plain["created_at"] for t in delivers):
+                plain["delivered_at"] = max(delivers)  # type: ignore[arg-type]
         out.append(Message(**plain))
     return out
+
+
+class PresenceUpdate(BaseModel):
+    typing: bool = False
+
+
+@router.post("/conversations/{conv_id}/presence")
+async def update_presence(conv_id: str, body: PresenceUpdate, authorization: Optional[str] = Header(None)):
+    """Heartbeat: I'm viewing this chat (and maybe typing). Drives the
+    'active in chat' + 'writing…' indicators."""
+    user = await get_current_user(authorization)
+    conv = await db.conversations.find_one({"id": conv_id}, {"_id": 0, "participant_ids": 1})
+    if not conv or user["user_id"] not in conv["participant_ids"]:
+        raise HTTPException(status_code=404, detail="Conversation not found")
+    now = datetime.now(timezone.utc)
+    patch = {f"last_active.{user['user_id']}": now}
+    if body.typing:
+        patch[f"typing_at.{user['user_id']}"] = now
+    else:
+        patch[f"typing_at.{user['user_id']}"] = None
+    await db.conversations.update_one({"id": conv_id}, {"$set": patch})
+    return {"ok": True}
+
+
+@router.get("/conversations/{conv_id}/presence")
+async def get_presence(conv_id: str, authorization: Optional[str] = Header(None)):
+    """Other participants' live state: who's active in the chat and who's typing."""
+    user = await get_current_user(authorization)
+    conv = await db.conversations.find_one({"id": conv_id}, {"_id": 0})
+    if not conv or user["user_id"] not in conv["participant_ids"]:
+        raise HTTPException(status_code=404, detail="Conversation not found")
+    now = datetime.now(timezone.utc)
+    active_window = timedelta(seconds=20)
+    typing_window = timedelta(seconds=6)
+    last_active = conv.get("last_active") or {}
+    typing_at = conv.get("typing_at") or {}
+
+    def _recent(ts, window):
+        if not ts:
+            return False
+        try:
+            return (now - _norm_dt(ts)) < window
+        except Exception:
+            return False
+
+    others = [p for p in conv["participant_ids"] if p != user["user_id"]]
+    typing_ids = [p for p in others if _recent(typing_at.get(p), typing_window)]
+    active_ids = [p for p in others if _recent(last_active.get(p), active_window)]
+    return {
+        "typing": bool(typing_ids),
+        "active": bool(active_ids),
+        "typing_ids": typing_ids,
+        "active_ids": active_ids,
+    }
 
 
 @router.post("/conversations/{conv_id}/messages", response_model=Message)
