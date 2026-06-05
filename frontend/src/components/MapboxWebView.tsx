@@ -29,6 +29,7 @@ export type MapboxWebViewHandle = {
   setMarkers: (markers: MarkerInput[]) => void;
   setRoute: (geometry: RouteGeometry | null) => void;
   flyTo: (lng: number, lat: number, zoom?: number) => void;
+  panTo: (lng: number, lat: number) => void;
   setUserLocation: (lng: number, lat: number, accuracy?: number, heading?: number) => void;
   setPitch: (pitch: number) => void;
   setBearing: (bearing: number) => void;
@@ -197,6 +198,11 @@ function buildHtml(token: string, center: [number, number], zoom: number, style:
   function flyTo(lng, lat, zoom) {
     map.flyTo({ center:[lng,lat], zoom: zoom != null ? zoom : map.getZoom(), essential: true });
   }
+  // Lightweight linear glide used for continuous "follow" tracking. Much cheaper
+  // and smoother than flyTo when fired on every GPS fix.
+  function panTo(lng, lat) {
+    map.easeTo({ center:[lng,lat], duration: 700, easing: function (t) { return t; } });
+  }
   function setUserLocation(lng, lat, accuracyM, heading) {
     if (!userMarker) {
       var el = document.createElement('div');
@@ -352,6 +358,7 @@ function buildHtml(token: string, center: [number, number], zoom: number, style:
         case 'setMarkers': setMarkers(msg.markers); break;
         case 'setRoute': setRoute(msg.geometry); break;
         case 'flyTo': flyTo(msg.lng, msg.lat, msg.zoom); break;
+        case 'panTo': panTo(msg.lng, msg.lat); break;
         case 'setUserLocation': setUserLocation(msg.lng, msg.lat, msg.accuracy, msg.heading); break;
         case 'setPitch': setPitch(msg.value); break;
         case 'setBearing': setBearing(msg.value); break;
@@ -395,6 +402,7 @@ export const MapboxWebView = forwardRef<MapboxWebViewHandle, Props>(
       setMarkers: (markers) => send({ cmd: "setMarkers", markers }),
       setRoute: (geometry) => send({ cmd: "setRoute", geometry }),
       flyTo: (lng, lat, zoom) => send({ cmd: "flyTo", lng, lat, zoom }),
+      panTo: (lng, lat) => send({ cmd: "panTo", lng, lat }),
       setUserLocation: (lng, lat, accuracy, heading) => send({ cmd: "setUserLocation", lng, lat, accuracy, heading }),
       setPitch: (value) => send({ cmd: "setPitch", value }),
       setBearing: (value) => send({ cmd: "setBearing", value }),

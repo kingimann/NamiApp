@@ -16,7 +16,6 @@ import {
   Platform,
   Linking,
   KeyboardAvoidingView,
-  ScrollView,
   Share,
   Image as RNImage,
 } from "react-native";
@@ -32,10 +31,8 @@ import {
 } from "@/src/components/MapboxWebView";
 import {
   forwardGeocode,
-  categorySearch,
   GeocodeFeature,
 } from "@/src/api/mapbox";
-import { useAuth } from "@/src/context/AuthContext";
 import { api, Place, Recent, Review, FsqProfile, buildPlaceKey } from "@/src/api/client";
 import { MAP_STYLES, MapStyleKey, theme } from "@/src/theme";
 
@@ -49,18 +46,8 @@ type SelectedPlace = {
   isCategoryPoi?: boolean;
 };
 
-const CATEGORIES: { key: string; label: string; icon: keyof typeof Ionicons.glyphMap; color: string }[] = [
-  { key: "restaurant", label: "Food", icon: "restaurant", color: "#F97316" },
-  { key: "coffee", label: "Coffee", icon: "cafe", color: "#A16207" },
-  { key: "gas_station", label: "Gas", icon: "car-sport", color: "#22C55E" },
-  { key: "hotel", label: "Hotels", icon: "bed", color: "#A855F7" },
-  { key: "parking_lot", label: "Parking", icon: "car", color: "#3B82F6" },
-  { key: "atm", label: "ATMs", icon: "card", color: "#06B6D4" },
-];
-
 export default function MapScreen() {
   const router = useRouter();
-  const { user } = useAuth();
   const mapRef = useRef<MapboxWebViewHandle>(null);
   const insets = useSafeAreaInsets();
 
@@ -84,10 +71,6 @@ export default function MapScreen() {
   const [results, setResults] = useState<GeocodeFeature[]>([]);
   const [searching, setSearching] = useState(false);
   const [showResults, setShowResults] = useState(false);
-
-  const [categoryKey, setCategoryKey] = useState<string | null>(null);
-  const [categoryResults, setCategoryResults] = useState<GeocodeFeature[]>([]);
-  const [loadingCategory, setLoadingCategory] = useState(false);
 
   const [selected, setSelected] = useState<SelectedPlace | null>(null);
   const [reviews, setReviews] = useState<Review[]>([]);
@@ -148,29 +131,17 @@ export default function MapScreen() {
     loadData();
   }, [loadData]);
 
-  // Render markers on map: saved places + category POIs
+  // Render markers on map: saved places
   useEffect(() => {
-    const markers = [
-      ...places.map((p) => ({
-        id: `place_${p.id}`,
-        longitude: p.longitude,
-        latitude: p.latitude,
-        title: p.title,
-        color: p.category === "favorite" ? "#EAB308" : "#3B82F6",
-      })),
-      ...categoryResults.map((c, i) => ({
-        id: `poi_${c.id}`,
-        longitude: c.longitude,
-        latitude: c.latitude,
-        title: c.name,
-        color:
-          CATEGORIES.find((cat) => cat.key === categoryKey)?.color ||
-          "#F97316",
-        label: String(i + 1),
-      })),
-    ];
+    const markers = places.map((p) => ({
+      id: `place_${p.id}`,
+      longitude: p.longitude,
+      latitude: p.latitude,
+      title: p.title,
+      color: p.category === "favorite" ? "#EAB308" : "#3B82F6",
+    }));
     mapRef.current?.setMarkers(markers);
-  }, [places, categoryResults, categoryKey]);
+  }, [places]);
 
   const requestLocation = useCallback(async () => {
     setLocating(true);
@@ -229,8 +200,8 @@ export default function MapScreen() {
         watcherRef.current = await Location.watchPositionAsync(
           {
             accuracy: Location.Accuracy.BestForNavigation,
-            timeInterval: 1500,
-            distanceInterval: 3,
+            timeInterval: 1000,
+            distanceInterval: 2,
           },
           (loc) => {
             if (cancelled) return;
@@ -244,9 +215,11 @@ export default function MapScreen() {
               acc ?? undefined,
               (loc.coords.heading != null && loc.coords.heading >= 0) ? loc.coords.heading : undefined,
             );
-            // Follow mode: pan the camera with the user (Google-Maps "blue dot follow")
+            // Follow mode: glide the camera with the user (Google-Maps "blue dot
+            // follow"). panTo is a short linear ease — far smoother than flyTo
+            // when fired on every GPS fix.
             if (followModeRef.current) {
-              mapRef.current?.flyTo(c[0], c[1]);
+              mapRef.current?.panTo(c[0], c[1]);
             }
           },
         );
@@ -310,52 +283,16 @@ export default function MapScreen() {
             });
             mapRef.current?.flyTo(p.longitude, p.latitude, 15);
           }
-        } else if (e.id.startsWith("poi_")) {
-          const pid = e.id.slice("poi_".length);
-          const c = categoryResults.find((cc) => cc.id === pid);
-          if (c) {
-            setSelected({
-              name: c.name,
-              address: c.full_address,
-              longitude: c.longitude,
-              latitude: c.latitude,
-              isCategoryPoi: true,
-            });
-            mapRef.current?.flyTo(c.longitude, c.latitude, 15);
-          }
         }
       }
     },
-    [places, categoryResults, requestLocation, styleKey],
+    [places, requestLocation, styleKey],
   );
 
   const onPickStyle = (key: MapStyleKey) => {
     setStyleKey(key);
     setStyleSheetOpen(false);
     mapRef.current?.setStyle(MAP_STYLES.find((x) => x.key === key)!.url);
-  };
-
-  const onPickCategory = async (key: string) => {
-    if (categoryKey === key) {
-      setCategoryKey(null);
-      setCategoryResults([]);
-      return;
-    }
-    const center = userLocation || [-74.006, 40.7128];
-    setCategoryKey(key);
-    setLoadingCategory(true);
-    try {
-      const r = await categorySearch(key, center, 12);
-      setCategoryResults(r);
-      if (r.length > 0) {
-        mapRef.current?.fitBounds(
-          [...r.map((x) => [x.longitude, x.latitude] as [number, number]), center],
-          80,
-        );
-      }
-    } finally {
-      setLoadingCategory(false);
-    }
   };
 
   const onPickResult = async (r: GeocodeFeature) => {
@@ -536,74 +473,6 @@ export default function MapScreen() {
           </View>
         </View>
 
-        {/* Category chips row (hide when search results open) */}
-        {(!showResults || (!query && results.length === 0)) && (
-          <ScrollView
-            horizontal
-            showsHorizontalScrollIndicator={false}
-            style={styles.catScrollRow}
-            contentContainerStyle={styles.catContent}
-            testID="category-row"
-          >
-            {user?.home_latitude != null && user?.home_longitude != null && (
-              <TouchableOpacity
-                style={[styles.catChip, { borderColor: "#22C55E" }]}
-                onPress={() => {
-                  mapRef.current?.flyTo(user.home_longitude!, user.home_latitude!, 14);
-                  setSelected({
-                    name: user.home_name || "Home",
-                    longitude: user.home_longitude!,
-                    latitude: user.home_latitude!,
-                  });
-                }}
-                testID="home-chip"
-              >
-                <Ionicons name="home" size={14} color="#22C55E" />
-                <Text style={[styles.catLabel, { color: "#22C55E" }]}>Home</Text>
-              </TouchableOpacity>
-            )}
-            {user?.work_latitude != null && user?.work_longitude != null && (
-              <TouchableOpacity
-                style={[styles.catChip, { borderColor: "#A855F7" }]}
-                onPress={() => {
-                  mapRef.current?.flyTo(user.work_longitude!, user.work_latitude!, 14);
-                  setSelected({
-                    name: user.work_name || "Work",
-                    longitude: user.work_longitude!,
-                    latitude: user.work_latitude!,
-                  });
-                }}
-                testID="work-chip"
-              >
-                <Ionicons name="briefcase" size={14} color="#A855F7" />
-                <Text style={[styles.catLabel, { color: "#A855F7" }]}>Work</Text>
-              </TouchableOpacity>
-            )}
-            {CATEGORIES.map((c) => {
-              const active = categoryKey === c.key;
-              return (
-                <TouchableOpacity
-                  key={c.key}
-                  onPress={() => onPickCategory(c.key)}
-                  style={[styles.catChip, active && { borderColor: c.color }]}
-                  testID={`cat-${c.key}`}
-                  activeOpacity={0.85}
-                >
-                  <Ionicons name={c.icon} size={14} color={active ? c.color : theme.textSecondary} />
-                  <Text
-                    style={[
-                      styles.catLabel,
-                      { color: active ? c.color : theme.textPrimary },
-                    ]}
-                  >
-                    {c.label}
-                  </Text>
-                </TouchableOpacity>
-              );
-            })}
-          </ScrollView>
-        )}
-
         {/* Results / Recents dropdown */}
         {showResults && (results.length > 0 || (!query && recents.length > 0)) && (
           <View style={styles.resultsCard} testID="search-results">
@@ -659,12 +528,6 @@ export default function MapScreen() {
           </View>
         )}
 
-        {loadingCategory && (
-          <View style={styles.catLoading} testID="category-loading">
-            <ActivityIndicator color={theme.primary} size="small" />
-            <Text style={styles.catLoadingText}>Finding places nearby…</Text>
-          </View>
-        )}
       </View>
 
       {/* Apple-Maps-style grouped control stack (bottom-right) */}
@@ -1082,39 +945,6 @@ const styles = StyleSheet.create({
     paddingVertical: 0,
     ...(Platform.OS === "web" ? ({ outlineStyle: "none" } as object) : {}),
   },
-  catScrollRow: { marginTop: 12, paddingHorizontal: 14 },
-  catContent: { gap: 8, paddingHorizontal: 2, paddingRight: 16 },
-  catChip: {
-    height: 34,
-    flexShrink: 0,
-    flexDirection: "row",
-    alignItems: "center",
-    gap: 6,
-    paddingHorizontal: 14,
-    borderRadius: 17,
-    backgroundColor: Platform.select({
-      ios: "rgba(28,28,32,0.55)",
-      android: "rgba(28,28,32,0.85)",
-      default: "rgba(28,28,32,0.78)",
-    }),
-    borderWidth: StyleSheet.hairlineWidth,
-    borderColor: "rgba(255,255,255,0.13)",
-    ...(Platform.OS === "web" ? ({
-      backdropFilter: "blur(22px) saturate(160%)",
-      WebkitBackdropFilter: "blur(22px) saturate(160%)",
-    } as any) : {}),
-  },
-  catLabel: { fontSize: 12.5, fontWeight: "600", letterSpacing: 0.1 },
-  catLoading: {
-    marginTop: 8,
-    backgroundColor: "rgba(15,15,17,0.95)",
-    borderRadius: 12,
-    padding: 10,
-    flexDirection: "row",
-    alignItems: "center",
-    gap: 8,
-  },
-  catLoadingText: { color: theme.textSecondary, fontSize: 13 },
   resultsCard: {
     marginTop: 8,
     backgroundColor: "rgba(15,15,17,0.97)",
