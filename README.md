@@ -1,10 +1,10 @@
 # Nampo
 
-**Nampo** is a social + maps app for mobile (and the web) that blends a Twitter/Instagram-style social network with a full-featured, Google-Maps-style navigation experience. Users get a **news feed** with photos and videos, **reels**, ephemeral **stories**, **direct and group messaging** (with voice notes and shared live locations), an interactive **Mapbox map** with **turn-by-turn navigation**, saved **places** and shareable **guides**, rich **profiles** with follows and friend requests, a **marketplace** for buying and selling, and **groups** with posts, pins, and admin roles — all on top of a single FastAPI backend.
+**Nami App** is a social + maps app for mobile (and the web) that blends a Twitter/Instagram-style social network with a full-featured, Google-Maps-style navigation experience. Users get a **news feed** with photos and videos, **reels**, ephemeral **stories**, **direct and group messaging** (voice notes, custom emojis, shared live locations), an interactive **Mapbox map** with **turn-by-turn navigation**, saved **places** and shareable **guides**, rich **profiles** with follows/friends and **verified badges**, a location-aware **marketplace**, **Reddit-style community forums**, chat **groups**, and **creator monetization** (tips & subscriptions) — all on a single FastAPI backend.
 
 The repo is a monorepo: a **React Native + Expo** client (`frontend/`) talking over REST and WebSockets to a **FastAPI** server (`backend/`).
 
-> Note on naming: the project is branded **Nampo** in its deployment docs; the application code and Expo manifest still use the internal name **"Atlas Maps"** (the API root returns `{"app": "Atlas Maps API"}`). They refer to the same app.
+> Note on naming: the repository is `nampo-deploy-readyzip` and deploy docs historically said "Nampo"; the app is branded **Nami App** (Expo manifest name, login screen, API root `{"app": "Nami App API"}`). They refer to the same app.
 
 ---
 
@@ -12,13 +12,15 @@ The repo is a monorepo: a **React Native + Expo** client (`frontend/`) talking o
 
 ### Social / Feed
 - News feed with text, photos, and videos (home/following feed and an explore feed)
-- Likes **and dislikes** (mutually exclusive), replies/threads, bookmarks, reposts, and quote-reposts
+- Likes **and dislikes** (mutually exclusive; counts sync to the server after each toggle), replies/threads, bookmarks, reposts, and quote-reposts
+- **Pin** your own posts to the top of your profile
+- **Threaded comments**: reply to a comment (nested under it), with "replying to @user" labels and tappable `@mentions`; the post owner can **pin a comment**
+- **Inline media & embeds**: paste a YouTube/Twitch/Vimeo link and it plays inline; paste a direct image / imgur / giphy link and it shows inline (in posts *and* comments). GIF picker available in comments too.
 - Polls (timed, single-choice) attached to posts
 - Hashtags (browse posts by tag, with counts) and rich link previews
-- X-style impression / view-count tracking on posts
-- Likers and reposters lists per post
+- X-style impression / view-count tracking on posts; likers and reposters lists
 - **Content reporting** (flag a post/reel for moderation, one report per user)
-- **Promote / advertise** a post: boosts ranking and adds a "Sponsored" badge, with a prototype checkout (durations + a test-mode card form; real payments to be added later)
+- **Promote / advertise** a post: boosts ranking and shows a "Sponsored" badge, via a prototype checkout (durations + a test-mode card form)
 
 ### Reels & Stories
 - Reels: a vertical, full-screen video feed (`/feed/reels`)
@@ -28,6 +30,7 @@ The repo is a monorepo: a **React Native + Expo** client (`frontend/`) talking o
 - One-to-one (DM) and group conversations
 - Message types: text, shared **place/location**, media (images/video), **voice notes** (with a live recording timer), **GIFs**, **shared posts**, **contacts**, and **file/document attachments** (native via the document picker, plus the web file input)
 - **❤️ reactions** (double-tap a bubble or use the long-press menu) and **replies** (quoted preview in the composer and on the sent bubble)
+- **Custom uploadable emojis**: upload an image + `:shortcode:` and use it inline in any message (global registry; long-press your own to delete)
 - Edits, read receipts, unread counts, and message deletion (with a tombstone)
 - Group conversation management (rename, avatar, add/remove members, leave)
 - Optional client-side **E2E encryption** (tweetnacl) plus optional at-rest encryption (Fernet) when a key is configured
@@ -43,18 +46,30 @@ The repo is a monorepo: a **React Native + Expo** client (`frontend/`) talking o
 
 ### Profile & Settings
 - Profiles with avatar, bio, username, and home/work saved locations
+- **Verified blue checkmark** shown next to verified users (on posts, comments, profiles)
 - Follow / unfollow, followers/following lists
 - Friend requests (send, accept, reject, remove) with friend status
-- A user's posts (originals plus reposts/quotes) shown on their profile
+- A user's posts (originals plus reposts/quotes) shown on their profile, pinned first
 - Account settings and a customizable navigation bar
+
+### Creators & monetization (fake payments)
+- **Tip** any creator (choose an amount + a note) and **subscribe** monthly at the creator's price, both through a reusable **test-mode checkout** (no real charge)
+- A creator's earnings are tracked and shown in a **Wallet** screen: total earned, tips vs. subscriptions, active subscribers, recent transactions, and a control to set your own monthly subscription price
+- All money is credited as earnings to the recipient. (Designed so a real payment processor can be dropped into the fake-payment step later.)
+
+### Roles & moderation
+- Site **roles**: `user` / `mod` / `admin`. Bootstrap admins with the `ADMIN_EMAILS` env var.
+- Admins can **verify** users and assign **mod/admin** roles from any profile
+- Mods/admins can delete any post (owners can always delete their own)
 
 ### Discovery
 - User search
 - Saved **places** and **recents**
 - **Guides**: curated, optionally public/cloneable collections of places (with shareable slugs)
 - **Reviews** for places (1–5 stars + text)
-- **Marketplace** listings (price, category, photo, location, sold status), with **search + category filters**, a **saved/bookmarked** view, **seller profiles** (avatar, aggregate rating, listing grid), and **buyer/seller reviews** (1–5★, one per reviewer)
-- **Groups**: public/private communities with posts, pinned posts, join requests, and member roles (owner/admin/member)
+- **Marketplace** listings (price, category, photos, condition, sold status) with **location + radius search** (Facebook-style: set your location, filter by distance, "N km away" on cards, "Nearest first" sort), **search + category filters**, a **saved/bookmarked** view, advanced listing fields (brand, quantity, negotiable, delivery), **seller profiles** (avatar, aggregate rating, listing grid), and **buyer/seller reviews** (1–5★)
+- **Communities (forum)**: a Reddit-style section — create/discover communities, join/leave, post **threads** (title + body), vote (up/down via like/dislike), comment, and sort **Hot / New / Top**
+- **Groups**: public/private chat communities with posts, pinned posts, join requests, and member roles (owner/admin/member) — distinct from the forum
 - Notifications feed (with unread counts and mark-as-read)
 
 ---
@@ -136,11 +151,13 @@ Nampo-deploy-readyzip/
 │   │   ├── messaging.py      # DMs, groups, messages, voice/place/media
 │   │   ├── notifications.py  # notifications feed
 │   │   ├── eta.py            # ETA share REST + WebSocket
-│   │   ├── posts.py          # feed, posts, likes, reposts, bookmarks, polls, reels
-│   │   ├── marketplace.py    # listings
-│   │   ├── groups.py         # communities, members, pins, requests
+│   │   ├── posts.py          # feed, posts, likes/dislikes, reposts, bookmarks, polls, reels, pinning, comment threads
+│   │   ├── communities.py    # Reddit-style forum communities + threads
+│   │   ├── marketplace.py    # listings (location/radius), seller profiles, reviews
+│   │   ├── groups.py         # chat communities, members, pins, requests
 │   │   ├── foursquare.py     # Foursquare place match
 │   │   └── stories.py        # ephemeral stories
+│   │   # users.py also hosts: tips, subscriptions, /wallet, /admin/users (roles/verify)
 │   ├── services/
 │   │   ├── encryption.py     # optional Fernet message encryption at rest
 │   │   └── link_preview.py   # OpenGraph/link-preview scraping
@@ -159,14 +176,19 @@ Nampo-deploy-readyzip/
     │   ├── reels.tsx          # reels feed
     │   ├── story/[userId].tsx # story viewer
     │   ├── post/[id].tsx, hashtag/[tag].tsx, bookmarks.tsx, notifications.tsx
-    │   ├── group/[id]/...     # group detail + members
+    │   ├── communities.tsx, c/[name].tsx   # forum: discover + a community page
+    │   ├── wallet.tsx          # creator earnings (tips/subs)
+    │   ├── advertise.tsx       # promote a post (fake-payment checkout)
+    │   ├── group/[id]/...     # chat group detail + members
     │   ├── guide/[id].tsx, g/[slug].tsx (public guide)
     │   ├── eta/[shareId].tsx  # public ETA viewer
     │   └── user/[name].tsx, people.tsx, connections.tsx, settings.tsx, ...
     └── src/
         ├── api/client.ts      # typed API client (reads EXPO_PUBLIC_BACKEND_URL/MAPBOX_TOKEN)
         ├── api/mapbox.ts      # geocoding, category search, directions
-        ├── components/        # PostCard, StoryTray, MapboxWebView, VoiceMessage, etc.
+        ├── utils/embeds.ts    # YouTube/Twitch/Vimeo + image/GIF link detection
+        ├── components/        # PostCard, CommentsSheet, EmbedCard, InlineMedia, EmojiText,
+        │                      #   CustomEmojiSheet, FakePaymentSheet, VerifiedBadge, MapboxWebView, …
         ├── context/           # Auth, Sidebar, NavBar contexts
         └── utils/             # secure storage, e2e helpers
 ```
@@ -195,9 +217,10 @@ Nampo-deploy-readyzip/
 | `CORS_ORIGINS`    | No       | No     | `*`            | Comma-separated allowed origins, or `*` for all. |
 | `MESSAGE_ENC_KEY` | No       | **Yes**| *(none)*       | Fernet key. If set, messages are encrypted at rest; if absent/invalid, messaging still works in plaintext. |
 | `FSQ_API_KEY`     | No       | **Yes**| `""`           | Foursquare Places API key for `/api/foursquare/match`. Without it, place matching returns nothing. |
-| `GOOGLE_OAUTH_CLIENT_ID` | No | **Yes** | `""`        | Enables Google sign-in (`/api/auth/google/*`). Optional — email/password is the primary path. |
-| `GOOGLE_OAUTH_CLIENT_SECRET` | No | **Yes** | `""`    | Paired with the client ID for Google OAuth. |
+| `ADMIN_EMAILS`    | No       | **Yes**| `""`           | Comma-separated emails auto-granted the **admin** role (verify users, set roles, moderate posts). |
 | `PORT`            | No       | No     | `8080`         | Port Uvicorn binds to (Render injects this). |
+
+> Auth is email/password only — Google sign-in was removed. `RENDER_EXTERNAL_URL` / `PUBLIC_BASE_URL` are read automatically for building absolute URLs.
 
 > **Note:** the database connection is configured **only** through `DATABASE_URL`; `DB_NAME` is unused. The Render Blueprint (`render.yaml`) provisions a Postgres instance and wires `DATABASE_URL` into the service automatically.
 
@@ -239,7 +262,7 @@ uvicorn server:app --reload --port 8080
 
 Health checks:
 - `GET /health` → `{"status":"ok"}`
-- `GET /` → `{"status":"ok","app":"Atlas Maps API"}`
+- `GET /` → `{"status":"ok","app":"Nami App API"}`
 - `GET /api/` → API root for the auth router
 
 ### 2. Frontend (Expo)
@@ -294,12 +317,13 @@ All routes are mounted under the **`/api`** prefix and (except auth/registration
 | Route group        | Base paths (examples) | What it does |
 | ------------------ | --------------------- | ------------ |
 | **Auth**           | `/auth/register`, `/auth/login`, `/auth/me`, `/auth/logout`, `/auth/username`, `/auth/keys`, `/auth/google/*` | Email/username + password registration & login (bcrypt, session tokens), profile read/patch, username availability/claim, E2E public keys, optional Google OAuth. |
-| **Users**          | `/users/search`, `/users/{id}/public`, `/users/{id}/follow`, `/friends/*` | User search, public profiles, follow/unfollow, followers/following, and the full friend-request lifecycle. |
-| **Posts / Feed**   | `/posts`, `/feed/home`, `/feed/explore`, `/feed/reels`, `/posts/{id}/like\|dislike\|repost\|bookmark\|vote\|view\|promote\|report`, `/bookmarks`, `/hashtags/{tag}` | Create/edit/delete posts, home/explore/reels feeds, replies/threads, likes & dislikes, reposts & quotes, bookmarks, polls, view tracking, post promotion, reporting, hashtags, likers/reposters. |
+| **Users**          | `/users/search`, `/users/{id}/public`, `/users/{id}/follow`, `/friends/*`, `/users/{id}/tip`, `/users/{id}/subscribe`, `/wallet`, `/admin/users/{id}` | User search, public profiles, follow/friends; **tips & subscriptions** + the creator **wallet**; **admin** verify/role management. |
+| **Posts / Feed**   | `/posts`, `/feed/home\|explore\|reels`, `/posts/{id}/like\|dislike\|repost\|bookmark\|vote\|view\|promote\|report\|pin`, `/posts/{id}/replies\|thread`, `/bookmarks`, `/hashtags/{tag}` | Create/edit/delete posts, feeds, replies + **full comment threads**, likes/dislikes, reposts/quotes, bookmarks, polls, views, promotion, reporting, **pinning**, hashtags. Forum posts carry `community_id` + `title`. |
 | **Stories**        | `/stories`, `/stories/tray`, `/stories/user/{id}`, `/stories/{id}/view\|viewers\|reply` | Create 24h ephemeral stories, story tray, view counts, viewer lists, and replies. |
-| **Messaging**      | `/conversations`, `/conversations/groups`, `/conversations/{id}/messages`, `/conversations/{id}/messages/{mid}/react`, `/conversations/{id}/read` | DMs and group chats; send text/place/media/voice/gif/file/contact/post messages; replies, ❤️ reactions, edits, read receipts, deletion; group management. |
-| **Groups**         | `/groups`, `/groups/{id}/join\|leave\|posts\|pins\|requests\|members/*` | Public/private communities: membership & join requests, posts, pinned posts, member roles (promote/demote/remove). |
-| **Marketplace**    | `/listings`, `/listings/{id}`, `/listings/{id}/contact` | Create/update/delete listings, browse by user, and start a DM with a seller. |
+| **Messaging**      | `/conversations`, `/conversations/groups`, `/conversations/{id}/messages`, `/conversations/{id}/messages/{mid}/react`, `/conversations/{id}/read`, `/emojis` | DMs and group chats; text/place/media/voice/gif/file/contact/post messages; replies, ❤️ reactions, edits, receipts, deletion; **custom emoji** registry (`/emojis` GET/POST/DELETE). |
+| **Communities**    | `/communities`, `/communities/{name}`, `/communities/{name}/join`, `/communities/{name}/posts?sort=hot\|new\|top` | Reddit-style forum: create/discover, join/leave, and the community's threads with Hot/New/Top sorting. |
+| **Groups**         | `/groups`, `/groups/{id}/join\|leave\|posts\|pins\|requests\|members/*` | Public/private chat communities: membership & join requests, posts, pinned posts, member roles (promote/demote/remove). |
+| **Marketplace**    | `/listings?lat&lng&radius_km&sort`, `/listings/{id}`, `/listings/{id}/contact\|save`, `/marketplace/users/{id}` | Create/update/delete listings, **location + radius** browse and nearby sort, save, seller profiles & reviews, and start a DM with a seller. |
 | **Places**         | `/places`, `/recents` | Saved map places and recent searches (create/list/delete). |
 | **Guides**         | `/guides`, `/guides/{id}/places/{pid}`, `/public/guides/{slug}`, `/public/guides/{slug}/clone` | Curated place collections; add/remove places; publish via slug; view/clone public guides. |
 | **Reviews**        | `/reviews` | Create/list/delete 1–5★ place reviews. |
