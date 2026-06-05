@@ -350,6 +350,20 @@ export default function FeedScreen() {
             </TouchableOpacity>
             <TouchableOpacity
               style={[styles.actionBtn, { marginTop: 6 }]}
+              onPress={async () => {
+                const p = actionPost!; setActionPost(null);
+                try {
+                  const u = await api.pinPost(p.id);
+                  setPosts((arr) => arr.map((x) => (x.id === u.id ? { ...x, pinned: u.pinned } : x)));
+                } catch {}
+              }}
+              testID="post-action-pin"
+            >
+              <Ionicons name={actionPost?.pinned ? "pin" : "pin-outline"} size={18} color={theme.primary} />
+              <Text style={styles.actionBtnText}>{actionPost?.pinned ? "Unpin from profile" : "Pin to profile"}</Text>
+            </TouchableOpacity>
+            <TouchableOpacity
+              style={[styles.actionBtn, { marginTop: 6 }]}
               onPress={() => { setActionPost(null); router.push("/advertise"); }}
               testID="post-action-promote"
             >
