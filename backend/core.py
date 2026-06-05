@@ -46,6 +46,14 @@ async def init_pool() -> None:
     global _real_db
     dsn = os.environ["DATABASE_URL"]
     _real_db = await init_db(dsn)
+    # Self-provision the ephemeral OAuth CSRF-state table (jsonb-doc pattern,
+    # like the other collections) so Google sign-in works in dev and prod.
+    async with _real_db._pool.acquire() as conn:
+        await conn.execute("CREATE TABLE IF NOT EXISTS oauth_states (doc jsonb NOT NULL)")
+        await conn.execute(
+            "CREATE UNIQUE INDEX IF NOT EXISTS idx_oauth_states_state "
+            "ON oauth_states ((doc ->> 'state'))"
+        )
     logger.info("PostgreSQL pool ready")
 
 

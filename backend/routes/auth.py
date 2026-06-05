@@ -1,13 +1,11 @@
 """Auth endpoints (Google OAuth + custom email/password) and user profile updates."""
-import base64
-import json
 import os
 import re
 import secrets
 import time
 from datetime import datetime, timezone, timedelta
 from typing import Optional
-from urllib.parse import urlencode
+from urllib.parse import urlencode, urlparse
 import uuid
 
 import bcrypt
@@ -19,6 +17,7 @@ from pydantic import BaseModel
 from db import DuplicateKeyError
 
 from core import (
+    _norm_dt,
     _user_doc_to_model,
     db,
     get_current_user,
@@ -65,18 +64,61 @@ async def _google_config() -> dict:
     return data
 
 
-def _encode_state(payload: dict) -> str:
-    raw = json.dumps(payload, separators=(",", ":")).encode("utf-8")
-    return base64.urlsafe_b64encode(raw).decode("ascii").rstrip("=")
+# Native app deep-link schemes we trust for post-auth redirects. "atlas" is the
+# standalone app scheme (app.json); "exp"/"exps" cover Expo Go dev clients.
+_ALLOWED_NATIVE_SCHEMES = {"atlas", "exp", "exps"}
 
 
-def _decode_state(state: str) -> dict:
+def _validate_redirect(target: str) -> str:
+    """Return a safe post-auth redirect target. Prevents open-redirect/token
+    exfiltration by allowing only our own https origin or known native schemes;
+    anything else falls back to our default origin."""
+    default = _public_base_url() + "/"
+    if not target:
+        return default
     try:
-        pad = "=" * (-len(state) % 4)
-        raw = base64.urlsafe_b64decode(state + pad)
-        return json.loads(raw.decode("utf-8"))
+        parsed = urlparse(target)
     except Exception:
-        return {}
+        return default
+    scheme = (parsed.scheme or "").lower()
+    if scheme == "https":
+        our_host = urlparse(_public_base_url()).netloc
+        if parsed.netloc and our_host and parsed.netloc == our_host:
+            return target
+        return default
+    if scheme in _ALLOWED_NATIVE_SCHEMES or scheme.startswith("exp+"):
+        return target
+    return default
+
+
+async def _store_oauth_state(redirect: str) -> str:
+    """Persist a one-time, random CSRF state (shared DB so it survives across
+    autoscale instances between /login and /callback)."""
+    state = secrets.token_urlsafe(24)
+    await db.oauth_states.insert_one({
+        "state": state,
+        "redirect": redirect,
+        "expires_at": datetime.now(timezone.utc) + timedelta(minutes=10),
+        "created_at": datetime.now(timezone.utc),
+    })
+    return state
+
+
+async def _consume_oauth_state(state: str) -> Optional[str]:
+    """Validate and single-use-consume a state. Returns the stored (already
+    validated) redirect target, or None if the state is missing/expired/forged."""
+    if not state:
+        return None
+    doc = await db.oauth_states.find_one({"state": state})
+    if not doc:
+        return None
+    await db.oauth_states.delete_one({"state": state})  # one-time use
+    try:
+        if _norm_dt(doc["expires_at"]) < datetime.now(timezone.utc):
+            return None
+    except Exception:
+        return None
+    return doc.get("redirect") or (_public_base_url() + "/")
 
 
 class RegisterRequest(BaseModel):
@@ -168,7 +210,8 @@ async def google_login(redirect: str = ""):
     if not GOOGLE_CLIENT_ID or not GOOGLE_CLIENT_SECRET:
         raise HTTPException(status_code=503, detail="Google sign-in is not configured")
     cfg = await _google_config()
-    state = _encode_state({"r": redirect, "n": secrets.token_urlsafe(8)})
+    safe_redirect = _validate_redirect(redirect)
+    state = await _store_oauth_state(safe_redirect)
     params = {
         "client_id": GOOGLE_CLIENT_ID,
         "redirect_uri": _google_redirect_uri(),
@@ -191,8 +234,11 @@ def _final_redirect(target: str, fragment: str) -> RedirectResponse:
 async def google_callback(code: str = "", state: str = "", error: str = ""):
     """Google redirects here with an auth code. Exchange it, upsert the user, and
     bounce back to the frontend with a freshly minted session token in the URL fragment."""
-    st = _decode_state(state)
-    target = st.get("r") or ""
+    stored = await _consume_oauth_state(state)
+    if stored is None:
+        # Missing/expired/forged state -> never honor a client-supplied target.
+        return _final_redirect(_public_base_url() + "/", "auth_error=state")
+    target = _validate_redirect(stored)  # defense in depth
     if error or not code:
         return _final_redirect(target, "auth_error=1")
     if not GOOGLE_CLIENT_ID or not GOOGLE_CLIENT_SECRET:

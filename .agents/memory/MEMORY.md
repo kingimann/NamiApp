@@ -1,1 +1,1 @@
-- [PostgreSQL migration](pg-migration.md) — MongoDB → asyncpg via JSONB wrapper; lazy db proxy pattern required for FastAPI route imports
+- [DB table provisioning](db-table-provisioning.md) — jsonb-doc tables, no migrations; new collections must self-provision in core.init_pool or they break prod.

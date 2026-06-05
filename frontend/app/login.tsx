@@ -34,6 +34,8 @@ export default function LoginScreen() {
     return m ? decodeURIComponent(m[1]) : null;
   };
 
+  const hasAuthError = (url: string): boolean => /[?#&]auth_error=/.test(url);
+
   const onGoogle = async () => {
     setBusy(true);
     try {
@@ -53,6 +55,13 @@ export default function LoginScreen() {
           if (popup.closed) { clearInterval(timer); setBusy(false); return; }
           try {
             const url = popup.location.href;
+            if (url && hasAuthError(url)) {
+              popup.close();
+              clearInterval(timer);
+              setBusy(false);
+              Alert.alert("Sign in failed", "Google sign-in was cancelled or could not be completed.");
+              return;
+            }
             const tok = url ? extractToken(url) : null;
             if (tok) {
               popup.close();
@@ -67,8 +76,12 @@ export default function LoginScreen() {
 
       const res = await WebBrowser.openAuthSessionAsync(authUrl, redirectUrl);
       if (res.type === "success") {
-        const tok = extractToken(res.url);
-        if (tok) await applySessionToken(tok);
+        if (hasAuthError(res.url)) {
+          Alert.alert("Sign in failed", "Google sign-in was cancelled or could not be completed.");
+        } else {
+          const tok = extractToken(res.url);
+          if (tok) await applySessionToken(tok);
+        }
       }
     } catch (e) { Alert.alert("Sign in failed", String(e)); }
     finally { setBusy(false); }
