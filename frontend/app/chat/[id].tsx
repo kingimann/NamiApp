@@ -552,7 +552,13 @@ export default function ChatScreen() {
         <TouchableOpacity onPress={() => router.back()} style={styles.iconBtn} testID="chat-back">
           <Ionicons name="chevron-back" size={24} color={theme.textPrimary} />
         </TouchableOpacity>
-        <Text style={styles.title} numberOfLines={1}>{name || "Chat"}</Text>
+        <View style={{ flex: 1, alignItems: "center" }}>
+          <Text style={styles.title} numberOfLines={1}>{name || "Chat"}</Text>
+          <View style={styles.encRow}>
+            <Ionicons name="lock-closed" size={10} color={theme.textMuted} />
+            <Text style={styles.encText}>Encrypted</Text>
+          </View>
+        </View>
         <View style={{ width: 40 }} />
       </View>
 
@@ -1047,7 +1053,9 @@ const styles = StyleSheet.create({
     borderBottomWidth: StyleSheet.hairlineWidth, borderBottomColor: theme.border,
   },
   iconBtn: { width: 40, height: 40, borderRadius: 20, alignItems: "center", justifyContent: "center" },
-  title: { flex: 1, color: theme.textPrimary, fontSize: 17, fontWeight: "700", textAlign: "center" },
+  title: { color: theme.textPrimary, fontSize: 17, fontWeight: "700", textAlign: "center" },
+  encRow: { flexDirection: "row", alignItems: "center", gap: 3, marginTop: 1 },
+  encText: { color: theme.textMuted, fontSize: 10.5, fontWeight: "600" },
   center: { flex: 1, alignItems: "center", justifyContent: "center" },
   empty: { paddingTop: 60, alignItems: "center" },
   emptyText: { color: theme.textMuted, fontSize: 13 },
