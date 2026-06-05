@@ -134,7 +134,7 @@ function Reel({ post, active, muted, onToggleMute, onOpenComments, screenW, scre
           <Text style={styles.metric}>{likeCount}</Text>
         </TouchableOpacity>
         <TouchableOpacity style={styles.iconBtn} onPress={onDislike} testID={`reel-dislike-${post.id}`}>
-          <Ionicons name={disliked ? "thumbs-down" : "thumbs-down-outline"} size={26} color={disliked ? "#8696A0" : "#fff"} />
+          <Ionicons name={disliked ? "thumbs-down" : "thumbs-down-outline"} size={26} color={disliked ? "#3B82F6" : "#fff"} />
         </TouchableOpacity>
         <TouchableOpacity style={styles.iconBtn} onPress={onComment}>
           <Ionicons name="chatbubble-outline" size={28} color="#fff" />
