@@ -180,6 +180,11 @@ export default function UserProfileScreen() {
               )}
               {!!user.bio && <Text style={styles.bio}>{user.bio}</Text>}
               <View style={styles.socialRow}>
+                <View style={styles.socialItem}>
+                  <Text style={styles.socialNum}>{posts.length}</Text>
+                  <Text style={styles.socialLabel}>Posts</Text>
+                </View>
+                <View style={styles.socialDivider} />
                 <TouchableOpacity
                   style={styles.socialItem}
                   onPress={() => router.push({ pathname: "/connections", params: { userId: user.user_id, name: user.name, tab: "followers" } })}
@@ -201,16 +206,6 @@ export default function UserProfileScreen() {
                 <View style={styles.socialItem}>
                   <Text style={styles.socialNum}>{user.stats?.friends || 0}</Text>
                   <Text style={styles.socialLabel}>Friends</Text>
-                </View>
-              </View>
-              <View style={styles.statsRow}>
-                <View style={styles.statBox}>
-                  <Text style={styles.statNum}>{posts.length}</Text>
-                  <Text style={styles.statLabel}>Posts</Text>
-                </View>
-                <View style={styles.statBox}>
-                  <Text style={styles.statNum}>{user.stats?.reviews || 0}</Text>
-                  <Text style={styles.statLabel}>Reviews</Text>
                 </View>
               </View>
               {user.user_id !== me?.user_id && (
@@ -272,8 +267,8 @@ export default function UserProfileScreen() {
                     testID="profile-subscribe"
                   >
                     <Ionicons name={user.is_subscribed ? "checkmark-circle" : "star"} size={15} color={user.is_subscribed ? theme.textPrimary : "#fff"} />
-                    <Text style={[styles.actionBtnText, user.is_subscribed && { color: theme.textPrimary }]}>
-                      {user.is_subscribed ? "Subscribed" : `Subscribe · $${withAppleFee(user.sub_price ?? 0).toFixed(2)}/mo`}
+                    <Text style={[styles.actionBtnText, user.is_subscribed && { color: theme.textPrimary }]} numberOfLines={1}>
+                      {user.is_subscribed ? "Subscribed" : `Subscribe $${withAppleFee(user.sub_price ?? 0).toFixed(2)}`}
                     </Text>
                   </TouchableOpacity>
                 </View>
@@ -403,10 +398,10 @@ const styles = StyleSheet.create({
   statBox: { alignItems: "center" },
   statNum: { color: theme.textPrimary, fontSize: 18, fontWeight: "800" },
   statLabel: { color: theme.textMuted, fontSize: 11, fontWeight: "700", textTransform: "uppercase", letterSpacing: 0.4 },
-  actionRow: { flexDirection: "row", gap: 8, marginTop: 14, flexWrap: "wrap", justifyContent: "center" },
+  actionRow: { flexDirection: "row", gap: 8, marginTop: 10, alignSelf: "stretch" },
   actionBtn: {
-    flexDirection: "row", alignItems: "center", gap: 6,
-    backgroundColor: theme.primary, paddingHorizontal: 18, paddingVertical: 10, borderRadius: 999,
+    flex: 1, flexDirection: "row", alignItems: "center", justifyContent: "center", gap: 6,
+    backgroundColor: theme.primary, paddingHorizontal: 10, height: 40, borderRadius: 12,
   },
   actionBtnGhost: { backgroundColor: theme.surface, borderWidth: 1, borderColor: theme.border },
   actionBtnText: { color: "#fff", fontWeight: "700", fontSize: 13 },
