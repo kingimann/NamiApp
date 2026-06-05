@@ -53,8 +53,10 @@ class CheckoutCreate(BaseModel):
     kind: str            # "tip" | "subscription" | "promote"
     creator_id: Optional[str] = None
     amount: float = 0    # dollars
-    post_id: Optional[str] = None   # promote
-    days: Optional[int] = None      # promote
+    post_id: Optional[str] = None          # promote
+    days: Optional[int] = None             # promote
+    conversation_id: Optional[str] = None  # tip sent from a DM
+    note: Optional[str] = None             # tip message
 
 
 @router.get("/payments/config")
@@ -187,6 +189,14 @@ async def create_checkout(body: CheckoutCreate, authorization: Optional[str] = H
     if net <= 0:
         raise HTTPException(status_code=400, detail="Amount must be greater than 0")
     meta["net"] = str(net)
+    # If the tip was sent from a DM, carry the conversation so the webhook can
+    # post an inline tip receipt once payment confirms.
+    if body.conversation_id:
+        conv = await db.conversations.find_one({"id": body.conversation_id}, {"_id": 0, "participant_ids": 1})
+        if conv and me["user_id"] in conv.get("participant_ids", []):
+            meta["conversation_id"] = body.conversation_id
+            if body.note:
+                meta["note"] = body.note[:200]
     gross_cents = int(round(net * 100))
     fee_cents = int(round(gross_cents * PLATFORM_FEE_PERCENT / 100.0))
     session = stripe.checkout.Session.create(
@@ -252,4 +262,16 @@ async def stripe_webhook(request: Request):
                     "amount": net, "status": "active", "source": "stripe",
                     "started_at": now, "renews_at": now + timedelta(days=30), "created_at": now,
                 })
+            # DM tip → drop an inline tip receipt into the conversation.
+            conv_id = meta.get("conversation_id")
+            if kind == "tip" and conv_id and buyer_id:
+                await db.messages.insert_one({
+                    "id": str(uuid.uuid4()), "conversation_id": conv_id, "sender_id": buyer_id,
+                    "type": "tip", "text": (meta.get("note") or ""), "amount": net,
+                    "media": [], "reactions": {}, "deleted": False, "created_at": now,
+                })
+                await db.conversations.update_one(
+                    {"id": conv_id},
+                    {"$set": {"last_message_at": now}},
+                )
     return {"ok": True}

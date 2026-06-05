@@ -49,6 +49,23 @@ Redeploy the backend (it auto-deploys on push; env changes need a redeploy).
 - **DM tips** stay on the test flow for now (they post an inline chat receipt that
   the webhook can't recreate yet) — easy to wire later.
 
+## Testing checklist (Stripe test mode)
+Use **test-mode** keys (`sk_test_…`, `whsec_…` from a test webhook). Stripe test cards:
+- ✅ Success: `4242 4242 4242 4242` · any future expiry · any CVC · any ZIP
+- 🔐 3-D Secure: `4000 0025 0000 3155`
+- ❌ Declined: `4000 0000 0000 0002`
+- Connect onboarding (test): use SSN `000-00-0000`, routing `110000000`, account `000123456789`, any other fields.
+
+Run through:
+1. **Payouts** — log in as the creator → Wallet → *Set up payouts* → finish Stripe onboarding → status flips to **Payouts active**.
+2. **Subscribe** — as a different user, open the creator's profile → *Subscribe* → you're sent to Stripe Checkout (recurring) → pay with `4242…` → creator's Wallet shows a subscription earning; Stripe dashboard shows an active subscription.
+3. **Tip (profile)** — *Tip* → enter amount → Stripe Checkout → pay → creator's Wallet shows the tip.
+4. **Tip (DM)** — in a chat → ➕ *Send tip* → pay → the inline 💸 tip receipt appears in the thread (posted by the webhook) and the recipient's Wallet updates.
+5. **Advertise** — Advertise → pick a post + duration → pay → the post shows **Sponsored** after the webhook confirms.
+6. **Fallback** — temporarily unset `STRIPE_SECRET_KEY` (or tip a creator with no payouts) → the in-app **test sheet** is used instead, and earnings still credit in-app.
+
+Tips for verifying webhooks: in the Stripe Dashboard → Developers → Webhooks, watch deliveries to `…/api/payments/webhook`; you can also use the Stripe CLI (`stripe listen --forward-to .../api/payments/webhook`) locally.
+
 ## Notes
 - Use Stripe **test mode** keys + test cards first; flip to live keys when ready.
 - On iOS, selling digital goods may require Apple In-App Purchase rather than

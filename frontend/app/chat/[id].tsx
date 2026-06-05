@@ -78,6 +78,8 @@ export default function ChatScreen() {
   const [contactOpen, setContactOpen] = useState(false);
   const [tipOpen, setTipOpen] = useState(false);
   const [peer, setPeer] = useState<{ id: string; name: string } | null>(null);
+  const [payEnabled, setPayEnabled] = useState(false);
+  useEffect(() => { api.getPaymentsConfig().then((c) => setPayEnabled(c.enabled)).catch(() => {}); }, []);
   const recordStartRef = useRef<number>(0);
 
   // Generate / load our keypair and publish public key. Then fetch peer's key.
@@ -946,6 +948,9 @@ export default function ChatScreen() {
         editableAmount
         allowNote
         appleFee
+        onCheckout={payEnabled && peer ? async (amt, note) => {
+          try { return (await api.createCheckout("tip", peer.id, amt, { conversation_id: id, note })).url; } catch { return null; }
+        } : undefined}
         cta="Send tip"
         successText={`Your tip was sent to ${peer?.name || "them"}.`}
         onClose={() => setTipOpen(false)}
