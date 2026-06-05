@@ -246,7 +246,7 @@ export default function FeedScreen() {
       )}
 
       <TouchableOpacity
-        style={[styles.fab, { bottom: insets.bottom + 80 }]}
+        style={[styles.fab, { bottom: 20 }]}
         onPress={() => { setEditing(null); setReplyTo(null); setComposeOpen(true); }}
         testID="open-composer"
         activeOpacity={0.9}
