@@ -57,7 +57,7 @@ async def next_ad(
     if not rows:
         return {"ad": None}
     post = random.choice(rows)
-    author = await db.users.find_one({"user_id": post["user_id"]}, {"_id": 0, "name": 1, "picture": 1})
+    author = await db.users.find_one({"user_id": post["user_id"]}, {"_id": 0, "name": 1})
     media = post.get("media") or []
     img = next((m.get("url") or m.get("base64") for m in media if m.get("type") == "image"), None)
     return {"ad": {
@@ -65,7 +65,6 @@ async def next_ad(
         "text": (post.get("text") or "")[:200],
         "image": img,
         "author_name": (author or {}).get("name", "Sponsored"),
-        "author_picture": (author or {}).get("picture"),
     }}
 
 
