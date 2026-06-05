@@ -122,10 +122,86 @@ async def send_money(body: SendMoney, authorization: Optional[str] = Header(None
     if amount <= 0:
         raise HTTPException(status_code=400, detail="Amount must be greater than 0")
     await _require_answer(me, body.answer)
-    await _do_transfer(me, body.to_user_id, amount, body.note or "")
+    # Money isn't credited until the recipient accepts it (Cash App-style).
+    now = datetime.now(timezone.utc)
+    doc = {
+        "id": str(uuid.uuid4()),
+        "from_user_id": me["user_id"], "from_name": me.get("name", "Someone"),
+        "to_user_id": body.to_user_id, "amount": amount, "note": (body.note or "")[:200],
+        "status": "pending", "created_at": now,
+    }
+    await db.money_transfers.insert_one(doc.copy())
     await _notify_money(body.to_user_id, me["user_id"], "money_received",
-                        f"sent you ${amount:.2f}")
+                        f"sent you ${amount:.2f} — accept it")
+    return {"ok": True, "amount": amount, "status": "pending"}
+
+
+async def _hydrate_transfer(t: dict, viewer_id: str) -> dict:
+    other_id = t["to_user_id"] if t["from_user_id"] == viewer_id else t["from_user_id"]
+    other = await _public_user(other_id, viewer_id)
+    return {
+        "id": t["id"], "from_user_id": t["from_user_id"], "to_user_id": t["to_user_id"],
+        "amount": round(float(t.get("amount", 0) or 0), 2), "note": t.get("note") or "",
+        "status": t.get("status", "pending"),
+        "direction": "outgoing" if t["from_user_id"] == viewer_id else "incoming",
+        "other_user": {
+            "user_id": other.user_id, "name": other.name,
+            "username": other.username, "picture": other.picture, "verified": other.verified,
+        },
+        "created_at": t.get("created_at"),
+    }
+
+
+@router.get("/money/transfers")
+async def list_transfers(authorization: Optional[str] = Header(None)):
+    me = await get_current_user(authorization)
+    uid = me["user_id"]
+    incoming = await db.money_transfers.find(
+        {"to_user_id": uid, "status": "pending"}, {"_id": 0}
+    ).sort("created_at", -1).limit(50).to_list(50)
+    outgoing = await db.money_transfers.find(
+        {"from_user_id": uid}, {"_id": 0}
+    ).sort("created_at", -1).limit(50).to_list(50)
+    return {
+        "incoming": [await _hydrate_transfer(t, uid) for t in incoming],
+        "outgoing": [await _hydrate_transfer(t, uid) for t in outgoing],
+    }
+
+
+@router.post("/money/transfers/{tid}/accept")
+async def accept_transfer(tid: str, authorization: Optional[str] = Header(None)):
+    me = await get_current_user(authorization)
+    t = await db.money_transfers.find_one(
+        {"id": tid, "to_user_id": me["user_id"], "status": "pending"}, {"_id": 0}
+    )
+    if not t:
+        raise HTTPException(status_code=404, detail="Transfer not found")
+    amount = round(float(t.get("amount", 0) or 0), 2)
+    sender = await db.users.find_one({"user_id": t["from_user_id"]}, {"_id": 0, "user_id": 1, "name": 1}) \
+        or {"user_id": t["from_user_id"], "name": t.get("from_name", "Someone")}
+    await _do_transfer(sender, me["user_id"], amount, t.get("note") or "")
+    await db.money_transfers.update_one(
+        {"id": tid}, {"$set": {"status": "accepted", "resolved_at": datetime.now(timezone.utc)}}
+    )
+    await _notify_money(t["from_user_id"], me["user_id"], "money_accepted",
+                        f"accepted your ${amount:.2f}")
     return {"ok": True, "amount": amount}
+
+
+@router.post("/money/transfers/{tid}/decline")
+async def decline_transfer(tid: str, authorization: Optional[str] = Header(None)):
+    me = await get_current_user(authorization)
+    t = await db.money_transfers.find_one(
+        {"id": tid, "to_user_id": me["user_id"], "status": "pending"}, {"_id": 0}
+    )
+    if not t:
+        raise HTTPException(status_code=404, detail="Transfer not found")
+    await db.money_transfers.update_one(
+        {"id": tid}, {"$set": {"status": "declined", "resolved_at": datetime.now(timezone.utc)}}
+    )
+    await _notify_money(t["from_user_id"], me["user_id"], "money_declined",
+                        "declined your money")
+    return {"ok": True}
 
 
 # ── Request money ────────────────────────────────────────────────────────────

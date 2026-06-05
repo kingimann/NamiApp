@@ -16,6 +16,7 @@ export default function MoneyScreen() {
   const insets = useSafeAreaInsets();
   const [security, setSecurity] = useState<{ is_set: boolean; question?: string | null } | null>(null);
   const [reqs, setReqs] = useState<{ incoming: MoneyRequest[]; outgoing: MoneyRequest[] }>({ incoming: [], outgoing: [] });
+  const [transfers, setTransfers] = useState<{ incoming: MoneyRequest[]; outgoing: MoneyRequest[] }>({ incoming: [], outgoing: [] });
   const [loading, setLoading] = useState(true);
 
   // Send / request flow
@@ -44,10 +45,12 @@ export default function MoneyScreen() {
 
   const load = useCallback(async () => {
     try {
-      const [s, r] = await Promise.all([api.getMoneySecurity(), api.listMoneyRequests()]);
-      setSecurity(s); setReqs(r);
+      const [s, r, t] = await Promise.all([api.getMoneySecurity(), api.listMoneyRequests(), api.listMoneyTransfers()]);
+      setSecurity(s); setReqs(r); setTransfers(t);
     } catch {} finally { setLoading(false); }
   }, []);
+  const acceptTransfer = async (t: MoneyRequest) => { try { await api.acceptMoneyTransfer(t.id); await load(); } catch {} };
+  const declineTransfer = async (t: MoneyRequest) => { try { await api.declineMoneyTransfer(t.id); await load(); } catch {} };
   useFocusEffect(useCallback(() => { load(); }, [load]));
 
   const openFlow = (f: "send" | "request") => {
@@ -63,7 +66,7 @@ export default function MoneyScreen() {
       if (flow === "send") {
         if (!security?.is_set) { setBusy(false); setFlow(null); setSecOpen(true); return; }
         await api.sendMoney({ to_user_id: recipient.user_id, amount: amt, note, answer });
-        setMsg(`Sent $${amt.toFixed(2)} to ${recipient.name}.`);
+        setMsg(`Sent $${amt.toFixed(2)} to ${recipient.name} — they'll get a notification to accept it.`);
       } else {
         await api.requestMoney({ to_user_id: recipient.user_id, amount: amt, note });
         setMsg(`Requested $${amt.toFixed(2)} from ${recipient.name}.`);
@@ -135,6 +138,27 @@ export default function MoneyScreen() {
             </View>
             <Text style={styles.secAction}>{security?.is_set ? "Change" : "Set up"}</Text>
           </TouchableOpacity>
+
+          {transfers.incoming.length > 0 && (
+            <>
+              <Text style={styles.section}>Money sent to you</Text>
+              {transfers.incoming.map((t) => (
+                <View key={t.id} style={styles.reqRow}>
+                  <Avatar u={t.other_user} />
+                  <View style={{ flex: 1 }}>
+                    <Text style={styles.reqName} numberOfLines={1}>{t.other_user.name}</Text>
+                    <Text style={styles.reqMeta}>sent ${t.amount.toFixed(2)}{t.note ? ` · ${t.note}` : ""}</Text>
+                  </View>
+                  <TouchableOpacity style={styles.payBtn} onPress={() => acceptTransfer(t)} testID={`accept-${t.id}`}>
+                    <Text style={styles.payBtnText}>Accept</Text>
+                  </TouchableOpacity>
+                  <TouchableOpacity style={styles.declineBtn} onPress={() => declineTransfer(t)} testID={`decline-tx-${t.id}`}>
+                    <Ionicons name="close" size={16} color={theme.textMuted} />
+                  </TouchableOpacity>
+                </View>
+              ))}
+            </>
+          )}
 
           <Text style={styles.section}>Requests for you</Text>
           {reqs.incoming.length === 0 ? (
