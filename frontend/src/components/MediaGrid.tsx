@@ -5,7 +5,7 @@ import {
 } from "react-native";
 import { Ionicons } from "@expo/vector-icons";
 import { useVideoPlayer, VideoView } from "expo-video";
-import { PostMedia } from "@/src/api/client";
+import { PostMedia, mediaUri } from "@/src/api/client";
 import { theme } from "@/src/theme";
 
 const { width: SCREEN_W } = Dimensions.get("window");
@@ -52,7 +52,7 @@ export default function MediaGrid({
   const n = media.length;
 
   const renderTile = (m: PostMedia, idx: number, style: any) => {
-    const uri = m.base64;
+    const uri = mediaUri(m);
     if (m.type === "video") {
       return (
         <View key={idx} style={[styles.tile, style]}>
@@ -117,7 +117,7 @@ export default function MediaGrid({
           <Pressable style={StyleSheet.absoluteFill} onPress={() => setOpenIndex(null)} />
           {openIndex !== null && (
             <Image
-              source={{ uri: media[openIndex].base64 }}
+              source={{ uri: mediaUri(media[openIndex]) }}
               style={{ width: SCREEN_W, height: SCREEN_W }}
               resizeMode="contain"
             />

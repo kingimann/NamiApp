@@ -378,10 +378,11 @@ async def send_message(
             raise HTTPException(status_code=400, detail="Media required")
         for m in body.media[:4]:
             d = m.model_dump() if hasattr(m, "model_dump") else dict(m)
+            url = d.get("url") or ""
             b = d.get("base64") or ""
-            if not b:
+            if not url and not b:
                 continue
-            if len(b) > 25 * 1024 * 1024:
+            if not url and len(b) > 25 * 1024 * 1024:
                 raise HTTPException(status_code=413, detail="Media too large (25MB limit)")
             d["type"] = d.get("type") or "image"
             media.append(d)

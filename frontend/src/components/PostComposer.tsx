@@ -6,7 +6,8 @@ import {
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { Ionicons } from "@expo/vector-icons";
 import * as ImagePicker from "expo-image-picker";
-import { api, Post, PostMedia } from "@/src/api/client";
+import { api, Post, PostMedia, mediaUri } from "@/src/api/client";
+import { cloudinaryEnabled, uploadToCloudinary } from "@/src/api/cloudinary";
 import { theme } from "@/src/theme";
 
 type Props = {
@@ -90,14 +91,33 @@ export default function PostComposer({
       // Reading a video into base64 can take a few seconds — show a spinner.
       setProcessing(true);
       const toAdd: PostMedia[] = [];
+      const useCloud = cloudinaryEnabled();
       for (const a of result.assets || []) {
         const isVideo = a.type === "video";
+
+        // Preferred path: push the file straight to the Cloudinary CDN and store
+        // only its URL — no size cap, and the DB/feed stay lightweight.
+        if (useCloud) {
+          try {
+            const up = await uploadToCloudinary(a.uri, isVideo ? "video" : "image");
+            toAdd.push({
+              type: isVideo ? "video" : "image",
+              url: up.url,
+              thumbnail: up.thumbnail || null,
+              width: up.width ?? a.width ?? null,
+              height: up.height ?? a.height ?? null,
+            });
+            continue;
+          } catch (err) {
+            Alert.alert("Upload failed", String((err as Error)?.message || err));
+            continue;
+          }
+        }
+
+        // Fallback path (no Cloudinary configured): embed as a base64 data URI,
+        // bounded by the per-item size cap.
         let uri = a.uri;
         if (isVideo) {
-          // Read the picked video into a base64 data URI so the actual bytes
-          // are uploaded. A raw file:// path is local to this device and can't
-          // be loaded by anyone else viewing the feed/reels. fetch + FileReader
-          // works on web and native alike.
           try {
             const res = await fetch(a.uri);
             const blob = await res.blob();
@@ -112,10 +132,8 @@ export default function PostComposer({
             continue;
           }
         } else if (a.base64) {
-          // Convert images to a data-URI so they embed in JSON cleanly.
           uri = `data:image/jpeg;base64,${a.base64}`;
         }
-        // Enforce the backend's ~8MB-per-item limit before sending.
         if (uri.length > MAX_MEDIA_BYTES) {
           const mb = (uri.length / (1024 * 1024)).toFixed(0);
           Alert.alert(
@@ -279,7 +297,7 @@ export default function PostComposer({
                       </View>
                     ) : (
                       <Image
-                        source={{ uri: m.base64 }}
+                        source={{ uri: mediaUri(m) }}
                         style={StyleSheet.absoluteFill}
                         resizeMode="cover"
                       />

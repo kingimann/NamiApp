@@ -433,7 +433,8 @@ class SellerProfile(BaseModel):
 # ---------- Posts (Newsfeed) ----------
 class PostMedia(BaseModel):
     type: Literal["image", "video"] = "image"
-    base64: str          # data URI or raw base64
+    base64: str = ""     # data URI or raw base64 (empty when `url` is set)
+    url: Optional[str] = None  # CDN URL (e.g. Cloudinary) — preferred over base64
     thumbnail: Optional[str] = None  # for videos
     width: Optional[int] = None
     height: Optional[int] = None

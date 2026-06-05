@@ -7,7 +7,7 @@ import { SafeAreaView, useSafeAreaInsets } from "react-native-safe-area-context"
 import { Ionicons } from "@expo/vector-icons";
 import { Stack, useFocusEffect, useLocalSearchParams, useRouter } from "expo-router";
 import { useVideoPlayer, VideoView } from "expo-video";
-import { api, Post } from "@/src/api/client";
+import { api, Post, mediaUri } from "@/src/api/client";
 import { theme } from "@/src/theme";
 import { SidebarMenuButton } from "@/src/components/LeftSidebar";
 import CommentsSheet from "@/src/components/CommentsSheet";
@@ -18,7 +18,7 @@ function Reel({ post, active, muted, onToggleMute, onOpenComments, screenW, scre
 }) {
   const video = post.media?.find((m) => m.type === "video");
   const image = post.media?.find((m) => m.type === "image");
-  const videoUri = video?.base64 || "";
+  const videoUri = mediaUri(video);
   const player = useVideoPlayer(videoUri || "about:blank", (p) => { p.loop = true; p.muted = muted; });
   const router = useRouter();
   const [paused, setPaused] = useState(false);
@@ -93,7 +93,7 @@ function Reel({ post, active, muted, onToggleMute, onOpenComments, screenW, scre
     }
   };
 
-  const imageUri = image?.base64 || "";
+  const imageUri = mediaUri(image);
 
   return (
     <View style={{ width: screenW, height: screenH, backgroundColor: "#000" }}>
@@ -200,7 +200,7 @@ export default function ReelsScreen() {
       const seen = new Set<string>();
       const valid = list.filter((p) => {
         if (seen.has(p.id)) return false;
-        const uri = p.media?.find((m) => m.type === "video")?.base64 || "";
+        const uri = mediaUri(p.media?.find((m) => m.type === "video"));
         if (!(uri.startsWith("data:") || uri.startsWith("http"))) return false;
         seen.add(p.id);
         return true;

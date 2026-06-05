@@ -633,11 +633,16 @@ export type PollCreate = { options: string[]; duration_hours: number };
 export type PostAuthor = { user_id: string; name: string; username?: string | null; picture?: string | null; verified?: boolean };
 export type PostMedia = {
   type: "image" | "video";
-  base64: string;
+  base64?: string;
+  url?: string | null;
   thumbnail?: string | null;
   width?: number | null;
   height?: number | null;
 };
+
+/** The source URI for a media item — prefers the CDN url, falls back to inline base64. */
+export const mediaUri = (m?: { url?: string | null; base64?: string | null } | null): string =>
+  (m?.url || m?.base64 || "") as string;
 export type Post = {
   id: string; user_id: string; author: PostAuthor; text: string;
   parent_id?: string | null;

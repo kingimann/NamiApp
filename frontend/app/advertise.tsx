@@ -6,7 +6,7 @@ import {
 import { SafeAreaView, useSafeAreaInsets } from "react-native-safe-area-context";
 import { Ionicons } from "@expo/vector-icons";
 import { Stack, useFocusEffect, useRouter } from "expo-router";
-import { api, Post } from "@/src/api/client";
+import { api, Post, mediaUri } from "@/src/api/client";
 import { useAuth } from "@/src/context/AuthContext";
 import { theme } from "@/src/theme";
 
@@ -138,7 +138,7 @@ export default function AdvertiseScreen() {
                   media.type === "video" ? (
                     <View style={[styles.thumb, styles.thumbVideo]}><Ionicons name="play" size={18} color="#fff" /></View>
                   ) : (
-                    <Image source={{ uri: media.base64 }} style={styles.thumb} resizeMode="cover" />
+                    <Image source={{ uri: mediaUri(media) }} style={styles.thumb} resizeMode="cover" />
                   )
                 ) : (
                   <View style={[styles.thumb, styles.thumbText]}><Ionicons name="text" size={18} color={theme.textMuted} /></View>

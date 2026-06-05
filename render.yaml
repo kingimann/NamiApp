@@ -63,6 +63,13 @@ services:
         value: https://nampo-backend.onrender.com
       - key: EXPO_PUBLIC_MAPBOX_TOKEN
         sync: false
+      # Optional: Cloudinary CDN for media (esp. video). When both are set, the
+      # app uploads files to Cloudinary and stores only the URL instead of
+      # embedding base64 in the database. Paste in the dashboard (sync:false).
+      - key: EXPO_PUBLIC_CLOUDINARY_CLOUD_NAME
+        sync: false
+      - key: EXPO_PUBLIC_CLOUDINARY_UPLOAD_PRESET
+        sync: false
     routes:
       # SPA fallback — the app exports a single index.html (web.output: single).
       - type: rewrite
