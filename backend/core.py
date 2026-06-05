@@ -127,6 +127,8 @@ def _user_doc_to_model(d: dict) -> dict:
         "name": d.get("name", ""),
         "username": d.get("username"),
         "picture": d.get("picture"),
+        "phone": d.get("phone"),
+        "phone_verified": bool(d.get("phone_verified", False)),
         "bio": d.get("bio", ""),
         "home_name": d.get("home_name"),
         "home_longitude": d.get("home_longitude"),

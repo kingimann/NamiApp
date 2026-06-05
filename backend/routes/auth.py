@@ -44,6 +44,23 @@ class UsernameUpdate(BaseModel):
     username: str
 
 
+class EmailUpdate(BaseModel):
+    current_password: str
+    new_email: str
+
+
+class PasswordUpdate(BaseModel):
+    current_password: str
+    new_password: str
+
+
+class PhoneUpdate(BaseModel):
+    phone: str  # empty string clears it
+
+
+PHONE_RE = re.compile(r"^\+?[0-9\s\-().]{7,20}$")
+
+
 def _hash_password(plain: str) -> str:
     return bcrypt.hashpw(plain.encode("utf-8")[:72], bcrypt.gensalt(rounds=12)).decode("utf-8")
 
@@ -234,6 +251,67 @@ async def set_username(body: UsernameUpdate, authorization: Optional[str] = Head
         {"user_id": user["user_id"]},
         {"$set": {"username": username, "username_changed_at": datetime.now(timezone.utc)}},
     )
+    updated = await db.users.find_one({"user_id": user["user_id"]}, {"_id": 0})
+    return User(**_user_doc_to_model(updated))
+
+
+@router.patch("/auth/me/email", response_model=User)
+async def change_email(body: EmailUpdate, authorization: Optional[str] = Header(None)):
+    user = await get_current_user(authorization)
+    if not _verify_password(body.current_password or "", user.get("hashed_password", "")):
+        raise HTTPException(status_code=400, detail="Current password is incorrect")
+    try:
+        valid = validate_email(body.new_email, check_deliverability=False)
+        new_email = valid.normalized.lower()
+    except EmailNotValidError:
+        raise HTTPException(status_code=400, detail="Enter a valid email address")
+    if new_email == (user.get("email") or "").lower():
+        return User(**_user_doc_to_model(user))
+    existing = await db.users.find_one(
+        {"email": new_email, "user_id": {"$ne": user["user_id"]}}, {"_id": 0, "user_id": 1}
+    )
+    if existing:
+        raise HTTPException(status_code=409, detail="That email is already in use")
+    try:
+        await db.users.update_one({"user_id": user["user_id"]}, {"$set": {"email": new_email}})
+    except DuplicateKeyError:
+        raise HTTPException(status_code=409, detail="That email is already in use")
+    updated = await db.users.find_one({"user_id": user["user_id"]}, {"_id": 0})
+    return User(**_user_doc_to_model(updated))
+
+
+@router.patch("/auth/me/password")
+async def change_password(body: PasswordUpdate, authorization: Optional[str] = Header(None)):
+    user = await get_current_user(authorization)
+    if not _verify_password(body.current_password or "", user.get("hashed_password", "")):
+        raise HTTPException(status_code=400, detail="Current password is incorrect")
+    new_pw = body.new_password or ""
+    if not (8 <= len(new_pw) <= 128):
+        raise HTTPException(status_code=400, detail="Password must be 8-128 characters")
+    if new_pw == body.current_password:
+        raise HTTPException(status_code=400, detail="New password must be different")
+    await db.users.update_one(
+        {"user_id": user["user_id"]}, {"$set": {"hashed_password": _hash_password(new_pw)}}
+    )
+    return {"ok": True}
+
+
+@router.patch("/auth/me/phone", response_model=User)
+async def change_phone(body: PhoneUpdate, authorization: Optional[str] = Header(None)):
+    user = await get_current_user(authorization)
+    raw = (body.phone or "").strip()
+    if raw == "":
+        # Clear the phone number.
+        await db.users.update_one(
+            {"user_id": user["user_id"]}, {"$set": {"phone": None, "phone_verified": False}}
+        )
+    else:
+        if not PHONE_RE.match(raw):
+            raise HTTPException(status_code=400, detail="Enter a valid phone number")
+        # Stored unverified for now; a verification step can be added later.
+        await db.users.update_one(
+            {"user_id": user["user_id"]}, {"$set": {"phone": raw, "phone_verified": False}}
+        )
     updated = await db.users.find_one({"user_id": user["user_id"]}, {"_id": 0})
     return User(**_user_doc_to_model(updated))
 

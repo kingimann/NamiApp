@@ -36,10 +36,9 @@ const HIDDEN_BAR_PREFIXES = [
   "/seller/",  // marketplace seller profile
   "/advertise",
   "/wallet",
-  // "/communities" is a top-level section (opened from the sidebar) — keep the
-  // bottom nav bar there like Home/Feed/Chat. Only the drill-in detail (/c/...)
-  // hides it, matching post/group/listing detail pages.
-  "/c/",
+  "/account",
+  // Communities (list and /c/<name> detail) keep the bottom nav bar — it's a
+  // top-level section opened from the sidebar, like Home/Feed/Chat.
   "/+html",
 ];
 

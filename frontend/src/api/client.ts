@@ -64,6 +64,12 @@ export const api = {
     request<{ available: boolean; reason?: string }>(`/auth/username-available?u=${encodeURIComponent(u)}`),
   setUsername: (username: string) =>
     request<User>("/auth/username", { method: "POST", body: JSON.stringify({ username }) }),
+  changeEmail: (current_password: string, new_email: string) =>
+    request<User>("/auth/me/email", { method: "PATCH", body: JSON.stringify({ current_password, new_email }) }),
+  changePassword: (current_password: string, new_password: string) =>
+    request<{ ok: boolean }>("/auth/me/password", { method: "PATCH", body: JSON.stringify({ current_password, new_password }) }),
+  setPhone: (phone: string) =>
+    request<User>("/auth/me/phone", { method: "PATCH", body: JSON.stringify({ phone }) }),
   uploadE2EKey: (public_key: string) =>
     request<{ ok: boolean }>("/auth/keys", { method: "POST", body: JSON.stringify({ public_key }) }),
   getUserE2EKey: (user_id: string) =>
@@ -431,6 +437,8 @@ export type User = {
   name: string;
   username?: string | null;
   picture?: string | null;
+  phone?: string | null;
+  phone_verified?: boolean;
   bio?: string;
   home_name?: string | null;
   home_longitude?: number | null;
@@ -452,6 +460,8 @@ export type WalletTxn = { id: string; kind: string; amount: number; from_user_id
 export type WalletSummary = {
   currency: string; total_earned: number; tips_total: number; subs_total: number;
   tips_count: number; active_subscribers: number; sub_price: number; recent: WalletTxn[];
+  total_spent: number; tips_sent_total: number; subs_sent_total: number;
+  subscriptions_count: number; sent: WalletTxn[];
 };
 export type FriendStatus = "none" | "request_sent" | "request_received" | "friends";
 export type PublicUser = {
