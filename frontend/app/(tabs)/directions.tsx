@@ -905,13 +905,13 @@ export default function DirectionsScreen() {
               <View style={styles.navFooter}>
                 <View style={styles.navStats}>
                   <View style={styles.navStat}>
-                    <Text style={styles.navStatValue}>{arrivalTime(remainingDur ?? routeInfo.duration)}</Text>
+                    <Text style={styles.navStatHero}>{arrivalTime(remainingDur ?? routeInfo.duration)}</Text>
                     <Text style={styles.navStatLabel}>arrival</Text>
                   </View>
                   <View style={styles.navStatDivider} />
                   <View style={styles.navStat}>
                     <Text style={styles.navStatValue}>{formatDuration(remainingDur ?? routeInfo.duration)}</Text>
-                    <Text style={styles.navStatLabel}>time</Text>
+                    <Text style={styles.navStatLabel}>time left</Text>
                   </View>
                   <View style={styles.navStatDivider} />
                   <View style={styles.navStat}>
@@ -919,7 +919,7 @@ export default function DirectionsScreen() {
                     <Text style={styles.navStatLabel}>distance</Text>
                   </View>
                 </View>
-                <View style={styles.navControls}>
+                <View style={styles.navBtnRow}>
                   <TouchableOpacity
                     onPress={() => {
                       const next = !voiceOn;
@@ -928,19 +928,21 @@ export default function DirectionsScreen() {
                     }}
                     style={[styles.iconCircle, voiceOn && { backgroundColor: "rgba(0,168,132,0.18)", borderColor: theme.primary }]}
                     testID="voice-toggle"
+                    activeOpacity={0.85}
                   >
-                    <Ionicons name={voiceOn ? "volume-high" : "volume-mute"} size={18} color={voiceOn ? theme.primary : theme.textMuted} />
+                    <Ionicons name={voiceOn ? "volume-high" : "volume-mute"} size={19} color={voiceOn ? theme.primary : theme.textMuted} />
                   </TouchableOpacity>
                   <TouchableOpacity
                     onPress={() => setShowSteps((s) => !s)}
-                    style={styles.iconCircle}
+                    style={[styles.iconCircle, showSteps && { backgroundColor: theme.surfaceAlt, borderColor: theme.primary }]}
                     testID="toggle-steps"
+                    activeOpacity={0.85}
                   >
-                    <Ionicons name="list" size={18} color={theme.textSecondary} />
+                    <Ionicons name="list" size={19} color={showSteps ? theme.primary : theme.textSecondary} />
                   </TouchableOpacity>
-                  <View style={{ flex: 1 }} />
-                  <TouchableOpacity onPress={exitNav} style={styles.endBtn} testID="end-route-btn">
-                    <Text style={styles.endBtnText}>End</Text>
+                  <TouchableOpacity onPress={exitNav} style={styles.endBtn} testID="end-route-btn" activeOpacity={0.85}>
+                    <Ionicons name="close" size={18} color="#fff" />
+                    <Text style={styles.endBtnText}>End route</Text>
                   </TouchableOpacity>
                 </View>
               </View>
@@ -1153,8 +1155,8 @@ const styles = StyleSheet.create({
     backgroundColor: "rgba(255,255,255,0.18)",
     alignItems: "center", justifyContent: "center",
   },
-  navDistBig: { color: "#fff", fontSize: 22, fontWeight: "800", letterSpacing: -0.5 },
-  navInstr: { color: "rgba(255,255,255,0.95)", fontSize: 15, fontWeight: "600", marginTop: 2 },
+  navDistBig: { color: "#fff", fontSize: 28, fontWeight: "800", letterSpacing: -0.6 },
+  navInstr: { color: "rgba(255,255,255,0.96)", fontSize: 16, fontWeight: "600", marginTop: 1 },
   thenRow: {
     flexDirection: "row", alignItems: "center", gap: 8,
     paddingHorizontal: 16, paddingVertical: 10,
@@ -1239,25 +1241,31 @@ const styles = StyleSheet.create({
   linkDot: { color: theme.textMuted, fontSize: 14 },
 
   // Navigation footer
-  navFooter: { gap: 14, paddingTop: 2 },
-  navStats: { flexDirection: "row", alignItems: "center" },
+  navFooter: { gap: 12, paddingTop: 2 },
+  navStats: {
+    flexDirection: "row", alignItems: "center",
+    backgroundColor: theme.surface, borderRadius: 18,
+    borderWidth: 1, borderColor: theme.border,
+    paddingVertical: 13,
+  },
   navStat: { flex: 1, alignItems: "center" },
   navStatDivider: { width: 1, height: 30, backgroundColor: theme.border },
+  navStatHero: { color: theme.primary, fontSize: 22, fontWeight: "800", letterSpacing: -0.4 },
   navStatValue: { color: theme.textPrimary, fontSize: 21, fontWeight: "800", letterSpacing: -0.4 },
-  navStatLabel: { color: theme.textMuted, fontSize: 11.5, marginTop: 3, textTransform: "uppercase", letterSpacing: 0.4 },
-  navControls: { flexDirection: "row", alignItems: "center", gap: 10 },
+  navStatLabel: { color: theme.textMuted, fontSize: 11, marginTop: 3, textTransform: "uppercase", letterSpacing: 0.4 },
+  navBtnRow: { flexDirection: "row", alignItems: "center", gap: 10 },
   iconCircle: {
-    width: 44, height: 44, borderRadius: 22,
+    width: 46, height: 46, borderRadius: 23,
     backgroundColor: theme.surface, borderWidth: 1, borderColor: theme.border,
     alignItems: "center", justifyContent: "center",
   },
   endBtn: {
-    paddingHorizontal: 18, height: 44, borderRadius: 22,
-    backgroundColor: "rgba(239,68,68,0.18)",
-    borderWidth: 1, borderColor: "rgba(239,68,68,0.55)",
+    flex: 1, flexDirection: "row", gap: 7,
+    height: 46, borderRadius: 23,
+    backgroundColor: theme.error,
     alignItems: "center", justifyContent: "center",
   },
-  endBtnText: { color: theme.error, fontSize: 14, fontWeight: "800" },
+  endBtnText: { color: "#fff", fontSize: 14.5, fontWeight: "800" },
 
   stepsList: {
     backgroundColor: theme.surface,
