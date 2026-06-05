@@ -262,8 +262,10 @@ class ListingCreate(BaseModel):
     price: float = 0
     currency: str = "USD"
     category: str = "other"
+    condition: Optional[str] = "used"   # new | like_new | good | fair | used
     description: Optional[str] = ""
-    photo_base64: Optional[str] = None
+    photo_base64: Optional[str] = None   # back-compat single photo
+    photos: Optional[List[str]] = None   # gallery (data URIs)
     longitude: Optional[float] = None
     latitude: Optional[float] = None
     locality: Optional[str] = None
@@ -274,8 +276,10 @@ class ListingPatch(BaseModel):
     price: Optional[float] = None
     currency: Optional[str] = None
     category: Optional[str] = None
+    condition: Optional[str] = None
     description: Optional[str] = None
     photo_base64: Optional[str] = None
+    photos: Optional[List[str]] = None
     status: Optional[Literal["active", "sold"]] = None
 
 
@@ -287,12 +291,17 @@ class Listing(BaseModel):
     price: float
     currency: str = "USD"
     category: str
+    condition: Optional[str] = "used"
     description: Optional[str] = ""
     photo_base64: Optional[str] = None
+    photos: List[str] = []
     longitude: Optional[float] = None
     latitude: Optional[float] = None
     locality: Optional[str] = None
     status: str = "active"
+    views_count: int = 0
+    saved_count: int = 0
+    saved_by_me: bool = False
     created_at: datetime
 
 

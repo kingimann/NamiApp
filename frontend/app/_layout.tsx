@@ -31,6 +31,7 @@ const HIDDEN_BAR_PREFIXES = [
   "/reels", // full-screen video
   "/eta/", "/g/", "/guide/", "/group/", "/user/", "/hashtag/",
   "/story/",
+  "/listing/", // marketplace listing detail
   "/+html",
 ];
 

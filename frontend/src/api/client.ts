@@ -204,14 +204,26 @@ export const api = {
   listFriendRequests: () => request<PublicUser[]>(`/friends/requests`),
 
   // Marketplace
-  listListings: (params?: { category?: string; q?: string }) => {
+  listListings: (params?: { category?: string; q?: string; condition?: string; min_price?: number; max_price?: number; sort?: string }) => {
     const qs = new URLSearchParams();
     if (params?.category) qs.set("category", params.category);
     if (params?.q) qs.set("q", params.q);
+    if (params?.condition) qs.set("condition", params.condition);
+    if (params?.min_price != null) qs.set("min_price", String(params.min_price));
+    if (params?.max_price != null) qs.set("max_price", String(params.max_price));
+    if (params?.sort) qs.set("sort", params.sort);
     return request<Listing[]>(`/listings${qs.toString() ? "?" + qs.toString() : ""}`);
   },
+  listSavedListings: () => request<Listing[]>("/listings/saved"),
+  getListing: (id: string) => request<Listing>(`/listings/${id}`),
   createListing: (body: ListingCreate) =>
     request<Listing>("/listings", { method: "POST", body: JSON.stringify(body) }),
+  updateListing: (id: string, body: Partial<ListingCreate> & { status?: string }) =>
+    request<Listing>(`/listings/${id}`, { method: "PATCH", body: JSON.stringify(body) }),
+  saveListing: (id: string) =>
+    request<{ ok: boolean; saved: boolean }>(`/listings/${id}/save`, { method: "POST" }),
+  unsaveListing: (id: string) =>
+    request<{ ok: boolean; saved: boolean }>(`/listings/${id}/save`, { method: "DELETE" }),
   deleteListing: (id: string) =>
     request<{ ok: boolean }>(`/listings/${id}`, { method: "DELETE" }),
   contactSeller: (id: string) =>
@@ -299,14 +311,21 @@ export type Listing = {
   id: string; user_id: string;
   seller: PostAuthor;
   title: string; price: number; currency: string; category: string;
+  condition?: string | null;
   description?: string | null;
   photo_base64?: string | null;
+  photos?: string[];
   longitude?: number | null; latitude?: number | null; locality?: string | null;
-  status: string; created_at: string;
+  status: string;
+  views_count?: number;
+  saved_count?: number;
+  saved_by_me?: boolean;
+  created_at: string;
 };
 export type ListingCreate = {
   title: string; price?: number; currency?: string; category?: string;
-  description?: string; photo_base64?: string;
+  condition?: string;
+  description?: string; photo_base64?: string; photos?: string[];
   longitude?: number; latitude?: number; locality?: string;
 };
 
