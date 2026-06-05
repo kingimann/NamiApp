@@ -208,6 +208,11 @@ export default function MessagesScreen() {
         )}
       </View>
 
+      <View style={styles.encNote}>
+        <Ionicons name="lock-closed" size={12} color={theme.textMuted} />
+        <Text style={styles.encNoteText}>Your chats are encrypted</Text>
+      </View>
+
       {loading ? (
         <View style={styles.center}><ActivityIndicator color={theme.primary} /></View>
       ) : (
@@ -481,6 +486,8 @@ const styles = StyleSheet.create({
     paddingHorizontal: 20, paddingTop: 16, paddingBottom: 8,
   },
   title: { color: theme.textPrimary, fontSize: 28, fontWeight: "800", letterSpacing: -0.5 },
+  encNote: { flexDirection: "row", alignItems: "center", justifyContent: "center", gap: 5, paddingBottom: 6 },
+  encNoteText: { color: theme.textMuted, fontSize: 11.5, fontWeight: "600" },
   searchWrap: {
     flexDirection: "row", alignItems: "center", gap: 8,
     marginHorizontal: 16, marginTop: 4, marginBottom: 6,
