@@ -410,6 +410,15 @@ async def start_trade(listing_id: str, authorization: Optional[str] = Header(Non
     listing = await db.listings.find_one({"id": listing_id}, {"_id": 0})
     if not listing:
         raise HTTPException(status_code=404, detail="Listing not found")
+    # A listing can only be verified/sold once.
+    done = await db.marketplace_trades.find_one(
+        {"listing_id": listing_id, "status": "confirmed"}, {"_id": 0, "id": 1}
+    )
+    if done:
+        raise HTTPException(status_code=400, detail={
+            "code": "already_sold",
+            "message": "This listing has already been verified as sold.",
+        })
     # Reuse an existing pending code this user started for this listing.
     existing = await db.marketplace_trades.find_one(
         {"listing_id": listing_id, "started_by": me["user_id"], "status": "pending"}, {"_id": 0}
@@ -445,11 +454,29 @@ async def confirm_trade(body: TradeConfirm, authorization: Optional[str] = Heade
         raise HTTPException(status_code=400, detail="This code has already been used")
     if me["user_id"] in trade.get("party_ids", []):
         raise HTTPException(status_code=400, detail="You generated this code — share it with the other person to confirm")
+    # One verification per listing.
+    listing_id = trade.get("listing_id")
+    if listing_id:
+        done = await db.marketplace_trades.find_one(
+            {"listing_id": listing_id, "status": "confirmed"}, {"_id": 0, "id": 1}
+        )
+        if done:
+            raise HTTPException(status_code=400, detail={
+                "code": "already_sold",
+                "message": "This listing has already been verified as sold.",
+            })
+    now = datetime.now(timezone.utc)
     parties = list(dict.fromkeys([*trade.get("party_ids", []), me["user_id"]]))
     await db.marketplace_trades.update_one(
         {"id": trade["id"]},
-        {"$set": {"party_ids": parties, "status": "confirmed", "confirmed_at": datetime.now(timezone.utc)}},
+        {"$set": {"party_ids": parties, "status": "confirmed", "buyer_id": me["user_id"], "confirmed_at": now}},
     )
+    # Verifying = the item was sold to the confirming user. Mark the listing sold.
+    if listing_id:
+        await db.listings.update_one(
+            {"id": listing_id},
+            {"$set": {"status": "sold", "sold_to": me["user_id"], "sold_at": now}},
+        )
     other = trade.get("started_by")
     other_doc = await db.users.find_one({"user_id": other}, {"_id": 0, "name": 1}) if other else None
     return {"status": "confirmed", "partner_name": (other_doc or {}).get("name", "the seller")}

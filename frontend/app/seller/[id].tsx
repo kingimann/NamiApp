@@ -40,17 +40,19 @@ export default function SellerProfileScreen() {
   const [verifyOpen, setVerifyOpen] = useState(false);
   const [code, setCode] = useState("");
   const [verifying, setVerifying] = useState(false);
+  const [verifyOk, setVerifyOk] = useState<string | null>(null);
+  const [verifyErr, setVerifyErr] = useState<string | null>(null);
 
   const verifyTrade = async () => {
     if (!code.trim() || verifying) return;
-    setVerifying(true);
+    setVerifying(true); setVerifyErr(null);
     try {
-      await api.confirmTrade(code.trim());
-      setVerifyOpen(false); setCode("");
+      const r = await api.confirmTrade(code.trim());
+      setCode("");
       await load();
-      Alert.alert("Trade verified", "You can now leave a review for this seller.");
+      setVerifyOk(`Verified with ${r.partner_name || "the seller"} — you can now leave a review.`);
     } catch (e: any) {
-      Alert.alert("Couldn't verify", String(e?.message || e).replace(/^\d{3}:\s*/, ""));
+      setVerifyErr(String(e?.message || e).replace(/^\d{3}:\s*/, ""));
     } finally { setVerifying(false); }
   };
 
@@ -231,26 +233,39 @@ export default function SellerProfileScreen() {
       <Modal visible={verifyOpen} transparent animationType="fade" onRequestClose={() => setVerifyOpen(false)}>
         <View style={styles.verifyBackdrop}>
           <View style={styles.verifyCard}>
-            <View style={styles.verifyIcon}><Ionicons name="shield-checkmark" size={24} color={theme.primary} /></View>
-            <Text style={styles.verifyTitle}>Verify your trade</Text>
-            <Text style={styles.verifySub}>
-              Ask {name || "the seller"} for the 6-character code from their listing, then enter it here. Reviews are only open to people who actually traded.
-            </Text>
-            <TextInput
-              style={styles.verifyInput}
-              placeholder="ABC123"
-              placeholderTextColor={theme.textMuted}
-              value={code}
-              onChangeText={(t) => setCode(t.toUpperCase().replace(/[^A-Z0-9]/g, "").slice(0, 6))}
-              autoCapitalize="characters"
-              autoCorrect={false}
-              maxLength={6}
-              testID="verify-code-input"
-            />
-            <TouchableOpacity style={[styles.verifyBtn, (verifying || code.length < 6) && { opacity: 0.5 }]} onPress={verifyTrade} disabled={verifying || code.length < 6} testID="verify-submit">
-              {verifying ? <ActivityIndicator color="#fff" /> : <Text style={styles.verifyBtnText}>Verify</Text>}
-            </TouchableOpacity>
-            <TouchableOpacity onPress={() => setVerifyOpen(false)}><Text style={styles.verifyCancel}>Cancel</Text></TouchableOpacity>
+            <View style={styles.verifyIcon}><Ionicons name={verifyOk ? "checkmark-circle" : "shield-checkmark"} size={24} color={theme.primary} /></View>
+            {verifyOk ? (
+              <>
+                <Text style={styles.verifyTitle}>Verified ✓</Text>
+                <Text style={styles.verifySub}>{verifyOk}</Text>
+                <TouchableOpacity style={styles.verifyBtn} onPress={() => { setVerifyOpen(false); setVerifyOk(null); }} testID="verify-done">
+                  <Text style={styles.verifyBtnText}>Done</Text>
+                </TouchableOpacity>
+              </>
+            ) : (
+              <>
+                <Text style={styles.verifyTitle}>Verify your trade</Text>
+                <Text style={styles.verifySub}>
+                  Ask {name || "the seller"} for the 6-character code from their listing, then enter it here. Reviews are only open to people who actually traded.
+                </Text>
+                <TextInput
+                  style={styles.verifyInput}
+                  placeholder="ABC123"
+                  placeholderTextColor={theme.textMuted}
+                  value={code}
+                  onChangeText={(t) => { setCode(t.toUpperCase().replace(/[^A-Z0-9]/g, "").slice(0, 6)); setVerifyErr(null); }}
+                  autoCapitalize="characters"
+                  autoCorrect={false}
+                  maxLength={6}
+                  testID="verify-code-input"
+                />
+                {!!verifyErr && <Text style={styles.verifyError}>{verifyErr}</Text>}
+                <TouchableOpacity style={[styles.verifyBtn, (verifying || code.length < 6) && { opacity: 0.5 }]} onPress={verifyTrade} disabled={verifying || code.length < 6} testID="verify-submit">
+                  {verifying ? <ActivityIndicator color="#fff" /> : <Text style={styles.verifyBtnText}>Verify</Text>}
+                </TouchableOpacity>
+                <TouchableOpacity onPress={() => setVerifyOpen(false)}><Text style={styles.verifyCancel}>Cancel</Text></TouchableOpacity>
+              </>
+            )}
           </View>
         </View>
       </Modal>
@@ -268,6 +283,7 @@ const styles = StyleSheet.create({
   verifyBtn: { alignSelf: "stretch", backgroundColor: theme.primary, borderRadius: 12, paddingVertical: 13, alignItems: "center", marginTop: 4 },
   verifyBtnText: { color: "#fff", fontWeight: "800", fontSize: 15 },
   verifyCancel: { color: theme.textMuted, fontSize: 14, fontWeight: "600", marginTop: 4 },
+  verifyError: { color: theme.error, fontSize: 13, fontWeight: "600", textAlign: "center" },
   root: { flex: 1, backgroundColor: theme.bg },
   header: {
     flexDirection: "row", alignItems: "center",

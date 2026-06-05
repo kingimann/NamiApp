@@ -65,25 +65,28 @@ export default function ListingDetailScreen() {
   const [genCode, setGenCode] = useState<string | null>(null);
   const [code, setCode] = useState("");
   const [tradeBusy, setTradeBusy] = useState(false);
+  // Inline feedback — Alert.alert is unreliable on web, so we show status in-modal.
+  const [tradeOk, setTradeOk] = useState<string | null>(null);
+  const [tradeErr, setTradeErr] = useState<string | null>(null);
 
   const openTrade = async () => {
-    setCode(""); setGenCode(null); setTradeOpen(true);
+    setCode(""); setGenCode(null); setTradeOpen(true); setTradeOk(null); setTradeErr(null);
     if (mine && listing) {
       setTradeBusy(true);
       try { setGenCode((await api.startTrade(listing.id)).code); }
-      catch (e: any) { Alert.alert("Couldn't create code", String(e?.message || e).replace(/^\d{3}:\s*/, "")); }
+      catch (e: any) { setTradeErr(String(e?.message || e).replace(/^\d{3}:\s*/, "")); }
       finally { setTradeBusy(false); }
     }
   };
   const submitTrade = async () => {
     if (!code.trim() || tradeBusy) return;
-    setTradeBusy(true);
+    setTradeBusy(true); setTradeErr(null);
     try {
       const r = await api.confirmTrade(code.trim());
-      setTradeOpen(false); setCode("");
-      Alert.alert("Trade verified", `You and ${r.partner_name || "the seller"} can now review each other.`);
+      setCode("");
+      setTradeOk(`Trade verified with ${r.partner_name || "the seller"} — you can now review each other.`);
     } catch (e: any) {
-      Alert.alert("Couldn't verify", String(e?.message || e).replace(/^\d{3}:\s*/, ""));
+      setTradeErr(String(e?.message || e).replace(/^\d{3}:\s*/, ""));
     } finally { setTradeBusy(false); }
   };
 
@@ -230,7 +233,12 @@ export default function ListingDetailScreen() {
         <View style={styles.tradeBackdrop}>
           <View style={styles.tradeCard}>
             <View style={styles.tradeIconWrap}><Ionicons name="shield-checkmark" size={24} color={theme.primary} /></View>
-            {mine ? (
+            {tradeOk ? (
+              <>
+                <Text style={styles.tradeTitle}>Verified ✓</Text>
+                <Text style={styles.tradeSub}>{tradeOk}</Text>
+              </>
+            ) : mine ? (
               <>
                 <Text style={styles.tradeTitle}>Your sale code</Text>
                 <Text style={styles.tradeSub}>Share this code with your buyer. When they enter it, the trade is verified and you can both review each other.</Text>
@@ -242,6 +250,7 @@ export default function ListingDetailScreen() {
                     <Ionicons name="copy-outline" size={18} color={theme.textMuted} />
                   </TouchableOpacity>
                 )}
+                {!!tradeErr && <Text style={styles.tradeError}>{tradeErr}</Text>}
               </>
             ) : (
               <>
@@ -252,16 +261,17 @@ export default function ListingDetailScreen() {
                   placeholder="ABC123"
                   placeholderTextColor={theme.textMuted}
                   value={code}
-                  onChangeText={(t) => setCode(t.toUpperCase().replace(/[^A-Z0-9]/g, "").slice(0, 6))}
+                  onChangeText={(t) => { setCode(t.toUpperCase().replace(/[^A-Z0-9]/g, "").slice(0, 6)); setTradeErr(null); }}
                   autoCapitalize="characters" autoCorrect={false} maxLength={6}
                   testID="listing-trade-input"
                 />
+                {!!tradeErr && <Text style={styles.tradeError}>{tradeErr}</Text>}
                 <TouchableOpacity style={[styles.tradeBtn, (tradeBusy || code.length < 6) && { opacity: 0.5 }]} onPress={submitTrade} disabled={tradeBusy || code.length < 6} testID="listing-trade-submit">
                   {tradeBusy ? <ActivityIndicator color="#fff" /> : <Text style={styles.tradeBtnText}>Verify</Text>}
                 </TouchableOpacity>
               </>
             )}
-            <TouchableOpacity onPress={() => setTradeOpen(false)}><Text style={styles.tradeCancel}>{mine ? "Done" : "Cancel"}</Text></TouchableOpacity>
+            <TouchableOpacity onPress={() => setTradeOpen(false)}><Text style={styles.tradeCancel}>{(mine || tradeOk) ? "Done" : "Cancel"}</Text></TouchableOpacity>
           </View>
         </View>
       </Modal>
@@ -281,6 +291,7 @@ const styles = StyleSheet.create({
   tradeBtn: { alignSelf: "stretch", backgroundColor: theme.primary, borderRadius: 12, paddingVertical: 13, alignItems: "center", marginTop: 4 },
   tradeBtnText: { color: "#fff", fontWeight: "800", fontSize: 15 },
   tradeCancel: { color: theme.textMuted, fontSize: 14, fontWeight: "600", marginTop: 4 },
+  tradeError: { color: theme.error, fontSize: 13, fontWeight: "600", textAlign: "center" },
   root: { flex: 1, backgroundColor: theme.bg },
   header: {
     flexDirection: "row", alignItems: "center",
