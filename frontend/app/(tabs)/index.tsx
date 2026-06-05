@@ -665,7 +665,7 @@ export default function MapScreen() {
             <Text style={styles.catLoadingText}>Finding places nearby…</Text>
           </View>
         )}
-      </SafeAreaView>
+      </View>
 
       {/* Apple-Maps-style grouped control stack (bottom-right) */}
       <View style={[styles.fabStack, { bottom: insets.bottom + 24 }]} pointerEvents="box-none">
@@ -1045,7 +1045,7 @@ export default function MapScreen() {
 
 const styles = StyleSheet.create({
   root: { flex: 1, backgroundColor: theme.bg },
-  topBar: { position: "absolute", top: 0, left: 0, right: 0, paddingTop: 8 },
+  topBar: { position: "absolute", top: 0, left: 0, right: 0 },
   searchRow: {
     flexDirection: "row", alignItems: "center", gap: 10,
     paddingHorizontal: 14, paddingTop: 8,
