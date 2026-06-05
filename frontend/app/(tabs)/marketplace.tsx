@@ -326,7 +326,7 @@ export default function MarketplaceScreen() {
               <View style={styles.tileBody}>
                 <View style={styles.tilePriceRow}>
                   <Text style={styles.tilePrice}>
-                    {item.price > 0 ? `${item.currency} ${item.price.toFixed(0)}` : "Free"}
+                    {item.price > 0 ? `$${item.price.toFixed(0)}` : "Free"}
                   </Text>
                   {item.negotiable && <Text style={styles.oboTag}>OBO</Text>}
                 </View>
@@ -397,7 +397,7 @@ export default function MarketplaceScreen() {
                 maxLength={120}
                 testID="listing-title-input"
               />
-              <Text style={styles.label}>Price (USD)</Text>
+              <Text style={styles.label}>Price ($)</Text>
               <TextInput
                 style={styles.input}
                 placeholder="0 for free"
@@ -574,7 +574,7 @@ export default function MarketplaceScreen() {
                 })}
               </View>
 
-              <Text style={styles.filterLabel}>Price range (USD)</Text>
+              <Text style={styles.filterLabel}>Price range ($)</Text>
               <View style={styles.priceRow}>
                 <TextInput
                   style={styles.priceInput}

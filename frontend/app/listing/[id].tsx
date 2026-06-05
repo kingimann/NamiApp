@@ -155,7 +155,7 @@ export default function ListingDetailScreen() {
           )}
 
           <View style={styles.body}>
-            <Text style={styles.price}>{listing.price > 0 ? `${listing.currency} ${listing.price.toFixed(0)}` : "Free"}</Text>
+            <Text style={styles.price}>{listing.price > 0 ? `$${listing.price.toFixed(0)}` : "Free"}</Text>
             <Text style={styles.title}>{listing.title}</Text>
             <View style={styles.metaRow}>
               <View style={styles.badge}><Text style={styles.badgeText}>{CONDITIONS[listing.condition || "used"] || "Used"}</Text></View>
