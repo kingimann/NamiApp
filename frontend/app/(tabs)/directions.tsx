@@ -656,7 +656,9 @@ export default function DirectionsScreen() {
         {!navMode && (
           <View style={styles.topWrap} pointerEvents="box-none">
             <View style={styles.card}>
-              {waypoints.map((w, i) => {
+              <View style={styles.cardTop}>
+                <View style={{ flex: 1 }}>
+                  {waypoints.map((w, i) => {
                 const isFirst = i === 0;
                 const isLast = i === waypoints.length - 1;
                 const dotColor = isFirst ? theme.success : isLast ? theme.error : "#EAB308";
@@ -688,10 +690,12 @@ export default function DirectionsScreen() {
                     {i < waypoints.length - 1 && <View style={styles.divider} />}
                   </View>
                 );
-              })}
-              <TouchableOpacity style={styles.swapBtn} onPress={swapEnds} testID="swap-waypoints" activeOpacity={0.85}>
-                <Ionicons name="swap-vertical" size={18} color={theme.primary} />
-              </TouchableOpacity>
+                  })}
+                </View>
+                <TouchableOpacity style={styles.swapBtn} onPress={swapEnds} testID="swap-waypoints" activeOpacity={0.85}>
+                  <Ionicons name="swap-vertical" size={18} color={theme.primary} />
+                </TouchableOpacity>
+              </View>
               <View style={styles.cardActions}>
                 <TouchableOpacity style={styles.addStopBtn} onPress={addStop} testID="add-stop">
                   <Ionicons name="add" size={16} color={theme.primary} />
@@ -1138,9 +1142,9 @@ const styles = StyleSheet.create({
     shadowColor: "#000", shadowOpacity: 0.4, shadowRadius: 12, elevation: 6,
     position: "relative",
   },
+  cardTop: { flexDirection: "row", alignItems: "center", gap: 8 },
   swapBtn: {
-    position: "absolute", right: 8, top: 30,
-    width: 34, height: 34, borderRadius: 17,
+    width: 36, height: 36, borderRadius: 18,
     backgroundColor: theme.surfaceAlt, borderWidth: 1, borderColor: theme.border,
     alignItems: "center", justifyContent: "center",
   },
