@@ -120,6 +120,7 @@ export default function DirectionsScreen() {
 
   const [userLocation, setUserLocation] = useState<[number, number] | null>(null);
   const [heading, setHeading] = useState<number>(0);
+  const [locAccuracy, setLocAccuracy] = useState<number | null>(null);
   const [waypoints, setWaypoints] = useState<Waypoint[]>([
     { id: newId(), query: "Your location", feature: null, isUserLocation: true },
     { id: newId(), query: "", feature: null },
@@ -201,16 +202,18 @@ export default function DirectionsScreen() {
       if (status !== "granted") return;
       const pos = await Location.getCurrentPositionAsync({ accuracy: Location.Accuracy.High });
       setUserLocation([pos.coords.longitude, pos.coords.latitude]);
+      if (pos.coords.accuracy != null) setLocAccuracy(pos.coords.accuracy);
       if (pos.coords.heading != null && pos.coords.heading >= 0) setHeading(pos.coords.heading);
       watcherRef.current?.remove();
       watcherRef.current = await Location.watchPositionAsync(
         {
           accuracy: Location.Accuracy.BestForNavigation,
-          timeInterval: 2000,
-          distanceInterval: 5,
+          timeInterval: 1000,
+          distanceInterval: 3,
         },
         (loc) => {
           setUserLocation([loc.coords.longitude, loc.coords.latitude]);
+          if (loc.coords.accuracy != null) setLocAccuracy(loc.coords.accuracy);
           if (loc.coords.heading != null && loc.coords.heading >= 0) setHeading(loc.coords.heading);
         },
       );
@@ -500,12 +503,12 @@ export default function DirectionsScreen() {
     // Recenter the camera on user position with bearing toward direction of travel.
     // Prefer device compass heading (stable, matches Google Maps' track-up).
     // Fall back to "bearing to next maneuver" only if heading is unavailable.
-    mapRef.current?.setUserLocation(userLocation[0], userLocation[1]);
-    mapRef.current?.flyTo(userLocation[0], userLocation[1], 17);
     const useDeviceHeading = typeof heading === "number" && !isNaN(heading) && heading >= 0;
     const brg = useDeviceHeading
       ? heading
       : (currentEnd ? bearingTo(userLocation, currentEnd) : 0);
+    mapRef.current?.setUserLocation(userLocation[0], userLocation[1], locAccuracy ?? undefined, useDeviceHeading ? heading : undefined);
+    mapRef.current?.flyTo(userLocation[0], userLocation[1], 17);
     mapRef.current?.setBearing(brg);
 
     // ── Speed limit lookup: find nearest route coord, then map to leg/segment ──
@@ -532,9 +535,12 @@ export default function DirectionsScreen() {
       setMaxSpeed(foundSpeed);
     }
 
-    // Off-route detection (throttle to 1 reroute per 8s)
+    // Off-route detection (throttle to 1 reroute per 8s).
+    // Scale the threshold with GPS accuracy so a poor fix (common on web/desktop)
+    // doesn't trigger a reroute storm that fights the follow camera.
     const offBy = distanceToRoute(userLocation, routeCoords);
-    if (offBy > 50 && Date.now() - lastRerouteAt.current > 8000 && !rerouting) {
+    const offThreshold = Math.max(60, (locAccuracy ?? 0) * 1.5);
+    if (offBy > offThreshold && Date.now() - lastRerouteAt.current > 8000 && !rerouting) {
       lastRerouteAt.current = Date.now();
       setRerouting(true);
       try { Speech.speak("Rerouting", { rate: 0.95 }); } catch {}
@@ -558,7 +564,7 @@ export default function DirectionsScreen() {
         try { Speech.stop(); Speech.speak(phrase, { rate: 0.95, pitch: 1.0 }); } catch {}
       }
     }
-  }, [userLocation, navMode, steps, stepIdx, stepEndCoords, routeCoords, voiceOn, rerouting, heading, recomputeRoute, routeLegs]);
+  }, [userLocation, navMode, steps, stepIdx, stepEndCoords, routeCoords, voiceOn, rerouting, heading, recomputeRoute, routeLegs, locAccuracy]);
 
   useEffect(() => () => { Speech.stop(); }, []);
 
@@ -860,7 +866,7 @@ export default function DirectionsScreen() {
         <View
           style={[
             styles.bottomCard,
-            { paddingBottom: insets.bottom + (navMode ? 26 : 90) },
+            { paddingBottom: navMode ? 16 : 18 },
           ]}
         >
           <View style={styles.grabberWrap} testID="panel-toggle" {...panelHandle.panHandlers}>
