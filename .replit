@@ -10,6 +10,10 @@ externalPort = 80
 localPort = 8080
 externalPort = 8080
 
+[[ports]]
+localPort = 8081
+externalPort = 8081
+
 [env]
 # Replit provides $PORT at runtime; the app binds to it.
 PORT = "8080"
@@ -65,5 +69,5 @@ waitForPort = 5000
 
 [deployment]
 deploymentTarget = "autoscale"
-run = ["bash", "-c", "cd backend && uvicorn server:app --host 0.0.0.0 --port 8080 --workers 2"]
-build = ["bash", "-c", "cd backend && pip install -r requirements.txt -q"]
+run = ["bash", "-c", "cd backend && python -m uvicorn server:app --host 0.0.0.0 --port ${PORT:-8080}"]
+build = ["bash", "-c", "cd backend && python -m pip install -r requirements.txt -q"]

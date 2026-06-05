@@ -11,7 +11,14 @@ import {
 import { fetchPublicEta, EtaShare } from "@/src/api/client";
 import { MAP_STYLES, theme } from "@/src/theme";
 
-const BASE_URL = process.env.EXPO_PUBLIC_BACKEND_URL as string;
+const _BACKEND_URL = (process.env.EXPO_PUBLIC_BACKEND_URL as string) || "";
+// Build the WebSocket base: on web use window.location.origin, on native use the configured URL.
+function getWsBase(): string {
+  if (Platform.OS === "web" && typeof window !== "undefined") {
+    return window.location.origin.replace(/^http/, "ws");
+  }
+  return _BACKEND_URL.replace(/^http/, "ws");
+}
 
 export default function EtaPublicViewer() {
   const router = useRouter();
@@ -36,7 +43,7 @@ export default function EtaPublicViewer() {
   // WebSocket for live updates
   useEffect(() => {
     if (!shareId) return;
-    const wsUrl = BASE_URL.replace(/^http/, "ws") + `/api/ws/eta/${shareId}`;
+    const wsUrl = getWsBase() + `/api/ws/eta/${shareId}`;
     let ws: WebSocket | null = null;
     let reconnectTimer: ReturnType<typeof setTimeout> | null = null;
     const connect = () => {

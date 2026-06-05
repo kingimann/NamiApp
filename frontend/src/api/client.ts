@@ -1,6 +1,11 @@
+import { Platform } from "react-native";
 import { storage } from "@/src/utils/storage";
 
-const BASE_URL = process.env.EXPO_PUBLIC_BACKEND_URL as string;
+// On web, use relative paths so the Metro proxy (dev) or same-origin server (prod)
+// handles routing — avoids CORS issues and works without knowing the backend URL.
+// On native (Expo Go / device), we need the full configured backend URL.
+const BASE_URL: string =
+  Platform.OS === "web" ? "" : (process.env.EXPO_PUBLIC_BACKEND_URL as string) || "";
 export const SESSION_TOKEN_KEY = "session_token";
 
 async function getToken(): Promise<string | null> {

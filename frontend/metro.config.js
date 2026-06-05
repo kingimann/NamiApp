@@ -12,9 +12,8 @@ config.cacheStores = [
 
 config.maxWorkers = 2;
 
-// Proxy /api/* and /health requests from the browser to the FastAPI backend
-// so both the frontend (port 5000) and backend (port 8080) are reachable
-// from the same origin.
+// Proxy /api/* and /health HTTP requests from the browser to the FastAPI backend
+// so both the frontend (port 5000) and backend (port 8080) share the same origin.
 const proxy = httpProxy.createProxyServer({
   target: 'http://localhost:8080',
   changeOrigin: true,
@@ -22,10 +21,10 @@ const proxy = httpProxy.createProxyServer({
 
 proxy.on('error', (err, req, res) => {
   console.error('[proxy error]', err.message);
-  if (!res.headersSent) {
+  if (res && !res.headersSent) {
     res.writeHead(502, { 'Content-Type': 'application/json' });
+    res.end(JSON.stringify({ detail: 'Backend unreachable' }));
   }
-  res.end(JSON.stringify({ detail: 'Backend unreachable' }));
 });
 
 config.server = {

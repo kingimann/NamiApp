@@ -80,12 +80,55 @@ async def root():
 
 @router.post("/auth/session", response_model=AuthResponse)
 async def create_session(payload: SessionRequest):
-    # Emergent OAuth has been removed for self-hosting on AWS.
-    # Use /auth/register and /auth/login (email + password) instead.
-    raise HTTPException(
-        status_code=410,
-        detail="OAuth session login is disabled. Use /auth/register or /auth/login.",
-    )
+    """Exchange a session_id from the Replit OAuth service for a local session token."""
+    import httpx as _httpx
+    try:
+        async with _httpx.AsyncClient(timeout=10) as client:
+            resp = await client.get(
+                "https://auth.emergentagent.com/api/auth/user",
+                params={"session_id": payload.session_id},
+            )
+            if not resp.is_success:
+                raise HTTPException(status_code=401, detail="Invalid or expired OAuth session")
+            data = resp.json()
+    except HTTPException:
+        raise
+    except Exception:
+        raise HTTPException(status_code=502, detail="Auth service temporarily unavailable")
+
+    email = (data.get("email") or "").strip().lower()
+    if not email:
+        raise HTTPException(status_code=401, detail="No email returned from OAuth provider")
+
+    name = (data.get("name") or data.get("displayName") or email.split("@")[0]).strip()[:80]
+    picture = data.get("picture") or data.get("profilePicture") or data.get("avatar")
+
+    user_doc = await db.users.find_one({"email": email})
+    if not user_doc:
+        user_id = f"user_{uuid.uuid4().hex[:12]}"
+        try:
+            await db.users.insert_one({
+                "user_id": user_id, "email": email, "name": name,
+                "username": None, "picture": picture, "bio": "",
+                "hashed_password": None,
+                "auth_providers": ["google"],
+                "failed_login_attempts": 0, "locked_until": None,
+                "created_at": datetime.now(timezone.utc),
+            })
+        except DuplicateKeyError:
+            user_doc = await db.users.find_one({"email": email})
+        else:
+            user_doc = await db.users.find_one({"user_id": user_id})
+    else:
+        upd = {}
+        if picture and not user_doc.get("picture"):
+            upd["picture"] = picture
+        if upd:
+            await db.users.update_one({"user_id": user_doc["user_id"]}, {"$set": upd})
+            user_doc = await db.users.find_one({"user_id": user_doc["user_id"]})
+
+    token = await _mint_session(user_doc["user_id"])
+    return AuthResponse(session_token=token, user=User(**_user_doc_to_model(user_doc)))
 
 
 @router.get("/auth/me", response_model=User)
