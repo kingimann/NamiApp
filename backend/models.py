@@ -321,6 +321,29 @@ class Listing(BaseModel):
     created_at: datetime
 
 
+class MarketplaceReviewCreate(BaseModel):
+    rating: int = 5
+    text: Optional[str] = ""
+
+
+class MarketplaceReview(BaseModel):
+    id: str
+    subject_user_id: str
+    reviewer: "PostAuthor"
+    rating: int
+    text: Optional[str] = ""
+    created_at: datetime
+
+
+class SellerProfile(BaseModel):
+    user: PublicUser
+    rating: float = 0.0
+    review_count: int = 0
+    listing_count: int = 0
+    listings: List[Listing] = []
+    reviewed_by_me: bool = False
+
+
 # ---------- Posts (Newsfeed) ----------
 class PostMedia(BaseModel):
     type: Literal["image", "video"] = "image"
@@ -418,6 +441,8 @@ class PromoteCreate(BaseModel):
 
 
 Listing.model_rebuild()
+MarketplaceReview.model_rebuild()
+SellerProfile.model_rebuild()
 Post.model_rebuild()
 
 

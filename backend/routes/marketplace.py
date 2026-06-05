@@ -12,8 +12,11 @@ from models import (
     Listing,
     ListingCreate,
     ListingPatch,
+    MarketplaceReview,
+    MarketplaceReviewCreate,
     Message,
     PostAuthor,
+    SellerProfile,
 )
 from services.encryption import encrypt_text, decrypt_text
 
@@ -254,6 +257,88 @@ async def delete_listing(listing_id: str, authorization: Optional[str] = Header(
     if res.deleted_count == 0:
         raise HTTPException(status_code=404, detail="Listing not found")
     return {"ok": True}
+
+
+# ---------- Seller / buyer profiles + reviews ----------
+async def _hydrate_review(doc: dict) -> MarketplaceReview:
+    author_doc = await db.users.find_one({"user_id": doc["reviewer_id"]}, {"_id": 0})
+    reviewer = PostAuthor(
+        user_id=doc["reviewer_id"],
+        name=author_doc.get("name", "Unknown") if author_doc else "Unknown",
+        picture=author_doc.get("picture") if author_doc else None,
+    )
+    return MarketplaceReview(
+        id=doc["id"], subject_user_id=doc["subject_user_id"], reviewer=reviewer,
+        rating=doc.get("rating", 5), text=doc.get("text", ""), created_at=doc["created_at"],
+    )
+
+
+@router.get("/marketplace/users/{user_id}", response_model=SellerProfile)
+async def seller_profile(user_id: str, authorization: Optional[str] = Header(None)):
+    me = await get_current_user(authorization)
+    udoc = await db.users.find_one({"user_id": user_id}, {"_id": 0, "user_id": 1})
+    if not udoc:
+        raise HTTPException(status_code=404, detail="User not found")
+    pu = await _public_user(user_id)
+    ratings = await db.marketplace_reviews.find(
+        {"subject_user_id": user_id}, {"_id": 0, "rating": 1}
+    ).to_list(2000)
+    count = len(ratings)
+    rating = round(sum(r.get("rating", 0) for r in ratings) / count, 1) if count else 0.0
+    listing_docs = await db.listings.find(
+        {"user_id": user_id, "status": {"$ne": "sold"}}, {"_id": 0}
+    ).sort("created_at", -1).to_list(60)
+    saved_ids = await _saved_ids_for(me["user_id"])
+    listings = [await _hydrate_listing(d, saved_ids=saved_ids) for d in listing_docs]
+    listing_count = await db.listings.count_documents({"user_id": user_id})
+    reviewed_by_me = bool(await db.marketplace_reviews.find_one(
+        {"subject_user_id": user_id, "reviewer_id": me["user_id"]}, {"_id": 0, "id": 1}
+    ))
+    return SellerProfile(
+        user=pu, rating=rating, review_count=count,
+        listing_count=listing_count, listings=listings, reviewed_by_me=reviewed_by_me,
+    )
+
+
+@router.get("/marketplace/users/{user_id}/reviews", response_model=List[MarketplaceReview])
+async def list_seller_reviews(user_id: str, authorization: Optional[str] = Header(None)):
+    await get_current_user(authorization)
+    docs = await db.marketplace_reviews.find(
+        {"subject_user_id": user_id}, {"_id": 0}
+    ).sort("created_at", -1).to_list(100)
+    return [await _hydrate_review(d) for d in docs]
+
+
+@router.post("/marketplace/users/{user_id}/reviews", response_model=MarketplaceReview)
+async def add_seller_review(
+    user_id: str, body: MarketplaceReviewCreate, authorization: Optional[str] = Header(None)
+):
+    me = await get_current_user(authorization)
+    if user_id == me["user_id"]:
+        raise HTTPException(status_code=400, detail="You can't review yourself")
+    subj = await db.users.find_one({"user_id": user_id}, {"_id": 0, "user_id": 1})
+    if not subj:
+        raise HTTPException(status_code=404, detail="User not found")
+    rating = max(1, min(5, int(body.rating or 5)))
+    text = (body.text or "")[:1000]
+    now = datetime.now(timezone.utc)
+    existing = await db.marketplace_reviews.find_one(
+        {"subject_user_id": user_id, "reviewer_id": me["user_id"]}, {"_id": 0}
+    )
+    if existing:
+        await db.marketplace_reviews.update_one(
+            {"id": existing["id"]},
+            {"$set": {"rating": rating, "text": text, "created_at": now}},
+        )
+        rid = existing["id"]
+    else:
+        rid = str(uuid.uuid4())
+        await db.marketplace_reviews.insert_one({
+            "id": rid, "subject_user_id": user_id, "reviewer_id": me["user_id"],
+            "rating": rating, "text": text, "created_at": now,
+        })
+    doc = await db.marketplace_reviews.find_one({"id": rid}, {"_id": 0})
+    return await _hydrate_review(doc)
 
 
 @router.post("/listings/{listing_id}/contact", response_model=ConversationView)
