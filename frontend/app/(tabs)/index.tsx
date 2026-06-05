@@ -503,7 +503,7 @@ export default function MapScreen() {
       />
 
       {/* Top: search + categories */}
-      <SafeAreaView edges={["top"]} style={styles.topBar} pointerEvents="box-none">
+      <View style={[styles.topBar, { paddingTop: insets.top + 8 }]} pointerEvents="box-none">
         <View style={styles.searchRow}>
           <SidebarMenuButton light />
           <View style={[styles.searchPill, { flex: 1 }]}>

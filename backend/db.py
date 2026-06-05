@@ -317,12 +317,11 @@ class Collection:
                 elif op in ("$gt", "$gte", "$lt", "$lte"):
                     op_sql = {"$gt": ">", "$gte": ">=", "$lt": "<", "$lte": "<="}[op]
                     if self._is_date_field(key):
-                        val_str = (
-                            op_val.isoformat()
-                            if isinstance(op_val, datetime)
-                            else str(op_val)
-                        )
-                        params.append(val_str)
+                        if isinstance(op_val, datetime):
+                            dt = op_val
+                        else:
+                            dt = datetime.fromisoformat(str(op_val))
+                        params.append(dt)
                         conditions.append(
                             f"({self._sql_text(key)})::timestamptz "
                             f"{op_sql} ${len(params)}::timestamptz"
@@ -371,7 +370,7 @@ class Collection:
             return f"{self._sql_jsonb(key)} @> ${len(params)}::jsonb"
 
         if isinstance(value, datetime):
-            params.append(value.isoformat())
+            params.append(value)
             return (
                 f"({self._sql_text(key)})::timestamptz "
                 f"= ${len(params)}::timestamptz"
