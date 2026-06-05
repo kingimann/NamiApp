@@ -44,6 +44,7 @@ const HIDDEN_BAR_PREFIXES = [
   "/admin-revenue",
   "/admin-bot",
   "/privacy",
+  "/encryption-key",
   "/oauth/",
   "/legal/",
   // Communities (list and /c/<name> detail) keep the bottom nav bar — it's a

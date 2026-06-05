@@ -87,6 +87,18 @@ export default function PrivacyScreen() {
           </TouchableOpacity>
         </View>
 
+        <Text style={styles.section}>Messages</Text>
+        <View style={styles.card}>
+          <TouchableOpacity style={styles.optRow} onPress={() => router.push("/encryption-key")} testID="privacy-encryption">
+            <Ionicons name="key-outline" size={18} color={theme.primary} />
+            <View style={{ flex: 1 }}>
+              <Text style={styles.optLabel}>Encryption key backup</Text>
+              <Text style={styles.optSub}>Back up your end-to-end key to restore chats on a new device.</Text>
+            </View>
+            <Ionicons name="chevron-forward" size={18} color={theme.textMuted} />
+          </TouchableOpacity>
+        </View>
+
         <Text style={styles.footer}>You can always see who viewed your own posts by tapping the view count.</Text>
       </ScrollView>
     </SafeAreaView>

@@ -47,9 +47,54 @@ export async function getPeerPublicKey(userId: string): Promise<Uint8Array | nul
   } catch { return null; }
 }
 
-export async function encryptForPeer(
+// ── Passphrase-protected key backup (multi-device restore) ───────────────────
+// Stretch a passphrase into a 32-byte secretbox key (iterated SHA-512 → 32 B).
+function deriveKey(passphrase: string, salt: Uint8Array): Uint8Array {
+  let h = nacl.hash(new Uint8Array([...decodeUTF8(passphrase), ...salt]));
+  for (let i = 0; i < 20000; i++) h = nacl.hash(h);
+  return h.slice(0, nacl.secretbox.keyLength);
+}
+
+/** Encrypt our private key with `passphrase` and upload the opaque blob. */
+export async function backupKey(passphrase: string): Promise<void> {
+  const { priv } = await ensureKeyPair();
+  const salt = nacl.randomBytes(16);
+  const nonce = nacl.randomBytes(nacl.secretbox.nonceLength);
+  const key = deriveKey(passphrase, salt);
+  const box = nacl.secretbox(priv, nonce, key);
+  const blob = JSON.stringify({
+    v: 1, salt: encodeBase64(salt), nonce: encodeBase64(nonce), box: encodeBase64(box),
+  });
+  await api.uploadE2EBackup(blob);
+}
+
+/** Fetch the backup, decrypt with `passphrase`, and install the key on this
+ *  device (so old end-to-end messages become readable again). */
+export async function restoreKey(passphrase: string): Promise<boolean> {
+  const { blob } = await api.getE2EBackup();
+  if (!blob) throw new Error("No backup found");
+  const { salt, nonce, box } = JSON.parse(blob);
+  const key = deriveKey(passphrase, decodeBase64(salt));
+  const priv = nacl.secretbox.open(decodeBase64(box), decodeBase64(nonce), key);
+  if (!priv) throw new Error("Wrong passphrase");
+  const kp = nacl.box.keyPair.fromSecretKey(priv);
+  await storage.secureSet(PRIV_KEY, encodeBase64(kp.secretKey));
+  await storage.secureSet(PUB_KEY, encodeBase64(kp.publicKey));
+  cachedPriv = kp.secretKey;
+  cachedPub = kp.publicKey;
+  try { await api.uploadE2EKey(encodeBase64(kp.publicKey)); } catch {}
+  return true;
+}
+
+export async function hasBackup(): Promise<boolean> {
+  try { return (await api.getE2EBackup()).has_backup; } catch { return false; }
+}
+
+/** Seal `plain` to every recipient (and to self, so we can re-read it). Works
+ *  for DMs (one recipient) and group chats (many). */
+export async function encryptForRecipients(
   plain: string,
-  peerPub: Uint8Array,
+  recipientPubs: Uint8Array[],
 ): Promise<string> {
   const { priv, pub } = await ensureKeyPair();
   const mkBox = (peer: Uint8Array) => {
@@ -57,8 +102,19 @@ export async function encryptForPeer(
     const box = nacl.box(decodeUTF8(plain), nonce, peer, priv);
     return `${encodeBase64(nonce)}.${encodeBase64(box)}`;
   };
-  // Encrypt for both peer AND self (so we can re-read our own messages).
-  return `${PREFIX}${mkBox(peerPub)}|${mkBox(pub)}`;
+  const seen = new Set<string>();
+  const boxes: string[] = [];
+  for (const p of [...recipientPubs, pub]) {
+    const k = encodeBase64(p);
+    if (seen.has(k)) continue;     // de-dup (self may already be in the list)
+    seen.add(k);
+    boxes.push(mkBox(p));
+  }
+  return `${PREFIX}${boxes.join("|")}`;
+}
+
+export async function encryptForPeer(plain: string, peerPub: Uint8Array): Promise<string> {
+  return encryptForRecipients(plain, [peerPub]);
 }
 
 export function isE2E(value: string): boolean {

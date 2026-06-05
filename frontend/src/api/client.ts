@@ -121,6 +121,10 @@ export const api = {
     request<{ ok: boolean }>("/auth/keys", { method: "POST", body: JSON.stringify({ public_key }) }),
   getUserE2EKey: (user_id: string) =>
     request<{ public_key: string | null }>(`/users/${user_id}/key`),
+  uploadE2EBackup: (blob: string) =>
+    request<{ ok: boolean }>("/auth/keys/backup", { method: "POST", body: JSON.stringify({ blob }) }),
+  getE2EBackup: () => request<{ has_backup: boolean; blob: string | null }>("/auth/keys/backup"),
+  deleteE2EBackup: () => request<{ ok: boolean }>("/auth/keys/backup", { method: "DELETE" }),
   recordPostView: (id: string) =>
     request<{ viewed: boolean }>(`/posts/${id}/view`, { method: "POST" }),
   reelsFeed: (focus?: string) =>

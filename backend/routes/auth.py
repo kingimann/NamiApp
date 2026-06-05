@@ -472,3 +472,35 @@ async def get_user_public_key(user_id: str, authorization: Optional[str] = Heade
     doc = await db.users.find_one({"user_id": user_id}, {"_id": 0, "e2e_public_key": 1})
     return {"public_key": (doc or {}).get("e2e_public_key")}
 
+
+class KeyBackup(BaseModel):
+    # Opaque, client-encrypted blob (private key sealed with a passphrase).
+    # The server never sees the passphrase or the plaintext key.
+    blob: str
+
+
+@router.post("/auth/keys/backup")
+async def upload_key_backup(body: KeyBackup, authorization: Optional[str] = Header(None)):
+    """Store the user's passphrase-encrypted private-key backup (opaque blob)."""
+    user = await get_current_user(authorization)
+    blob = (body.blob or "").strip()
+    if not blob or len(blob) > 20000:
+        raise HTTPException(status_code=400, detail="Invalid backup")
+    await db.users.update_one({"user_id": user["user_id"]}, {"$set": {"e2e_key_backup": blob}})
+    return {"ok": True}
+
+
+@router.get("/auth/keys/backup")
+async def get_key_backup(authorization: Optional[str] = Header(None)):
+    user = await get_current_user(authorization)
+    doc = await db.users.find_one({"user_id": user["user_id"]}, {"_id": 0, "e2e_key_backup": 1})
+    blob = (doc or {}).get("e2e_key_backup")
+    return {"has_backup": bool(blob), "blob": blob}
+
+
+@router.delete("/auth/keys/backup")
+async def delete_key_backup(authorization: Optional[str] = Header(None)):
+    user = await get_current_user(authorization)
+    await db.users.update_one({"user_id": user["user_id"]}, {"$set": {"e2e_key_backup": None}})
+    return {"ok": True}
+
