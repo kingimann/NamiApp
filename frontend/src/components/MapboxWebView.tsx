@@ -109,9 +109,11 @@ function buildHtml(token: string, center: [number, number], zoom: number, style:
     else window.parent && window.parent.postMessage(s, '*');
   }
 
-  // Hide Mapbox's built-in business/POI labels & icons (they can look outdated).
+  // Apply our basemap config + hide business/POI labels (they can look outdated).
   function hidePoiLayers() {
-    // New Standard style: POIs are a config flag, not a separate layer.
+    // New Standard style: config-driven. Use a dark night preset to match the
+    // app's dark UI, and hide POIs via the config flag (not a layer).
+    try { map.setConfigProperty('basemap', 'lightPreset', 'night'); } catch (e) {}
     try { map.setConfigProperty('basemap', 'showPointOfInterestLabels', false); } catch (e) {}
     // Classic styles (streets/satellite/dark/outdoors): hide 'poi' layers.
     try {
