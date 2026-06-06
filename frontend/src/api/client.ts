@@ -151,6 +151,7 @@ export const api = {
     request<{ test_payments: boolean }>("/admin/test-payments", { method: "POST", body: JSON.stringify({ enabled }) }),
   adminResetMoney: () => request<{ ok: boolean }>("/admin/reset/money", { method: "POST" }),
   adminResetAnalytics: () => request<{ ok: boolean }>("/admin/reset/analytics", { method: "POST" }),
+  adminGetRevenue: () => request<{ total: number; count: number; by_source: Record<string, number>; platform_fee_percent: number; transaction_fee_cents: number }>("/admin/revenue"),
   adminGetFees: () => request<{ platform_fee_percent: number; creator_share_percent: number; transaction_fee_cents: number }>("/admin/fees"),
   adminSetFees: (body: { platform_fee_percent?: number; transaction_fee_cents?: number }) =>
     request<{ platform_fee_percent: number; creator_share_percent: number; transaction_fee_cents: number }>("/admin/fees", { method: "POST", body: JSON.stringify(body) }),

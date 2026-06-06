@@ -687,6 +687,26 @@ async def admin_set_fees(body: FeesBody, authorization: Optional[str] = Header(N
     }
 
 
+@router.get("/admin/revenue")
+async def admin_revenue(authorization: Optional[str] = Header(None)):
+    """Platform revenue from in-app transaction fees (the flat per-payment fee).
+    Note: the percentage cut on tips/subscriptions is collected by Stripe and
+    shows in your Stripe Dashboard."""
+    me = await get_current_user(authorization)
+    _admin_only(me)
+    rows = await db.platform_revenue.find({}, {"_id": 0}).sort("created_at", -1).limit(5000).to_list(5000)
+    total = round(sum(float(r.get("amount", 0) or 0) for r in rows), 2)
+    by_source: dict = {}
+    for r in rows:
+        s = r.get("source", "other")
+        by_source[s] = round(by_source.get(s, 0) + float(r.get("amount", 0) or 0), 2)
+    return {
+        "total": total, "count": len(rows), "by_source": by_source,
+        "platform_fee_percent": await platform_fee_percent(),
+        "transaction_fee_cents": await transaction_fee_cents(),
+    }
+
+
 @router.post("/admin/reset/money")
 async def admin_reset_money(authorization: Optional[str] = Header(None)):
     """Wipe wallet/money data (earnings, tips, subs, payouts, transfers, requests)
@@ -694,7 +714,7 @@ async def admin_reset_money(authorization: Optional[str] = Header(None)):
     me = await get_current_user(authorization)
     _admin_only(me)
     for coll in ("earnings", "tips", "subscriptions", "payouts", "money_transfers",
-                 "money_requests", "wallet_topups", "ad_topups"):
+                 "money_requests", "wallet_topups", "ad_topups", "platform_revenue"):
         await getattr(db, coll).delete_many({})
     await db.users.update_many({}, {"$set": {"ad_balance": 0, "wallet_balance": 0}})
     return {"ok": True}
