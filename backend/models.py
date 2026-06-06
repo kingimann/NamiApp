@@ -347,6 +347,8 @@ class ConversationView(BaseModel):
     other_user: Optional[PublicUser] = None  # only for DM
     members: List[PublicUser] = []           # group members (empty for DM)
     owner_id: Optional[str] = None           # group owner
+    listing_id: Optional[str] = None         # set when the DM started from a marketplace listing
+    listing_title: Optional[str] = None
     last_message: Optional[Message] = None
     last_message_at: Optional[datetime] = None
     unread_count: int = 0

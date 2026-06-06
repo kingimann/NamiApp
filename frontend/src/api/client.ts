@@ -1017,6 +1017,8 @@ export type ConversationView = {
   other_user?: PublicUser | null;
   members?: PublicUser[];
   owner_id?: string | null;
+  listing_id?: string | null;     // set when the DM started from a marketplace listing
+  listing_title?: string | null;
   last_message?: Message | null;
   last_message_at?: string | null;
   unread_count?: number;

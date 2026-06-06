@@ -591,6 +591,14 @@ async def contact_seller(listing_id: str, authorization: Optional[str] = Header(
         }
         await db.conversations.insert_one(conv.copy())
         conv.pop("_id", None)
+    # Tag the conversation as a marketplace chat so it shows in its own section.
+    listing_title = (listing.get("title") or "")[:120]
+    conv["listing_id"] = listing_id
+    conv["listing_title"] = listing_title
+    await db.conversations.update_one(
+        {"id": conv["id"]},
+        {"$set": {"listing_id": listing_id, "listing_title": listing_title}},
+    )
     now = datetime.now(timezone.utc)
     await db.messages.insert_one({
         "id": str(uuid.uuid4()),
@@ -614,6 +622,8 @@ async def contact_seller(listing_id: str, authorization: Optional[str] = Header(
     return ConversationView(
         id=conv["id"],
         other_user=other,
+        listing_id=conv.get("listing_id"),
+        listing_title=conv.get("listing_title"),
         last_message=Message(**last_msg_doc) if last_msg_doc else None,
         last_message_at=now,
         unread_count=0,
