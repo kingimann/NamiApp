@@ -472,6 +472,40 @@ export async function stripeAddDebitCard(acctId: string, currency?: string): Pro
 }
 
 /**
+ * Mount the secure card field (the one PCI-required Stripe element) into a DOM
+ * node owned by a NATIVE in-app screen, so debit-card entry lives inside our own
+ * screen instead of a popup. Returns a tokenizer + cleanup. Web only.
+ */
+export async function mountDebitCardField(
+  nodeId: string,
+  acctId: string,
+): Promise<{ tokenize: (currency?: string) => Promise<string>; destroy: () => void }> {
+  if (!isWeb) throw new Error("Card entry is available on the web app.");
+  if (!PK || !acctId) throw new Error("Payouts aren't set up on this device.");
+  await loadScript("https://js.stripe.com/v3/");
+  const Stripe = (window as any).Stripe;
+  if (!Stripe) throw new Error("Couldn't load the secure card field. Please try again.");
+  const node = document.getElementById(nodeId);
+  if (!node) throw new Error("Card field isn't ready yet.");
+  const stripe = Stripe(PK, { stripeAccount: acctId });
+  const elements = stripe.elements();
+  const card = elements.create("card", {
+    style: { base: { fontSize: "16px", color: "#E9EDEF", "::placeholder": { color: "#8696A0" } } },
+  });
+  card.mount(node);
+  return {
+    tokenize: async (currency?: string) => {
+      const data: any = {};
+      if (currency) data.currency = currency;
+      const { token, error } = await stripe.createToken(card, data);
+      if (error) throw new Error(error.message || "Couldn't read that card.");
+      return token.id;
+    },
+    destroy: () => { try { card.unmount(); } catch {} },
+  };
+}
+
+/**
  * Tokenize a bank account with Stripe.js and return the token id, so a NATIVE
  * in-app form (our own RN inputs) can collect the details and we never render a
  * Stripe popup. Throws with a friendly message on failure.
