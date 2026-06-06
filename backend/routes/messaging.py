@@ -109,6 +109,8 @@ async def _hydrate_conv(conv: dict, viewer_id: str) -> ConversationView:
     return ConversationView(
         id=conv["id"], kind="dm",
         other_user=other,
+        listing_id=conv.get("listing_id"),
+        listing_title=conv.get("listing_title"),
         last_message=Message(**last) if last else None,
         last_message_at=conv.get("last_message_at"),
         unread_count=unread,

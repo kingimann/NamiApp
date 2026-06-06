@@ -1,6 +1,6 @@
-import React, { useCallback, useEffect, useState } from "react";
+import React, { useCallback, useEffect, useMemo, useState } from "react";
 import {
-  View, Text, StyleSheet, TouchableOpacity, FlatList, ActivityIndicator,
+  View, Text, StyleSheet, TouchableOpacity, FlatList, SectionList, ActivityIndicator,
   TextInput, Image, Modal, KeyboardAvoidingView, Platform, Alert, RefreshControl,
 } from "react-native";
 import { SafeAreaView, useSafeAreaInsets } from "react-native-safe-area-context";
@@ -155,6 +155,26 @@ export default function MessagesScreen() {
     }
   };
 
+  // Split conversations into Direct / Marketplace / Groups sections. Empty
+  // sections are dropped so headers only appear when there's something in them.
+  const sections = useMemo(() => {
+    const q = search.trim().toLowerCase();
+    const match = (c: ConversationView) => {
+      if (!q) return true;
+      const nm = c.kind === "group" ? (c.name || "Group") : (c.other_user?.name || "User");
+      return nm.toLowerCase().includes(q) || (c.listing_title || "").toLowerCase().includes(q);
+    };
+    const filtered = convs.filter(match);
+    const direct = filtered.filter((c) => c.kind === "dm" && !c.listing_id);
+    const market = filtered.filter((c) => c.kind === "dm" && !!c.listing_id);
+    const groups = filtered.filter((c) => c.kind === "group");
+    const out: { title: string; data: ConversationView[] }[] = [];
+    if (direct.length) out.push({ title: "Direct messages", data: direct });
+    if (market.length) out.push({ title: "Marketplace", data: market });
+    if (groups.length) out.push({ title: "Group chats", data: groups });
+    return out;
+  }, [convs, search]);
+
   const fmtTime = (s?: string | null) => {
     if (!s) return "";
     const d = new Date(s);
@@ -216,14 +236,10 @@ export default function MessagesScreen() {
       {loading ? (
         <View style={styles.center}><ActivityIndicator color={theme.primary} /></View>
       ) : (
-        <FlatList
-          data={convs.filter((c) => {
-            const q = search.trim().toLowerCase();
-            if (!q) return true;
-            const nm = c.kind === "group" ? (c.name || "Group") : (c.other_user?.name || "User");
-            return nm.toLowerCase().includes(q);
-          })}
+        <SectionList
+          sections={sections}
           keyExtractor={(i) => i.id}
+          stickySectionHeadersEnabled={false}
           contentContainerStyle={{ padding: 16, paddingBottom: insets.bottom + 80, gap: 8 }}
           refreshControl={
             <RefreshControl
@@ -242,6 +258,9 @@ export default function MessagesScreen() {
               <Text style={styles.emptySub}>Tap the compose icon to find someone or start a group.</Text>
             </View>
           }
+          renderSectionHeader={({ section }) => (
+            <Text style={styles.sectionHeader}>{section.title}</Text>
+          )}
           renderItem={({ item }) => {
             const isGroup = item.kind === "group";
             const displayName = isGroup ? (item.name || "Group") : (item.other_user?.name || "User");
@@ -299,6 +318,9 @@ export default function MessagesScreen() {
                     </View>
                     <Text style={styles.convTime}>{fmtTime(item.last_message_at)}</Text>
                   </View>
+                  {!!item.listing_id && !!item.listing_title && (
+                    <Text style={styles.listingTag} numberOfLines={1}>🏷️ {item.listing_title}</Text>
+                  )}
                   <View style={styles.convBottomRow}>
                     <Text
                       style={[styles.convPreview, (item.unread_count || 0) > 0 && { color: theme.textPrimary, fontWeight: "700" }]}
@@ -554,6 +576,12 @@ const styles = StyleSheet.create({
     backgroundColor: "#7C3AED22",
   },
   groupPillText: { color: "#A78BFA", fontSize: 10, fontWeight: "800" },
+  sectionHeader: {
+    color: theme.textSecondary, fontSize: 12.5, fontWeight: "800",
+    textTransform: "uppercase", letterSpacing: 0.5,
+    marginTop: 14, marginBottom: 2,
+  },
+  listingTag: { color: theme.primary, fontSize: 12, fontWeight: "600", marginTop: 1 },
   selfChatRow: {
     flexDirection: "row", alignItems: "center", gap: 12,
     backgroundColor: theme.surface,
