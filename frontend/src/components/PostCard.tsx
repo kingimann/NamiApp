@@ -1,6 +1,6 @@
 import React, { useState } from "react";
 import {
-  View, Text, StyleSheet, TouchableOpacity, Image, Modal, Pressable, ActivityIndicator,
+  View, Text, StyleSheet, TouchableOpacity, Image, Modal, Pressable, ActivityIndicator, Share,
 } from "react-native";
 import { Ionicons } from "@expo/vector-icons";
 import { useRouter } from "expo-router";
@@ -119,6 +119,13 @@ export default function PostCard({
       const updated = await api.reactToPost(display.id, emoji);
       if (!isRepost) setLocalPost(updated);
     } catch {}
+  };
+
+  // Share a public link to this post (web URL when configured, else deep link).
+  const shareLink = async () => {
+    const base = (process.env.EXPO_PUBLIC_BACKEND_URL as string) || "";
+    const url = base ? `${base.replace(/\/$/, "")}/post/${display.id}` : `atlas://post/${display.id}`;
+    try { await Share.share({ message: display.text ? `${display.text}\n\n${url}` : url, url }); } catch {}
   };
 
   return (
@@ -267,41 +274,26 @@ export default function PostCard({
         </TouchableOpacity>
 
         {!display.likes_disabled && (
-          <>
-            {/* Unified reaction button — opens the emoji picker (or removes your
-                current reaction with a long-press). */}
-            <TouchableOpacity
-              style={styles.actionBtn}
-              onPress={(e) => { e.stopPropagation?.(); setReactOpen(true); }}
-              onLongPress={() => { if (display.my_reaction) doReact(display.my_reaction); else setLikers({ open: true, kind: "likers" }); }}
-              delayLongPress={350}
-              testID={`react-${post.id}`}
-            >
-              {display.my_reaction ? (
-                <Text style={{ fontSize: 17 }}>{display.my_reaction}</Text>
-              ) : (
-                <Ionicons name="happy-outline" size={18} color={theme.textSecondary} />
-              )}
-              {(display.reactions_total ?? display.likes_count) > 0 && (
-                <Text style={[styles.actionText, display.my_reaction && { color: theme.primary }]}>
-                  {display.reactions_total ?? display.likes_count}
-                </Text>
-              )}
-            </TouchableOpacity>
-
-            {/* Top reaction tallies — tap to react with that emoji. */}
-            {(display.reactions || []).slice(0, 3).map((r) => (
-              <TouchableOpacity
-                key={r.emoji}
-                style={[styles.reactChip, display.my_reaction === r.emoji && styles.reactChipMine]}
-                onPress={(e) => { e.stopPropagation?.(); doReact(r.emoji); }}
-                testID={`react-chip-${post.id}-${r.emoji}`}
-              >
-                <Text style={{ fontSize: 13 }}>{r.emoji}</Text>
-                <Text style={styles.reactChipCount}>{r.count}</Text>
-              </TouchableOpacity>
-            ))}
-          </>
+          // A single heart opens the reaction picker. The specific emojis people
+          // used are hidden here — they're only revealed in the picker sheet.
+          <TouchableOpacity
+            style={styles.actionBtn}
+            onPress={(e) => { e.stopPropagation?.(); setReactOpen(true); }}
+            onLongPress={() => setLikers({ open: true, kind: "likers" })}
+            delayLongPress={350}
+            testID={`react-${post.id}`}
+          >
+            <Ionicons
+              name={display.my_reaction ? "heart" : "heart-outline"}
+              size={18}
+              color={display.my_reaction ? "#EF4444" : theme.textSecondary}
+            />
+            {(display.reactions_total ?? display.likes_count) > 0 && (
+              <Text style={[styles.actionText, display.my_reaction && { color: "#EF4444" }]}>
+                {display.reactions_total ?? display.likes_count}
+              </Text>
+            )}
+          </TouchableOpacity>
         )}
 
         {!!display.views_count && display.views_count > 0 && (
@@ -339,6 +331,22 @@ export default function PostCard({
         <Pressable style={styles.reportBackdrop} onPress={() => setReactOpen(false)}>
           <Pressable style={styles.reactSheet} onPress={(e) => e.stopPropagation?.()}>
             <Text style={styles.reportTitle}>React</Text>
+            {/* The actual emojis people used are revealed here (not on the post). */}
+            {(display.reactions || []).length > 0 && (
+              <View style={styles.reactTally}>
+                {(display.reactions || []).map((r) => (
+                  <TouchableOpacity
+                    key={r.emoji}
+                    style={[styles.reactChip, display.my_reaction === r.emoji && styles.reactChipMine]}
+                    onPress={() => doReact(r.emoji)}
+                    testID={`react-tally-${r.emoji}`}
+                  >
+                    <Text style={{ fontSize: 14 }}>{r.emoji}</Text>
+                    <Text style={styles.reactChipCount}>{r.count}</Text>
+                  </TouchableOpacity>
+                ))}
+              </View>
+            )}
             <View style={styles.reactGrid}>
               {QUICK_EMOJIS.map((em) => (
                 <TouchableOpacity
@@ -371,6 +379,10 @@ export default function PostCard({
             <TouchableOpacity style={styles.menuRow} onPress={() => { setMenuOpen(false); onBookmark(display); }} testID={`menu-bookmark-${post.id}`}>
               <Ionicons name={display.bookmarked_by_me ? "bookmark" : "bookmark-outline"} size={20} color={display.bookmarked_by_me ? theme.primary : theme.textPrimary} />
               <Text style={styles.menuText}>{display.bookmarked_by_me ? "Remove bookmark" : "Bookmark"}</Text>
+            </TouchableOpacity>
+            <TouchableOpacity style={styles.menuRow} onPress={() => { setMenuOpen(false); shareLink(); }} testID={`menu-share-link-${post.id}`}>
+              <Ionicons name="link-outline" size={20} color={theme.textPrimary} />
+              <Text style={styles.menuText}>Share link</Text>
             </TouchableOpacity>
             {isOwner && onMore ? (
               <TouchableOpacity style={styles.menuRow} onPress={() => { setMenuOpen(false); onMore(post); }} testID={`menu-owner-${post.id}`}>
@@ -433,10 +445,11 @@ export default function PostCard({
 const styles = StyleSheet.create({
   reportBackdrop: { flex: 1, backgroundColor: "rgba(0,0,0,0.55)", justifyContent: "flex-end" },
   reportSheet: { backgroundColor: theme.surface, borderTopLeftRadius: 20, borderTopRightRadius: 20, padding: 18, paddingBottom: 28, gap: 4 },
+  reactTally: { flexDirection: "row", flexWrap: "wrap", gap: 6 },
   reactChip: {
     flexDirection: "row", alignItems: "center", gap: 3,
     backgroundColor: theme.surfaceAlt, borderRadius: 999,
-    paddingHorizontal: 8, paddingVertical: 3, marginRight: 4,
+    paddingHorizontal: 8, paddingVertical: 4,
     borderWidth: 1, borderColor: "transparent",
   },
   reactChipMine: { borderColor: theme.primary, backgroundColor: "rgba(0,168,132,0.12)" },
@@ -492,7 +505,8 @@ const styles = StyleSheet.create({
   },
   placeText: { color: theme.textSecondary, fontSize: 11, fontWeight: "600", maxWidth: 200 },
   actionsRow: {
-    flexDirection: "row", alignItems: "center", justifyContent: "space-between",
+    flexDirection: "row", alignItems: "center", flexWrap: "wrap",
+    columnGap: 20, rowGap: 8,
     paddingTop: 12, marginTop: 6,
     borderTopWidth: StyleSheet.hairlineWidth, borderTopColor: theme.border,
   },
