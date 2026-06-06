@@ -208,7 +208,7 @@ export const api = {
   getPayoutStatus: () =>
     request<{
       enabled: boolean; connected: boolean; payouts_enabled: boolean; charges_enabled?: boolean; details_submitted: boolean;
-      has_external_account?: boolean; has_debit_card?: boolean; country?: string;
+      has_external_account?: boolean; has_debit_card?: boolean; account_id?: string; account_currency?: string; country?: string;
       capabilities?: { transfers?: string; card_payments?: string };
       requirements_due?: string[]; requirements_eventually?: string[]; requirements_pending?: string[]; disabled_reason?: string | null;
       platform?: { charges_enabled: boolean; payouts_enabled: boolean; details_submitted: boolean; requirements_due: string[]; disabled_reason?: string | null } | null;
@@ -226,6 +226,8 @@ export const api = {
     request<{ client_secret: string; publishable_key: string; components?: string[] }>("/payments/payouts/account-session", { method: "POST" }),
   cashoutToCard: (amount?: number) =>
     request<{ ok: boolean; amount: number; balance: number; currency?: string; local_amount?: number }>("/payments/payouts/cashout", { method: "POST", body: JSON.stringify(amount != null ? { amount } : {}) }),
+  addDebitCard: (token: string) =>
+    request<{ ok: boolean; has_debit_card: boolean; brand?: string; last4?: string }>("/payments/payouts/debit-card", { method: "POST", body: JSON.stringify({ token }) }),
 
   listPlaces: () => request<Place[]>("/places"),
   getPlace: (id: string) => request<Place>(`/places/${id}`),

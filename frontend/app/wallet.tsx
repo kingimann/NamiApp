@@ -10,7 +10,7 @@ import { Stack, useFocusEffect, useRouter, useLocalSearchParams } from "expo-rou
 import { api, WalletSummary, WalletTxn, WalletBalance, Topup } from "@/src/api/client";
 import { useAuth } from "@/src/context/AuthContext";
 import { theme } from "@/src/theme";
-import { stripeOnboarding, stripeManagePayouts, stripeAddPayoutMethod, stripeTopup, stripeCardTopup } from "@/src/lib/stripeEmbed";
+import { stripeOnboarding, stripeManagePayouts, stripeAddDebitCard, stripeTopup, stripeCardTopup } from "@/src/lib/stripeEmbed";
 
 function fmtWhen(iso: string) {
   try { return new Date(iso).toLocaleDateString([], { month: "short", day: "numeric" }); } catch { return ""; }
@@ -217,13 +217,15 @@ export default function WalletScreen() {
   };
 
   const addPayoutMethod = async () => {
+    if (!payout?.account_id) { await setupPayouts(); return; }
     setConnecting(true);
     try {
-      await stripeAddPayoutMethod();
+      const added = await stripeAddDebitCard(payout.account_id, payout.account_currency);
       await load();
       await pollPayoutStatus(1);
+      if (added) Alert.alert("Card added", "Your debit card is set up. You can now cash out instantly.");
     } catch (e: any) {
-      Alert.alert("Couldn't open payouts", String(e?.message || e).replace(/^\d{3}:\s*/, ""));
+      Alert.alert("Couldn't add card", String(e?.message || e).replace(/^\d{3}:\s*/, ""));
     } finally { setConnecting(false); }
   };
 

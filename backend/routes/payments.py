@@ -271,6 +271,8 @@ async def payouts_status(authorization: Optional[str] = Header(None)):
         "details_submitted": bool(acct.get("details_submitted")),
         "has_external_account": has_external,
         "has_debit_card": has_debit_card,
+        "account_id": acct_id,
+        "account_currency": (acct.get("default_currency") or "").lower(),
         "country": acct.get("country"),
         "capabilities": {"transfers": caps.get("transfers"), "card_payments": caps.get("card_payments")},
         # What Stripe still needs (so the UI can explain why setup won't finish).
@@ -365,6 +367,39 @@ async def cashout_to_card(body: CashoutBody, authorization: Optional[str] = Head
         "ok": True, "amount": amount, "currency": acct_ccy.upper(), "local_amount": local_amount,
         "balance": round(float((fresh or {}).get("wallet_balance", 0) or 0), 2),
     }
+
+
+class DebitCardBody(BaseModel):
+    token: str   # Stripe.js card token (tok_...) created on the connected account
+
+
+@router.post("/payments/payouts/debit-card")
+async def add_debit_card(body: DebitCardBody, authorization: Optional[str] = Header(None)):
+    """Attach a debit card to the user's connected account as their payout method
+    (for instant cash-out). The card is tokenized in the app via Stripe.js — raw
+    card data never touches our server — and only the token is sent here."""
+    _require_stripe()
+    user = await get_current_user(authorization)
+    acct_id = await _ensure_connect_account(user)
+    if not body.token:
+        raise HTTPException(status_code=400, detail={"code": "no_token", "message": "Card details were missing — please try again."})
+    try:
+        ext = stripe.Account.create_external_account(
+            acct_id, external_account=body.token, default_for_currency=True,
+        )
+    except Exception as e:
+        msg = getattr(e, "user_message", None) or getattr(e, "_message", None) or str(e)
+        raise HTTPException(status_code=400, detail={
+            "code": "card_failed",
+            "message": f"Couldn't add that card: {msg} Use a debit card eligible for instant payouts (credit cards and most prepaid cards won't work).",
+        })
+    # Only a debit card works for instant payouts — reject a non-card just in case.
+    if ext.get("object") != "card":
+        raise HTTPException(status_code=400, detail={
+            "code": "not_a_card",
+            "message": "That wasn't a debit card. Please add a debit card for instant cash-out.",
+        })
+    return {"ok": True, "has_debit_card": True, "brand": ext.get("brand"), "last4": ext.get("last4")}
 
 
 @router.post("/payments/checkout")

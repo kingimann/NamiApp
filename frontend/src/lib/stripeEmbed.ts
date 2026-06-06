@@ -322,3 +322,73 @@ export function stripeManagePayouts(): Promise<void> {
 export function stripeAddPayoutMethod(): Promise<void> {
   return embeddedConnectFlow("account_management");
 }
+
+/**
+ * Inline debit-card entry for payouts — renders a card field right in the app
+ * (like the top-up sheet), tokenizes it against the connected account, and
+ * attaches it as the payout method server-side. Works on any account type and
+ * never leaves the app. Returns true if a card was added.
+ */
+export async function stripeAddDebitCard(acctId: string, currency?: string): Promise<boolean> {
+  if (!isWeb || !PK || !acctId) return false;
+  try {
+    await loadScript("https://js.stripe.com/v3/");
+    const Stripe = (window as any).Stripe;
+    if (!Stripe) return false;
+    // Tokenize on behalf of the connected account so the card can become its
+    // external (payout) account.
+    const stripe = Stripe(PK, { stripeAccount: acctId });
+    const elements = stripe.elements();
+    const card = elements.create("card", {
+      hidePostalCode: false,
+      style: { base: { fontSize: "16px", color: "#0b141a", "::placeholder": { color: "#9aa5a1" } } },
+    });
+
+    return await new Promise<boolean>((resolve) => {
+      let settled = false;
+      const finish = (v: boolean) => { if (settled) return; settled = true; resolve(v); };
+      const { container, close } = makeOverlay(() => finish(false));
+
+      const title = document.createElement("div");
+      title.textContent = "Add a debit card to cash out";
+      title.style.cssText = "font-size:16px;font-weight:800;color:#0b141a;margin:4px 2px 4px;";
+      const sub = document.createElement("div");
+      sub.textContent = "Instant cash-out sends money straight to this debit card. Credit and most prepaid cards aren’t eligible.";
+      sub.style.cssText = "font-size:12.5px;color:#55636b;line-height:1.45;margin:0 2px 12px;";
+      const cardBox = document.createElement("div");
+      cardBox.style.cssText = "border:1px solid #d6dcd9;border-radius:12px;padding:14px 12px;background:#fff;";
+      const err = document.createElement("div");
+      err.style.cssText = "color:#dc2626;font-size:13px;font-weight:600;margin:8px 2px 0;min-height:16px;";
+      const save = document.createElement("button");
+      save.textContent = "Save debit card";
+      save.style.cssText = "width:100%;margin-top:14px;padding:14px;border:0;border-radius:12px;background:#00A884;color:#fff;font-size:15px;font-weight:800;cursor:pointer;";
+      const hint = document.createElement("div");
+      hint.textContent = "🔒 Your card is processed securely by Stripe.";
+      hint.style.cssText = "color:#7a8a85;font-size:11.5px;text-align:center;margin-top:10px;";
+
+      container.appendChild(title);
+      container.appendChild(sub);
+      container.appendChild(cardBox);
+      container.appendChild(err);
+      container.appendChild(save);
+      container.appendChild(hint);
+      card.mount(cardBox);
+
+      save.onclick = async () => {
+        save.disabled = true; save.textContent = "Saving…"; err.textContent = "";
+        try {
+          const data: any = {};
+          if (currency) data.currency = currency;
+          const { token, error } = await stripe.createToken(card, data);
+          if (error) { err.textContent = error.message || "Couldn’t read that card."; save.disabled = false; save.textContent = "Save debit card"; return; }
+          await api.addDebitCard(token.id);
+          finish(true); close();
+        } catch (e: any) {
+          err.textContent = String(e?.message || e).replace(/^\d{3}:\s*/, "") || "Couldn’t add that card."; save.disabled = false; save.textContent = "Save debit card";
+        }
+      };
+    });
+  } catch {
+    return false;
+  }
+}
