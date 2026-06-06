@@ -92,6 +92,7 @@ export default function MapScreen() {
   // re-render on every GPS tick. The `userLocation` state is updated only on
   // meaningful moves so the distance labels refresh but the screen stays smooth.
   const userLocationRef = useRef<[number, number] | null>(null);
+  const mapCenterRef = useRef<[number, number] | null>(null); // fallback origin for nearby search
   const setUserLoc = useCallback((c: [number, number]) => {
     userLocationRef.current = c;
     setUserLocation((prev) =>
@@ -295,10 +296,12 @@ export default function MapScreen() {
       }
       setSearching(true);
       try {
-        const loc = userLocationRef.current;
-        // Run the address geocoder and (when we know where you are) a Foursquare
-        // place search in parallel — the latter lists every nearby match for a
-        // brand/business like "McDonald's", nearest first.
+        // Prefer the GPS fix; fall back to the map's current center so nearby
+        // search works on web (or before a location fix lands).
+        const loc = userLocationRef.current || mapCenterRef.current;
+        // Run the address geocoder and a Foursquare place search in parallel —
+        // the latter lists every nearby match for a brand/business like
+        // "McDonald's", nearest first.
         const [geo, fsq] = await Promise.all([
           forwardGeocode(query, loc || undefined),
           loc
@@ -338,6 +341,10 @@ export default function MapScreen() {
         setMapReady(true);
         requestLocation();
       } else if (e.type === "moveEnd") {
+        // Remember the map center so "near me / nearby" still works when there's
+        // no GPS fix (e.g. on web without location permission) — we search around
+        // wherever the map is currently looking.
+        mapCenterRef.current = e.center;
         // Only update state when the compass-relevant values actually changed,
         // so routine pan/zoom-end events don't re-render the whole screen.
         setBearing((b) => (Math.abs(b - e.bearing) > 0.5 ? e.bearing : b));
