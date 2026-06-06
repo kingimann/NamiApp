@@ -71,8 +71,14 @@ async def _check_foursquare() -> tuple[bool, str]:
             return False, "FSQ_API_KEY not set."
         headers = {"Authorization": f"Bearer {FSQ_API_KEY}", "X-Places-Api-Version": "2025-06-17"}
         async with httpx.AsyncClient(timeout=10) as c:
-            r = await c.get(f"{FSQ_BASE}/search", headers=headers, params={"query": "coffee", "ll": "40.7,-74.0", "limit": "1"})
-        return (r.status_code == 200), (f"API reachable." if r.status_code == 200 else f"HTTP {r.status_code}")
+            r = await c.get(f"{FSQ_BASE}/search", headers=headers,
+                            params={"query": "coffee", "ll": "40.7128,-74.006", "radius": "4000", "limit": "5"})
+        if r.status_code != 200:
+            return False, f"HTTP {r.status_code}: {r.text[:180]}"
+        n = len((r.json() or {}).get("results", []))
+        if n > 0:
+            return True, f"OK — {n} results for a test 'coffee' search in NYC."
+        return False, "200 OK but 0 results — check the key's plan/permissions for Place Search."
     except Exception as e:
         return False, f"Foursquare call failed: {str(e)[:120]}"
 

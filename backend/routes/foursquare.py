@@ -28,15 +28,16 @@ async def foursquare_search(
         "X-Places-Api-Version": "2025-06-17",
         "Accept": "application/json",
     }
+    # Note: we DON'T send a `fields` param. An unrecognized field name makes the
+    # whole call 400 (→ zero results), and the default response already includes
+    # name/location/categories/distance/coordinates. We parse coords from
+    # whichever shape Foursquare returns (top-level lat/lng or geocodes.*).
     params = {
         "query": query,
         "ll": f"{lat},{lng}",
         "radius": str(radius),
         "limit": str(limit),
         "sort": "DISTANCE",
-        # Coordinates live under `geocodes` (geocodes.main.{latitude,longitude})
-        # in the current Places API — NOT as top-level latitude/longitude.
-        "fields": "fsq_place_id,name,location,categories,distance,geocodes,rating,price",
     }
     try:
         async with httpx.AsyncClient(timeout=10.0) as http_client:
@@ -44,7 +45,8 @@ async def foursquare_search(
     except httpx.HTTPError:
         return {"configured": True, "results": [], "error": "upstream"}
     if resp.status_code != 200:
-        return {"configured": True, "results": [], "error": "upstream", "status": resp.status_code}
+        return {"configured": True, "results": [], "error": "upstream",
+                "status": resp.status_code, "detail": resp.text[:200]}
 
     out = []
     for r in (resp.json() or {}).get("results", []):
@@ -52,11 +54,8 @@ async def foursquare_search(
         cats = r.get("categories") or []
         geo = r.get("geocodes") or {}
         main = geo.get("main") or geo.get("roof") or geo.get("front_door") or {}
-        rlat = main.get("latitude")
-        rlng = main.get("longitude")
-        if rlat is None or rlng is None:  # legacy/alt shape fallback
-            rlat = rlat if rlat is not None else r.get("latitude")
-            rlng = rlng if rlng is not None else r.get("longitude")
+        rlat = main.get("latitude") if main.get("latitude") is not None else r.get("latitude")
+        rlng = main.get("longitude") if main.get("longitude") is not None else r.get("longitude")
         if rlat is None or rlng is None:
             continue
         out.append({
