@@ -991,6 +991,7 @@ export type EtaUpdateBody = {
 
 export type TransitDeparture = {
   stop_name: string;
+  stop_distance?: number | null; // meters from the user to the stop
   route: string;
   route_long?: string;
   route_id?: string | null;
