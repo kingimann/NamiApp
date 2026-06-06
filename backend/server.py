@@ -27,6 +27,7 @@ from routes import (
     posts as posts_routes,
     reviews as reviews_routes,
     stories as stories_routes,
+    transit as transit_routes,
     users as users_routes,
     webhooks as webhooks_routes,
 )
@@ -128,6 +129,7 @@ api_router.include_router(adnetwork_routes.router)
 api_router.include_router(payouts_routes.router)
 api_router.include_router(oauth_routes.router)
 api_router.include_router(money_routes.router)
+api_router.include_router(transit_routes.router)
 
 app.include_router(api_router)
 

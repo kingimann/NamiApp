@@ -14,7 +14,7 @@ import {
 import {
   forwardGeocode, fetchRoutes, categorySearch, GeocodeFeature, Profile, Step, RouteResult,
 } from "@/src/api/mapbox";
-import { api, EtaShare } from "@/src/api/client";
+import { api, EtaShare, TransitNearby } from "@/src/api/client";
 import { MAP_STYLES, theme } from "@/src/theme";
 import { SidebarMenuButton } from "@/src/components/LeftSidebar";
 
@@ -112,6 +112,23 @@ function cleanInstruction(s: string): string {
   return (s || "").replace(/^In \d+[\d,\.]*\s*(meters|m|kilometers|km|feet|ft|miles|mi)\s*,?\s*/i, "");
 }
 
+const transitIcon = (kind: string): keyof typeof Ionicons.glyphMap => {
+  switch (kind) {
+    case "bus": case "trolleybus": return "bus";
+    case "ferry": return "boat";
+    case "subway": case "rail": case "tram": case "monorail": case "funicular": return "train";
+    default: return "navigate";
+  }
+};
+const transitWhen = (d: { minutes: number | null; time_label?: string }): string => {
+  if (d.minutes != null) {
+    if (d.minutes <= 0) return "Now";
+    if (d.minutes === 1) return "1 min";
+    return `${d.minutes} min`;
+  }
+  return d.time_label || "—";
+};
+
 export default function DirectionsScreen() {
   const insets = useSafeAreaInsets();
   const router = useRouter();
@@ -174,6 +191,11 @@ export default function DirectionsScreen() {
   const [sarCategory, setSarCategory] = useState<string | null>(null);
   const [sarResults, setSarResults] = useState<GeocodeFeature[]>([]);
   const [sarLoading, setSarLoading] = useState(false);
+
+  // ── Nearby public transit (TransitLand) ──
+  const [transitOpen, setTransitOpen] = useState(false);
+  const [transitData, setTransitData] = useState<TransitNearby | null>(null);
+  const [transitLoading, setTransitLoading] = useState(false);
 
   // Step end-coordinates (where each maneuver "completes") — derived from route coords.
   // We approximate by using the cumulative distance per step against the route.
@@ -461,6 +483,21 @@ export default function DirectionsScreen() {
       setSarResults(res);
     } catch { setSarResults([]); } finally { setSarLoading(false); }
   };
+
+  const openTransit = useCallback(async () => {
+    const loc = userLocationRef.current || userLocation;
+    if (!loc) return;
+    setTransitOpen(true);
+    setTransitLoading(true);
+    try {
+      const d = await api.transitNearby(loc[1], loc[0]);
+      setTransitData(d);
+    } catch {
+      setTransitData(null);
+    } finally {
+      setTransitLoading(false);
+    }
+  }, [userLocation]);
 
   const addSarStop = (f: GeocodeFeature) => {
     setWaypoints((ws) => {
@@ -916,6 +953,16 @@ export default function DirectionsScreen() {
                   </TouchableOpacity>
                 );
               })}
+              {/* Transit isn't a routing profile — it opens nearby departures. */}
+              <TouchableOpacity
+                onPress={openTransit}
+                style={styles.profileChip}
+                testID="profile-transit"
+                activeOpacity={0.85}
+              >
+                <Ionicons name="bus" size={16} color={theme.textSecondary} />
+                <Text style={[styles.profileLabel, { color: theme.textSecondary }]}>Transit</Text>
+              </TouchableOpacity>
             </ScrollView>
           )}
 
@@ -1117,6 +1164,61 @@ export default function DirectionsScreen() {
                       )}
                     </View>
                   </TouchableOpacity>
+                )}
+              />
+            )}
+          </View>
+        </View>
+      )}
+
+      {/* Nearby public transit departures (TransitLand) */}
+      {transitOpen && (
+        <View style={styles.sarSheetWrap} pointerEvents="box-none">
+          <View style={[styles.sarSheet, { paddingBottom: insets.bottom + 14 }]}>
+            <View style={styles.sarHeader}>
+              <Text style={styles.sarTitle}>Nearby transit</Text>
+              <TouchableOpacity onPress={() => setTransitOpen(false)} testID="transit-close">
+                <Ionicons name="close" size={22} color={theme.textPrimary} />
+              </TouchableOpacity>
+            </View>
+            {transitLoading ? (
+              <ActivityIndicator color={theme.primary} style={{ marginVertical: 30 }} />
+            ) : !transitData?.configured ? (
+              <Text style={styles.sarEmpty}>
+                Transit isn’t set up yet. Add a free TransitLand API key
+                (TRANSITLAND_API_KEY) to enable live departures.
+              </Text>
+            ) : transitData.departures.length === 0 ? (
+              <Text style={styles.sarEmpty}>
+                No upcoming departures found near you.
+              </Text>
+            ) : (
+              <FlatList
+                data={transitData.departures}
+                keyExtractor={(_i, idx) => String(idx)}
+                style={{ maxHeight: 360 }}
+                renderItem={({ item }) => (
+                  <View style={styles.transitRow} testID="transit-departure">
+                    <View style={styles.transitBadge}>
+                      <Ionicons name={transitIcon(item.kind)} size={14} color="#fff" />
+                      <Text style={styles.transitBadgeText} numberOfLines={1}>{item.route}</Text>
+                    </View>
+                    <View style={{ flex: 1 }}>
+                      <Text style={styles.transitHeadsign} numberOfLines={1}>
+                        {item.headsign || item.route_long || "—"}
+                      </Text>
+                      <Text style={styles.transitStop} numberOfLines={1}>{item.stop_name}</Text>
+                    </View>
+                    <View style={styles.transitWhenWrap}>
+                      <Text style={styles.transitWhen}>{transitWhen(item)}</Text>
+                      {item.realtime && (
+                        <View style={styles.transitLiveRow}>
+                          <View style={styles.transitLiveDot} />
+                          <Text style={styles.transitLiveText}>live</Text>
+                        </View>
+                      )}
+                    </View>
+                  </View>
                 )}
               />
             )}
@@ -1416,4 +1518,25 @@ const styles = StyleSheet.create({
   },
   sarRowTitle: { color: theme.textPrimary, fontSize: 14, fontWeight: "700" },
   sarRowSub: { color: theme.textSecondary, fontSize: 12, marginTop: 2 },
+
+  // ── Transit departures ──
+  transitRow: {
+    flexDirection: "row", alignItems: "center", gap: 12,
+    paddingVertical: 11, paddingHorizontal: 4,
+    borderBottomWidth: StyleSheet.hairlineWidth, borderBottomColor: theme.border,
+  },
+  transitBadge: {
+    flexDirection: "row", alignItems: "center", gap: 5,
+    backgroundColor: theme.primary, borderRadius: 8,
+    paddingHorizontal: 8, paddingVertical: 5, minWidth: 52, maxWidth: 96,
+    justifyContent: "center",
+  },
+  transitBadgeText: { color: "#fff", fontSize: 13, fontWeight: "800" },
+  transitHeadsign: { color: theme.textPrimary, fontSize: 14, fontWeight: "700" },
+  transitStop: { color: theme.textSecondary, fontSize: 12, marginTop: 2 },
+  transitWhenWrap: { alignItems: "flex-end", minWidth: 56 },
+  transitWhen: { color: theme.textPrimary, fontSize: 14, fontWeight: "800" },
+  transitLiveRow: { flexDirection: "row", alignItems: "center", gap: 4, marginTop: 2 },
+  transitLiveDot: { width: 6, height: 6, borderRadius: 3, backgroundColor: theme.success },
+  transitLiveText: { color: theme.success, fontSize: 10, fontWeight: "700" },
 });

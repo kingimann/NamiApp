@@ -389,6 +389,10 @@ export const api = {
   stopEta: (share_id: string) =>
     request<EtaShare>(`/eta/${share_id}/stop`, { method: "POST" }),
 
+  // Public transit — nearby stops + next departures (TransitLand)
+  transitNearby: (lat: number, lon: number, radius = 800) =>
+    request<TransitNearby>(`/transit/nearby?lat=${lat}&lon=${lon}&radius=${radius}`),
+
   // Posts / Feed / Follows
   createPost: (body: PostCreate) =>
     request<Post>("/posts", { method: "POST", body: JSON.stringify(body) }),
@@ -971,6 +975,29 @@ export type EtaUpdateBody = {
   current_longitude: number;
   current_latitude: number;
   eta_minutes?: number;
+};
+
+export type TransitDeparture = {
+  stop_name: string;
+  route: string;
+  route_long?: string;
+  kind: string; // bus | subway | rail | tram | ferry | …
+  headsign?: string;
+  time_label?: string; // "HH:MM"
+  minutes: number | null;
+  realtime: boolean;
+  iso?: string | null;
+};
+export type TransitStop = {
+  name: string;
+  onestop_id: string;
+  distance?: number | null;
+};
+export type TransitNearby = {
+  configured: boolean;
+  stops: TransitStop[];
+  departures: TransitDeparture[];
+  error?: string;
 };
 
 export type LinkPreview = {

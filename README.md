@@ -250,6 +250,7 @@ Nampo-deploy-readyzip/
 | `CORS_ORIGINS`    | No       | No     | `*`            | Comma-separated allowed origins, or `*` for all. |
 | `MESSAGE_ENC_KEY` | No       | **Yes**| *(none)*       | Fernet key. If set, messages are encrypted at rest; if absent/invalid, messaging still works in plaintext. |
 | `FSQ_API_KEY`     | No       | **Yes**| `""`           | Foursquare Places API key for `/api/foursquare/match`. Without it, place matching returns nothing. |
+| `TRANSITLAND_API_KEY` | No   | **Yes**| `""`           | [TransitLand](https://www.transit.land/) API key for `/api/transit/nearby` (live bus/train departures in Directions → **Transit**). Without it, the Transit sheet shows a "not set up" message. |
 | `ADMIN_EMAILS`    | No       | **Yes**| `""`           | Comma-separated emails auto-granted the **admin** role (verify users, set roles, moderate posts). |
 | `STRIPE_SECRET_KEY` | No     | **Yes**| *(none)*       | Stripe secret key (`sk_live_…`/`sk_test_…`). When set, real payments activate (Connect, Checkout, payouts); otherwise the app uses simulated payments. |
 | `STRIPE_WEBHOOK_SECRET` | No | **Yes**| *(none)*      | Signing secret for the `checkout.session.completed` / `checkout.session.expired` webhook (`/api/payments/webhook`). Enforced when set. |
@@ -376,6 +377,7 @@ All routes are mounted under the **`/api`** prefix and (except auth/registration
 | **ETA**            | `/eta`, `/eta/{id}/update\|stop`, `/public/eta/{id}`, **WS** `/ws/eta/{share_id}` | Create and update live ETA shares; public read; real-time location stream over WebSocket. |
 | **Notifications**  | `/notifications`, `/notifications/unread`, `/notifications/read-all` | Notification feed, unread counts, mark single/all read, delete. |
 | **Foursquare**     | `/foursquare/match` | Match a place against Foursquare for a business profile (needs `FSQ_API_KEY`). |
+| **Transit**        | `/transit/nearby` | Nearby public-transit stops + next departures via TransitLand (needs `TRANSITLAND_API_KEY`). |
 
 The full set of endpoints is the source of truth — see each module under `backend/routes/`. For a developer-facing reference see **`API.md`**, the in-app **Developer API** screen (Settings → Developer API, with API-key management), the machine-readable `GET /api/v1/info`, and the interactive **Swagger docs at `/docs`** (`/openapi.json` for the schema) which FastAPI exposes by default.
 
