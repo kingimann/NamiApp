@@ -9,6 +9,7 @@ import { Stack, useFocusEffect, useLocalSearchParams, useRouter } from "expo-rou
 import * as Clipboard from "expo-clipboard";
 import { api, Listing } from "@/src/api/client";
 import { useAuth } from "@/src/context/AuthContext";
+import { useConfirm } from "@/src/context/ConfirmContext";
 import { theme } from "@/src/theme";
 
 const { width: SCREEN_W } = Dimensions.get("window");
@@ -20,6 +21,7 @@ const CONDITIONS: Record<string, string> = {
 export default function ListingDetailScreen() {
   const { id } = useLocalSearchParams<{ id: string }>();
   const router = useRouter();
+  const confirm = useConfirm();
   const insets = useSafeAreaInsets();
   const { user } = useAuth();
   const [listing, setListing] = useState<Listing | null>(null);
@@ -90,18 +92,10 @@ export default function ListingDetailScreen() {
     } finally { setTradeBusy(false); }
   };
 
-  const remove = () => {
+  const remove = async () => {
     if (!listing) return;
-    const doDelete = async () => { try { await api.deleteListing(listing.id); router.back(); } catch {} };
-    if (Platform.OS === "web") {
-      // eslint-disable-next-line no-alert
-      if (typeof window !== "undefined" && window.confirm("Delete this listing?")) doDelete();
-    } else {
-      Alert.alert("Delete listing", "This cannot be undone.", [
-        { text: "Cancel", style: "cancel" },
-        { text: "Delete", style: "destructive", onPress: doDelete },
-      ]);
-    }
+    if (!(await confirm({ title: "Delete listing?", message: "This cannot be undone.", confirmLabel: "Delete", destructive: true }))) return;
+    try { await api.deleteListing(listing.id); router.back(); } catch {}
   };
 
   return (

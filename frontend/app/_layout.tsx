@@ -11,6 +11,7 @@ import { AuthProvider, useAuth } from "@/src/context/AuthContext";
 import { SidebarProvider } from "@/src/context/SidebarContext";
 import { SidebarMenuProvider } from "@/src/context/SidebarMenuContext";
 import { NavBarProvider } from "@/src/context/NavBarContext";
+import { ConfirmProvider } from "@/src/context/ConfirmContext";
 import LeftSidebar from "@/src/components/LeftSidebar";
 import LiquidTabBar from "@/src/components/LiquidTabBar";
 import UsernameGate from "@/src/components/UsernameGate";
@@ -98,14 +99,16 @@ export default function RootLayout() {
           <SidebarProvider>
             <NavBarProvider>
               <SidebarMenuProvider>
-                <StatusBar style="light" />
-                <View style={{ flex: 1 }}>
-                  <Stack screenOptions={{ headerShown: false, contentStyle: { backgroundColor: "#0A0A0A" } }} />
-                </View>
-                <GlobalTabBar />
-                <AuthedSidebar />
-                <UsernameGate />
-                <PolicyGate />
+                <ConfirmProvider>
+                  <StatusBar style="light" />
+                  <View style={{ flex: 1 }}>
+                    <Stack screenOptions={{ headerShown: false, contentStyle: { backgroundColor: "#0A0A0A" } }} />
+                  </View>
+                  <GlobalTabBar />
+                  <AuthedSidebar />
+                  <UsernameGate />
+                  <PolicyGate />
+                </ConfirmProvider>
               </SidebarMenuProvider>
             </NavBarProvider>
           </SidebarProvider>
