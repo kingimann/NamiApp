@@ -58,6 +58,12 @@ export default function PostComposer({
     if (!/^https?:\/\//i.test(u)) { Alert.alert("Invalid link", "Paste a video link starting with https://"); return; }
     if (media.length >= MAX_MEDIA) { Alert.alert("Limit reached", `You can attach up to ${MAX_MEDIA} files.`); return; }
     u = u.replace(/\.gifv(\?|$)/i, ".mp4$1");                  // imgur .gifv → playable .mp4
+    // YouTube / TikTok / Vimeo can't be reels — they belong in the post text as an
+    // inline embed, not as a video reel.
+    if (/youtube\.com|youtu\.be|tiktok\.com|vimeo\.com/i.test(u)) {
+      Alert.alert("Not a reel", "YouTube, TikTok and Vimeo links can't be reels — just paste the link into your post and it'll play inline in the feed.");
+      return;
+    }
     let direct = u;
     let thumb: string | null = null;
     const base = u.split("?")[0].toLowerCase();
@@ -67,6 +73,11 @@ export default function PostComposer({
       setResolvingLink(true);
       try {
         const r = await api.resolveVideoLink(u);
+        if (r.embed) {
+          setResolvingLink(false);
+          Alert.alert("Not a reel", "That link plays in its own player and can't be a reel — paste it into your post text to embed it in the feed.");
+          return;
+        }
         direct = r.url; thumb = r.thumbnail || null;
       } catch (e: any) {
         setResolvingLink(false);
