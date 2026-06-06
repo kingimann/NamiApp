@@ -159,6 +159,12 @@ export const api = {
     request<{ ok: boolean; balance: number }>(`/admin/users/${userId}/wallet`, { method: "POST", body: JSON.stringify({ balance }) }),
   adminAddTransaction: (userId: string, body: { kind: "topup" | "received" | "sent" | "cashout"; amount: number; note?: string; counterparty?: string; adjust_balance?: boolean; created_at?: string }) =>
     request<{ ok: boolean; id: string; balance: number }>(`/admin/users/${userId}/transaction`, { method: "POST", body: JSON.stringify(body) }),
+  adminListTransactions: (userId: string) =>
+    request<{ transactions: AdminTxn[] }>(`/admin/users/${userId}/transactions`),
+  adminEditTransaction: (userId: string, body: { ref: string; amount?: number; note?: string; counterparty?: string; created_at?: string; adjust_balance?: boolean }) =>
+    request<{ ok: boolean; balance: number }>(`/admin/users/${userId}/transaction`, { method: "PATCH", body: JSON.stringify(body) }),
+  adminDeleteTransaction: (userId: string, ref: string, adjust_balance: boolean) =>
+    request<{ ok: boolean; balance: number }>(`/admin/users/${userId}/transaction?ref=${encodeURIComponent(ref)}&adjust_balance=${adjust_balance}`, { method: "DELETE" }),
   adminAuditLog: () => request<{ entries: AdminAuditEntry[] }>("/admin/audit"),
   adminGetTestPayments: () => request<{ test_payments: boolean; stripe_configured: boolean }>("/admin/test-payments"),
   adminSetTestPayments: (enabled: boolean) =>
@@ -777,6 +783,10 @@ export type AdminUser = {
 export type AdminAuditEntry = {
   id: string; admin_id: string; admin_name: string; action: string;
   target_id?: string | null; target_name?: string | null; detail?: string; created_at: string;
+};
+export type AdminTxn = {
+  ref: string; kind: "topup" | "received" | "sent" | "cashout"; in: boolean;
+  amount: number; counterparty: string; note: string; created_at: string;
 };
 export type MoneyRequest = {
   id: string; from_user_id: string; to_user_id: string; amount: number; note: string;
