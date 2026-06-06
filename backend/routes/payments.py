@@ -95,12 +95,25 @@ def _checkout_response(session, embedded: bool) -> dict:
 
 @router.get("/payments/config")
 async def payments_config():
-    """Tell the client whether real payments are available."""
-    live = await payments_live()
+    """Tell the client whether real payments are available.
+
+    Test/simulated payments are OFF by default: real Stripe is used whenever
+    Stripe is configured and an admin hasn't explicitly forced test mode. The
+    app only falls back to simulated payments when Stripe isn't configured
+    (i.e. it's down / not set up) or an admin turns test mode on.
+    """
+    configured = stripe_enabled()
+    test_override = await test_payments_on()
+    live = configured and not test_override
     return {
         "enabled": live,
         "platform_fee_percent": PLATFORM_FEE_PERCENT,
         "publishable_key": STRIPE_PUBLISHABLE_KEY if live else "",
+        # Why payments may be simulated, so the admin can tell the difference
+        # between "Stripe isn't configured/down" and "an admin forced test mode".
+        "stripe_configured": configured,
+        "test_mode": (not live),
+        "test_override": test_override,
     }
 
 
@@ -439,6 +452,20 @@ async def stripe_webhook(request: Request):
             if amt > 0:
                 from routes.ads import _apply_ad_topup
                 await _apply_ad_topup(meta["buyer_id"], amt, "stripe")
+        elif kind == "wallet_topup" and meta.get("buyer_id"):
+            amt = round(float(meta.get("amount") or 0), 2)
+            if amt > 0:
+                await db.users.update_one({"user_id": meta["buyer_id"]}, {"$inc": {"wallet_balance": amt}})
+                await db.wallet_topups.insert_one({
+                    "id": str(uuid.uuid4()), "user_id": meta["buyer_id"], "amount": amt,
+                    "source": "stripe", "created_at": now,
+                })
+                try:
+                    from routes.notifications import emit_notification
+                    await emit_notification(user_id=meta["buyer_id"], actor_id=meta["buyer_id"],
+                                            ntype="wallet_topup", message=f"${amt:.2f} added to your wallet")
+                except Exception:
+                    pass
         elif kind == "api_usage" and meta.get("buyer_id") and meta.get("pack"):
             pack = API_OVERAGE_BY_ID.get(meta["pack"])
             if pack:
@@ -554,9 +581,10 @@ async def admin_reset_money(authorization: Optional[str] = Header(None)):
     and zero ad balances. For clearing test/fake money."""
     me = await get_current_user(authorization)
     _admin_only(me)
-    for coll in ("earnings", "tips", "subscriptions", "payouts", "money_transfers", "money_requests"):
+    for coll in ("earnings", "tips", "subscriptions", "payouts", "money_transfers",
+                 "money_requests", "wallet_topups", "ad_topups"):
         await getattr(db, coll).delete_many({})
-    await db.users.update_many({}, {"$set": {"ad_balance": 0}})
+    await db.users.update_many({}, {"$set": {"ad_balance": 0, "wallet_balance": 0}})
     return {"ok": True}
 
 
