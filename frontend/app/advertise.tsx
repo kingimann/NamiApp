@@ -327,7 +327,7 @@ export default function AdvertiseScreen() {
                     <View style={{ flex: 1 }}>
                       <Text style={styles.linkRowTitle} numberOfLines={1}>{a.headline}</Text>
                       <Text style={styles.linkRowMeta} numberOfLines={1}>
-                        {a.active ? "● Active" : "Ended"} · {a.duration}s · {a.impressions} views · {a.clicks} clicks · ${a.spent.toFixed(2)}
+                        {a.active ? "● Active" : "Ended"} · {a.duration}s · {a.impressions} views · {a.clicks} clicks · {(a.ctr ?? 0).toFixed(1)}% CTR · ${a.spent.toFixed(2)}
                       </Text>
                     </View>
                     <TouchableOpacity onPress={() => removeReelAd(a.id)} testID={`del-reel-${a.id}`}>
