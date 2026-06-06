@@ -187,32 +187,29 @@ export default function AdminPaymentsScreen() {
             <View style={styles.feeRow}>
               <Text style={styles.rowLabel}>Platform cut (subscriptions & tips)</Text>
               <Text style={styles.rowSub}>Your share of each subscription & tip. Creators keep the rest.</Text>
-              <View style={styles.feeInputRow}>
-                <View style={styles.feeInputWrap}>
-                  <TextInput
-                    style={styles.feeInput} value={feePct}
-                    onChangeText={(t) => setFeePct(t.replace(/[^0-9.]/g, ""))}
-                    keyboardType="decimal-pad" placeholder="30" placeholderTextColor={theme.textMuted} testID="ap-fee-pct"
-                  />
-                  <Text style={styles.feeUnit}>%</Text>
-                </View>
-                <Text style={styles.splitText}>creators {creatorShare}% · you {Math.max(0, Math.min(100, Number(feePct) || 0))}%</Text>
+              <View style={styles.feeInputWrap}>
+                <TextInput
+                  style={styles.feeInput} value={feePct}
+                  onChangeText={(t) => setFeePct(t.replace(/[^0-9.]/g, ""))}
+                  keyboardType="decimal-pad" placeholder="30" placeholderTextColor={theme.textMuted} testID="ap-fee-pct"
+                />
+                <Text style={styles.feeUnit}>%</Text>
               </View>
+              <Text style={styles.splitText}>Creators keep {creatorShare}% · you keep {Math.max(0, Math.min(100, Number(feePct) || 0))}%</Text>
             </View>
             <View style={styles.feeDivider} />
             <View style={styles.feeRow}>
               <Text style={styles.rowLabel}>Transaction fee</Text>
               <Text style={styles.rowSub}>Flat fee charged to the payer on each payment (tips & money sends).</Text>
-              <View style={styles.feeInputRow}>
-                <View style={styles.feeInputWrap}>
-                  <TextInput
-                    style={styles.feeInput} value={feeCents}
-                    onChangeText={(t) => setFeeCents(t.replace(/[^0-9]/g, ""))}
-                    keyboardType="number-pad" placeholder="10" placeholderTextColor={theme.textMuted} testID="ap-fee-cents"
-                  />
-                  <Text style={styles.feeUnit}>¢</Text>
-                </View>
+              <View style={styles.feeInputWrap}>
+                <TextInput
+                  style={styles.feeInput} value={feeCents}
+                  onChangeText={(t) => setFeeCents(t.replace(/[^0-9]/g, ""))}
+                  keyboardType="number-pad" placeholder="10" placeholderTextColor={theme.textMuted} testID="ap-fee-cents"
+                />
+                <Text style={styles.feeUnit}>¢</Text>
               </View>
+              <Text style={styles.splitText}>{feeCents || "10"}¢ on every payment</Text>
             </View>
             <TouchableOpacity style={styles.saveBtn} onPress={saveFees} disabled={savingFees} testID="ap-save-fees">
               {savingFees ? <ActivityIndicator color="#fff" size="small" /> : <Text style={styles.saveText}>Save fees</Text>}
@@ -255,11 +252,10 @@ const styles = StyleSheet.create({
   knobOn: { alignSelf: "flex-end" },
   note: { color: theme.textSecondary, fontSize: 13, marginTop: 10, fontWeight: "600" },
   feeRow: { padding: 16 },
-  feeInputRow: { flexDirection: "row", alignItems: "center", gap: 12, marginTop: 12, flexWrap: "wrap" },
-  feeInputWrap: { flexDirection: "row", alignItems: "center", backgroundColor: theme.surfaceAlt, borderRadius: 10, borderWidth: 1, borderColor: theme.border, paddingHorizontal: 10, height: 44, width: 96 },
-  feeInput: { flex: 1, color: theme.textPrimary, fontSize: 17, fontWeight: "800", textAlign: "right", ...(Platform.OS === "web" ? ({ outlineStyle: "none" } as object) : {}) },
-  feeUnit: { color: theme.textMuted, fontSize: 15, fontWeight: "800", marginLeft: 4 },
-  splitText: { color: theme.primary, fontSize: 13, fontWeight: "700", flexShrink: 1 },
+  feeInputWrap: { flexDirection: "row", alignItems: "center", backgroundColor: theme.surfaceAlt, borderRadius: 10, borderWidth: 1, borderColor: theme.border, paddingHorizontal: 14, height: 48, width: 130, marginTop: 12 },
+  feeInput: { flex: 1, color: theme.textPrimary, fontSize: 18, fontWeight: "800", ...(Platform.OS === "web" ? ({ outlineStyle: "none" } as object) : {}) },
+  feeUnit: { color: theme.textMuted, fontSize: 16, fontWeight: "800", marginLeft: 6 },
+  splitText: { color: theme.primary, fontSize: 13, fontWeight: "700", marginTop: 10 },
   feeDivider: { height: StyleSheet.hairlineWidth, backgroundColor: theme.border, marginVertical: 6, marginHorizontal: 16 },
   saveBtn: { backgroundColor: theme.primary, borderRadius: 12, paddingVertical: 13, alignItems: "center", margin: 16, marginTop: 10 },
   saveText: { color: "#fff", fontWeight: "800", fontSize: 14 },
