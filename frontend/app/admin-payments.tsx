@@ -23,6 +23,15 @@ export default function AdminPaymentsScreen() {
   const [feeCents, setFeeCents] = useState("");  // flat per-payment fee, in cents
   const [savingFees, setSavingFees] = useState(false);
   const [revenue, setRevenue] = useState<{ total: number; count: number; by_source: Record<string, number>; transaction_fee_cents: number } | null>(null);
+  const [mobileOnly, setMobileOnly] = useState(false);
+  const [savingMobile, setSavingMobile] = useState(false);
+
+  const toggleMobileOnly = async () => {
+    const next = !mobileOnly; setMobileOnly(next); setSavingMobile(true);
+    try { await api.adminSetMobileOnly(next); }
+    catch (e: any) { setMobileOnly(!next); Alert.alert("Couldn't save", String(e?.message || e).replace(/^\d{3}:\s*/, "")); }
+    finally { setSavingMobile(false); }
+  };
 
   const load = useCallback(async () => {
     try { const r = await api.adminGetTestPayments(); setTestPayments(r.test_payments); setStripeConfigured(r.stripe_configured); }
@@ -30,6 +39,7 @@ export default function AdminPaymentsScreen() {
     try { const f = await api.adminGetFees(); setFeePct(String(f.platform_fee_percent)); setFeeCents(String(f.transaction_fee_cents)); }
     catch {}
     try { setRevenue(await api.adminGetRevenue()); } catch {}
+    try { setMobileOnly((await api.adminGetMobileOnly()).mobile_only); } catch {}
   }, []);
   useFocusEffect(useCallback(() => { load(); }, [load]));
 
@@ -103,6 +113,21 @@ export default function AdminPaymentsScreen() {
               ? "🧪 Test mode — no real charges. Tips/subscriptions/promotes run as simulated."
               : stripeConfigured ? "💳 Live — real Stripe charges." : "Simulated (Stripe not set up)."}
           </Text>
+
+          <Text style={styles.section}>Access</Text>
+          <View style={styles.card}>
+            <TouchableOpacity style={styles.toggleRow} onPress={toggleMobileOnly} disabled={savingMobile} testID="ap-mobile-only">
+              <View style={{ flex: 1 }}>
+                <Text style={styles.rowLabel}>Mobile only (web)</Text>
+                <Text style={styles.rowSub}>When on, desktop browsers see an "open on your phone" screen with a QR code. Phones &amp; tablets are unaffected.</Text>
+              </View>
+              {savingMobile ? <ActivityIndicator color={theme.primary} size="small" /> : (
+                <View style={[styles.switch, mobileOnly && styles.switchOn]}>
+                  <View style={[styles.knob, mobileOnly && styles.knobOn]} />
+                </View>
+              )}
+            </TouchableOpacity>
+          </View>
 
           {revenue ? (
             <>
