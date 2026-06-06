@@ -56,9 +56,14 @@ export default function WebNavGuard() {
     };
     window.addEventListener("keydown", onKey);
 
+    // Disable the right-click context menu across the site.
+    const onContext = (e: MouseEvent) => { e.preventDefault(); };
+    window.addEventListener("contextmenu", onContext);
+
     return () => {
       window.removeEventListener("popstate", onPop);
       window.removeEventListener("keydown", onKey);
+      window.removeEventListener("contextmenu", onContext);
     };
   }, [confirm]);
 
