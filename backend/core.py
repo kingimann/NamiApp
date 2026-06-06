@@ -24,6 +24,11 @@ load_dotenv(ROOT_DIR / ".env")
 FSQ_API_KEY = os.environ.get("FSQ_API_KEY", "")
 FSQ_BASE = "https://places-api.foursquare.com/places"
 
+# TransitLand (public transit schedules + real-time departures). Get a free key
+# at https://www.transit.land/ and set TRANSITLAND_API_KEY in the environment.
+TRANSITLAND_API_KEY = os.environ.get("TRANSITLAND_API_KEY", "")
+TRANSITLAND_BASE = "https://transit.land/api/v2/rest"
+
 logger = logging.getLogger("server")
 
 # ── Lazy proxy so `from core import db` works in all route modules even
