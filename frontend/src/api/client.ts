@@ -71,11 +71,28 @@ export const api = {
   registerLocal: (body: { email: string; password: string; name: string; username: string }) =>
     request<{ session_token: string; user: User }>("/auth/register", { method: "POST", body: JSON.stringify(body) }),
   loginLocal: (body: { identifier: string; password: string }) =>
-    request<{ session_token: string; user: User }>("/auth/login", { method: "POST", body: JSON.stringify(body) }),
+    request<LoginResponse>("/auth/login", { method: "POST", body: JSON.stringify(body) }),
+  // Finish a two-factor login with the texted code.
+  login2fa: (identifier: string, code: string) =>
+    request<{ session_token: string; user: User }>("/auth/login/2fa", { method: "POST", body: JSON.stringify({ identifier, code }) }),
+  // Turn SMS two-factor on/off (enable needs a verified phone; disable needs password).
+  setTwofa: (enabled: boolean, password?: string) =>
+    request<User>("/auth/2fa", { method: "POST", body: JSON.stringify({ enabled, password }) }),
+  // Phone OTP login (existing accounts with a verified phone).
+  loginPhoneStart: (phone: string) =>
+    request<{ exists: boolean; sent?: boolean; masked_phone?: string; dev_code?: string }>("/auth/login/phone/start", { method: "POST", body: JSON.stringify({ phone }) }),
+  loginPhoneVerify: (phone: string, code: string) =>
+    request<{ session_token: string; user: User }>("/auth/login/phone/verify", { method: "POST", body: JSON.stringify({ phone, code }) }),
   forgotPassword: (email: string) =>
     request<{ ok: boolean; sent: boolean; email_configured: boolean }>("/auth/forgot-password", { method: "POST", body: JSON.stringify({ email }) }),
+  // Reset code via SMS to the account's verified phone.
+  forgotPasswordSms: (identifier: string) =>
+    request<{ ok: boolean; sent: boolean; sms_configured: boolean; masked_phone?: string | null; dev_code?: string }>("/auth/forgot-password/sms", { method: "POST", body: JSON.stringify({ identifier }) }),
   resetPassword: (email: string, code: string, new_password: string) =>
     request<{ ok: boolean; message?: string }>("/auth/reset-password", { method: "POST", body: JSON.stringify({ email, code, new_password }) }),
+  // Reset with a code, identifying the account by email, username, or phone.
+  resetPasswordCode: (identifier: string, code: string, new_password: string) =>
+    request<{ ok: boolean; message?: string }>("/auth/reset-password/code", { method: "POST", body: JSON.stringify({ identifier, code, new_password }) }),
   usernameAvailable: (u: string) =>
     request<{ available: boolean; reason?: string }>(`/auth/username-available?u=${encodeURIComponent(u)}`),
   setUsername: (username: string) =>
@@ -713,6 +730,8 @@ export type User = {
   picture?: string | null;
   phone?: string | null;
   phone_verified?: boolean;
+  twofa_enabled?: boolean;
+  sms_notifications?: boolean;
   bio?: string;
   home_name?: string | null;
   home_longitude?: number | null;
@@ -738,7 +757,18 @@ export type ProfilePatch = {
   payout_threshold?: number;
   default_comment_policy?: string;
   default_likes_disabled?: boolean;
+  sms_notifications?: boolean;
 };
+// /auth/login returns either a session (success) or a two-factor challenge.
+export type TwofaChallenge = {
+  twofa_required: true;
+  identifier: string;
+  masked_phone: string;
+  sent: boolean;
+  dev_code?: string;
+  note?: string;
+};
+export type LoginResponse = { session_token: string; user: User } | TwofaChallenge;
 export type SubTier = { id: string; name: string; price: number };
 export type WalletTxn = { id: string; kind: string; amount: number; from_user_id: string; from_name: string; source?: string; message?: string; created_at: string };
 export type WalletSummary = {
