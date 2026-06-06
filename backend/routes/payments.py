@@ -77,23 +77,29 @@ async def setup_payouts(authorization: Optional[str] = Header(None)):
     onboarding link where they choose how they want to get paid."""
     _require_stripe()
     user = await get_current_user(authorization)
-    acct_id = user.get("stripe_account_id")
-    if not acct_id:
-        acct = stripe.Account.create(
-            type="express",
-            email=user.get("email"),
-            metadata={"user_id": user["user_id"]},
-            capabilities={"transfers": {"requested": True}},
+    try:
+        acct_id = user.get("stripe_account_id")
+        if not acct_id:
+            acct = stripe.Account.create(
+                type="express",
+                email=user.get("email"),
+                metadata={"user_id": user["user_id"]},
+                # Request card_payments too: a standard Express account that doesn't
+                # need the special "transfers without card_payments" approval.
+                capabilities={"transfers": {"requested": True}, "card_payments": {"requested": True}},
+            )
+            acct_id = acct["id"]
+            await db.users.update_one({"user_id": user["user_id"]}, {"$set": {"stripe_account_id": acct_id}})
+        link = stripe.AccountLink.create(
+            account=acct_id,
+            refresh_url=f"{WEB_APP_URL}/wallet?payouts=refresh",
+            return_url=f"{WEB_APP_URL}/wallet?payouts=done",
+            type="account_onboarding",
         )
-        acct_id = acct["id"]
-        await db.users.update_one({"user_id": user["user_id"]}, {"$set": {"stripe_account_id": acct_id}})
-    link = stripe.AccountLink.create(
-        account=acct_id,
-        refresh_url=f"{WEB_APP_URL}/wallet?payouts=refresh",
-        return_url=f"{WEB_APP_URL}/wallet?payouts=done",
-        type="account_onboarding",
-    )
-    return {"url": link["url"]}
+        return {"url": link["url"]}
+    except Exception as e:
+        msg = getattr(e, "user_message", None) or getattr(e, "_message", None) or str(e)
+        raise HTTPException(status_code=400, detail={"code": "stripe_setup_failed", "message": f"Stripe payout setup failed: {msg}"})
 
 
 @router.get("/payments/payouts/status")
