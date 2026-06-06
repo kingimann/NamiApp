@@ -19,6 +19,7 @@ import {
   Keyboard,
   Share,
   Image as RNImage,
+  ScrollView,
 } from "react-native";
 import { SafeAreaView, useSafeAreaInsets } from "react-native-safe-area-context";
 import { Ionicons } from "@expo/vector-icons";
@@ -46,6 +47,20 @@ type SelectedPlace = {
   saved?: Place | null;
   isCategoryPoi?: boolean;
 };
+
+// One-tap nearby categories (the term is what we send to Foursquare search).
+const PLACE_CATEGORIES: { label: string; term: string; icon: keyof typeof Ionicons.glyphMap }[] = [
+  { label: "Coffee", term: "coffee", icon: "cafe-outline" },
+  { label: "Food", term: "restaurant", icon: "restaurant-outline" },
+  { label: "Gas", term: "gas station", icon: "car-outline" },
+  { label: "ATM", term: "atm", icon: "cash-outline" },
+  { label: "Grocery", term: "grocery store", icon: "basket-outline" },
+  { label: "Pharmacy", term: "pharmacy", icon: "medkit-outline" },
+  { label: "Hotels", term: "hotel", icon: "bed-outline" },
+  { label: "Bars", term: "bar", icon: "wine-outline" },
+  { label: "Parking", term: "parking", icon: "car-sport-outline" },
+];
+const RADII_KM = [1, 5, 10, 25];
 
 export default function MapScreen() {
   const router = useRouter();
@@ -96,6 +111,7 @@ export default function MapScreen() {
   const [recents, setRecents] = useState<Recent[]>([]);
 
   const [query, setQuery] = useState("");
+  const [radiusKm, setRadiusKm] = useState(8); // nearby-search radius
   const [results, setResults] = useState<GeocodeFeature[]>([]);
   const [searching, setSearching] = useState(false);
   const [showResults, setShowResults] = useState(false);
@@ -286,7 +302,7 @@ export default function MapScreen() {
         const [geo, fsq] = await Promise.all([
           forwardGeocode(query, loc || undefined),
           loc
-            ? api.fsqSearch(query, loc[0], loc[1]).then((r) => r.results).catch(() => [])
+            ? api.fsqSearch(query, loc[0], loc[1], radiusKm * 1000).then((r) => r.results).catch(() => [])
             : Promise.resolve([] as Awaited<ReturnType<typeof api.fsqSearch>>["results"]),
         ]);
         const fsqFeatures: GeocodeFeature[] = fsq.map((r) => ({
@@ -312,7 +328,7 @@ export default function MapScreen() {
       }
     }, 350);
     return () => clearTimeout(t);
-  }, [query]);
+  }, [query, radiusKm]);
 
   const onMapEvent = useCallback(
     (e: MapboxEvent) => {
@@ -565,6 +581,56 @@ export default function MapScreen() {
             )}
           </View>
         </View>
+
+        {/* Category quick-chips + radius (one-tap nearby browsing) */}
+        {showResults && (
+          <>
+            <ScrollView
+              horizontal
+              showsHorizontalScrollIndicator={false}
+              keyboardShouldPersistTaps="handled"
+              contentContainerStyle={styles.catRow}
+            >
+              {PLACE_CATEGORIES.map((c) => {
+                const active = query.trim().toLowerCase() === c.term;
+                return (
+                  <TouchableOpacity
+                    key={c.term}
+                    style={[styles.catChip, active && styles.catChipOn]}
+                    onPress={() => { setQuery(c.term); setShowResults(true); }}
+                    testID={`cat-${c.term}`}
+                    activeOpacity={0.85}
+                  >
+                    <Ionicons name={c.icon} size={14} color={active ? "#fff" : theme.primary} />
+                    <Text style={[styles.catChipText, active && { color: "#fff" }]}>{c.label}</Text>
+                  </TouchableOpacity>
+                );
+              })}
+            </ScrollView>
+            <ScrollView
+              horizontal
+              showsHorizontalScrollIndicator={false}
+              keyboardShouldPersistTaps="handled"
+              contentContainerStyle={styles.radiusRow}
+            >
+              <Text style={styles.radiusLabel}>Within</Text>
+              {RADII_KM.map((km) => {
+                const active = radiusKm === km;
+                return (
+                  <TouchableOpacity
+                    key={km}
+                    style={[styles.radiusChip, active && styles.radiusChipOn]}
+                    onPress={() => setRadiusKm(km)}
+                    testID={`radius-${km}`}
+                    activeOpacity={0.85}
+                  >
+                    <Text style={[styles.radiusChipText, active && { color: "#fff" }]}>{km} km</Text>
+                  </TouchableOpacity>
+                );
+              })}
+            </ScrollView>
+          </>
+        )}
 
         {/* Results / Recents dropdown */}
         {showResults && (results.length > 0 || (!query && recents.length > 0)) && (
@@ -1118,6 +1184,24 @@ const styles = StyleSheet.create({
   resultTitle: { color: theme.textPrimary, fontSize: 14, fontWeight: "600" },
   resultSub: { color: theme.textSecondary, fontSize: 12, marginTop: 2 },
   resultDist: { color: theme.textMuted, fontSize: 11.5, fontWeight: "700", marginLeft: 8 },
+  catRow: { gap: 8, paddingHorizontal: 2, paddingTop: 10 },
+  catChip: {
+    flexDirection: "row", alignItems: "center", gap: 5,
+    backgroundColor: theme.surfaceGlass, borderRadius: 999,
+    borderWidth: 1, borderColor: theme.border,
+    paddingHorizontal: 12, paddingVertical: 8,
+  },
+  catChipOn: { backgroundColor: theme.primary, borderColor: theme.primary },
+  catChipText: { color: theme.textPrimary, fontSize: 13, fontWeight: "700" },
+  radiusRow: { gap: 8, paddingHorizontal: 2, paddingTop: 8, alignItems: "center" },
+  radiusLabel: { color: theme.textSecondary, fontSize: 12, fontWeight: "700", marginRight: 2 },
+  radiusChip: {
+    backgroundColor: theme.surfaceGlass, borderRadius: 999,
+    borderWidth: 1, borderColor: theme.border,
+    paddingHorizontal: 12, paddingVertical: 6,
+  },
+  radiusChipOn: { backgroundColor: theme.primary, borderColor: theme.primary },
+  radiusChipText: { color: theme.textPrimary, fontSize: 12.5, fontWeight: "700" },
 
   fabStack: { position: "absolute", right: 14, gap: 10, alignItems: "flex-end" },
   // Solo FAB (compass — appears only when bearing != 0)
