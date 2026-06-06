@@ -171,12 +171,19 @@ function Reel({ post, active, muted, onToggleMute, onOpenComments, screenW, scre
   );
 }
 
-function AdReel({ ad, active, muted, screenW, screenH }: {
-  ad: any; active: boolean; muted: boolean; screenW: number; screenH: number;
+function AdReel({ ad, active, muted, screenW, screenH, onSkip }: {
+  ad: any; active: boolean; muted: boolean; screenW: number; screenH: number; onSkip?: () => void;
 }) {
   const [paused, setPaused] = useState(false);
   const [progress, setProgress] = useState(0);
-  React.useEffect(() => { if (active) setPaused(false); }, [active]);
+  const [elapsed, setElapsed] = useState(0);
+  React.useEffect(() => { if (active) { setPaused(false); setElapsed(0); } }, [active]);
+  React.useEffect(() => {
+    if (!active || paused) return;
+    const iv = setInterval(() => setElapsed((s) => s + 1), 1000);
+    return () => clearInterval(iv);
+  }, [active, paused]);
+  const canSkip = elapsed >= 5;
   React.useEffect(() => {
     if (!active || paused) return;
     const dur = Math.max(5, Math.min(60, ad.duration || 15));
@@ -212,6 +219,10 @@ function AdReel({ ad, active, muted, screenW, screenH }: {
         <Ionicons name="megaphone" size={11} color="#fff" />
         <Text style={styles.adBadgeText}>Sponsored · {Math.max(5, Math.min(60, ad.duration || 15))}s</Text>
       </View>
+      <TouchableOpacity style={styles.adSkip} onPress={() => canSkip && onSkip && onSkip()} disabled={!canSkip} testID={`reel-ad-skip-${ad.id}`}>
+        <Text style={styles.adSkipText}>{canSkip ? "Skip" : `Skip in ${Math.max(0, 5 - elapsed)}s`}</Text>
+        {canSkip ? <Ionicons name="play-skip-forward" size={14} color="#fff" /> : null}
+      </TouchableOpacity>
       <View style={styles.adBottom} pointerEvents="box-none">
         <Text style={styles.adAdvertiser}>{ad.owner_name}</Text>
         <Text style={styles.adHeadline} numberOfLines={2}>{ad.headline}</Text>
@@ -239,6 +250,14 @@ export default function ReelsScreen() {
   const [muted, setMuted] = useState(false);
   const [focused, setFocused] = useState(true);
   const [commentsPost, setCommentsPost] = useState<Post | null>(null);
+  const listRef = useRef<FlatList>(null);
+  const skipToNext = useCallback(() => {
+    setItems((arr) => {
+      const next = Math.min(activeIdx + 1, arr.length - 1);
+      try { listRef.current?.scrollToIndex({ index: next, animated: true }); } catch {}
+      return arr;
+    });
+  }, [activeIdx]);
 
   const load = useCallback(async () => {
     try {
@@ -309,6 +328,7 @@ export default function ReelsScreen() {
         </View>
       ) : (
         <FlatList
+          ref={listRef}
           data={items}
           keyExtractor={(i) => i.id}
           pagingEnabled
@@ -330,7 +350,7 @@ export default function ReelsScreen() {
           initialScrollIndex={focusIndex > 0 ? focusIndex : undefined}
           renderItem={({ item, index }) => (
             item.__ad ? (
-              <AdReel ad={item} active={index === activeIdx && focused && !commentsPost} muted={muted} screenW={screenW} screenH={screenH} />
+              <AdReel ad={item} active={index === activeIdx && focused && !commentsPost} muted={muted} screenW={screenW} screenH={screenH} onSkip={skipToNext} />
             ) : (
               <Reel
                 post={item}
@@ -376,6 +396,8 @@ const styles = StyleSheet.create({
   adProgressFill: { height: 3, borderRadius: 2, backgroundColor: "#fff" },
   adBadge: { position: "absolute", top: 66, left: 12, flexDirection: "row", alignItems: "center", gap: 5, backgroundColor: "rgba(0,0,0,0.55)", borderRadius: 8, paddingHorizontal: 8, paddingVertical: 4 },
   adBadgeText: { color: "#fff", fontSize: 11.5, fontWeight: "800", textTransform: "uppercase", letterSpacing: 0.3 },
+  adSkip: { position: "absolute", top: 64, right: 12, flexDirection: "row", alignItems: "center", gap: 5, backgroundColor: "rgba(0,0,0,0.55)", borderRadius: 20, paddingHorizontal: 12, paddingVertical: 6 },
+  adSkipText: { color: "#fff", fontSize: 12.5, fontWeight: "800" },
   adBottom: { position: "absolute", left: 14, right: 80, bottom: 90 },
   adAdvertiser: { color: "#fff", fontSize: 14, fontWeight: "800", marginBottom: 4, textShadowColor: "rgba(0,0,0,0.6)", textShadowRadius: 4 },
   adHeadline: { color: "#fff", fontSize: 15, fontWeight: "600", lineHeight: 20, marginBottom: 10, textShadowColor: "rgba(0,0,0,0.6)", textShadowRadius: 4 },

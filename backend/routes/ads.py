@@ -528,13 +528,16 @@ async def bill_reel_ad(ad: dict, actor_id: Optional[str], kind: str) -> float:
 
 
 def _reel_ad_view(d: dict) -> dict:
+    impressions = int(d.get("ad_impressions", 0) or 0)
+    clicks = int(d.get("ad_clicks", 0) or 0)
     return {
         "id": d["id"], "owner_id": d.get("owner_id"), "owner_name": d.get("owner_name", "Advertiser"),
         "video_url": d.get("video_url"), "thumbnail": d.get("thumbnail"),
         "headline": d.get("headline"), "url": d.get("url"), "cta": d.get("cta") or "Learn more",
         "duration": int(d.get("duration", 15) or 15),
         "cpc": round(float(d.get("ad_cpc", 0) or 0), 2),
-        "impressions": int(d.get("ad_impressions", 0) or 0), "clicks": int(d.get("ad_clicks", 0) or 0),
+        "impressions": impressions, "clicks": clicks,
+        "ctr": round((clicks / impressions * 100), 1) if impressions else 0.0,
         "spent": round(float(d.get("ad_spent", 0) or 0), 2),
         "promoted_until": d.get("promoted_until"),
         "active": bool(d.get("promoted_until") and _norm_dt(d["promoted_until"]) > datetime.now(timezone.utc)),
