@@ -7,6 +7,7 @@ import { SafeAreaView } from "react-native-safe-area-context";
 import { Ionicons } from "@expo/vector-icons";
 import { useRouter } from "expo-router";
 import { theme } from "@/src/theme";
+import { api } from "@/src/api/client";
 import { useAuth } from "@/src/context/AuthContext";
 import { useNavBar } from "@/src/context/NavBarContext";
 
@@ -28,6 +29,41 @@ export default function LoginScreen() {
   const [email, setEmail] = useState("");
   const [agreed, setAgreed] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [info, setInfo] = useState<string | null>(null);
+  // Forgot-password flow
+  const [forgot, setForgot] = useState(false);
+  const [resetStage, setResetStage] = useState<"request" | "code">("request");
+  const [resetEmail, setResetEmail] = useState("");
+  const [resetCode, setResetCode] = useState("");
+  const [newPassword, setNewPassword] = useState("");
+
+  const sendResetCode = async () => {
+    setBusy(true); setError(null); setInfo(null);
+    try {
+      if (!resetEmail.trim()) throw new Error("Enter your account email");
+      const r = await api.forgotPassword(resetEmail.trim());
+      if (!r.email_configured) {
+        setError("Email isn't set up on this server, so a reset code can't be sent. Ask the site owner to reset your password.");
+        return;
+      }
+      setResetStage("code");
+      setInfo("If an account exists for that email, a 6-digit code is on its way. Enter it below with a new password.");
+    } catch (e: any) { setError(e?.message || String(e)); }
+    finally { setBusy(false); }
+  };
+
+  const doReset = async () => {
+    setBusy(true); setError(null);
+    try {
+      if (!resetCode.trim()) throw new Error("Enter the code from your email");
+      if (newPassword.length < 8) throw new Error("Password must be at least 8 characters");
+      await api.resetPassword(resetEmail.trim(), resetCode.trim(), newPassword);
+      setForgot(false); setResetStage("request"); setMode("signin");
+      setIdentifier(resetEmail.trim()); setPassword(""); setResetCode(""); setNewPassword("");
+      setInfo("Password updated — sign in with your new password.");
+    } catch (e: any) { setError(e?.message || String(e)); }
+    finally { setBusy(false); }
+  };
 
   // Land on the first item in the user's customized nav bar (not always the map).
   useEffect(() => {
@@ -69,6 +105,38 @@ export default function LoginScreen() {
             <Text style={styles.tagline}>Sign in to your account</Text>
 
             <View style={styles.card}>
+              {forgot ? (
+                <>
+                  <Text style={styles.resetTitle}>Reset your password</Text>
+                  {!!error && (
+                    <View style={styles.errorBox} testID="auth-error">
+                      <Ionicons name="alert-circle" size={16} color="#FCA5A5" />
+                      <Text style={styles.errorText}>{error}</Text>
+                    </View>
+                  )}
+                  {!!info && <Text style={styles.infoText}>{info}</Text>}
+                  {resetStage === "request" ? (
+                    <>
+                      <TextInput style={styles.input} placeholder="Your account email" placeholderTextColor={theme.textMuted} value={resetEmail} onChangeText={setResetEmail} keyboardType="email-address" autoCapitalize="none" testID="reset-email" />
+                      <TouchableOpacity style={[styles.submitBtn, busy && { opacity: 0.5 }]} onPress={sendResetCode} disabled={busy} testID="reset-send">
+                        {busy ? <ActivityIndicator color="#fff" /> : <Text style={styles.submitText}>Send reset code</Text>}
+                      </TouchableOpacity>
+                    </>
+                  ) : (
+                    <>
+                      <TextInput style={styles.input} placeholder="6-digit code" placeholderTextColor={theme.textMuted} value={resetCode} onChangeText={(t) => setResetCode(t.replace(/[^0-9]/g, ""))} keyboardType="number-pad" maxLength={6} testID="reset-code" />
+                      <TextInput style={styles.input} placeholder="New password" placeholderTextColor={theme.textMuted} value={newPassword} onChangeText={setNewPassword} secureTextEntry testID="reset-newpw" />
+                      <TouchableOpacity style={[styles.submitBtn, busy && { opacity: 0.5 }]} onPress={doReset} disabled={busy} testID="reset-confirm">
+                        {busy ? <ActivityIndicator color="#fff" /> : <Text style={styles.submitText}>Reset password</Text>}
+                      </TouchableOpacity>
+                    </>
+                  )}
+                  <TouchableOpacity onPress={() => { setForgot(false); setError(null); setInfo(null); setResetStage("request"); }} testID="reset-back">
+                    <Text style={styles.forgotLink}>← Back to sign in</Text>
+                  </TouchableOpacity>
+                </>
+              ) : (
+              <>
               <View style={styles.tabsRow}>
                 <TouchableOpacity onPress={() => { setMode("signin"); setError(null); }} style={[styles.tab, mode === "signin" && styles.tabActive]} testID="tab-signin">
                   <Text style={[styles.tabText, mode === "signin" && { color: "#fff" }]}>Sign in</Text>
@@ -84,6 +152,7 @@ export default function LoginScreen() {
                   <Text style={styles.errorText}>{error}</Text>
                 </View>
               )}
+              {!!info && <Text style={styles.infoText}>{info}</Text>}
 
               {mode === "signup" && (
                 <>
@@ -112,6 +181,14 @@ export default function LoginScreen() {
               <TouchableOpacity style={[styles.submitBtn, (busy || (mode === "signup" && !agreed)) && { opacity: 0.5 }]} onPress={submit} disabled={busy || (mode === "signup" && !agreed)} testID="submit-btn">
                 {busy ? <ActivityIndicator color="#fff" /> : <Text style={styles.submitText}>{mode === "signin" ? "Sign in" : "Create account"}</Text>}
               </TouchableOpacity>
+
+              {mode === "signin" && (
+                <TouchableOpacity onPress={() => { setForgot(true); setError(null); setInfo(null); setResetEmail(identifier.includes("@") ? identifier.trim() : ""); }} testID="forgot-link">
+                  <Text style={styles.forgotLink}>Forgot password?</Text>
+                </TouchableOpacity>
+              )}
+              </>
+              )}
             </View>
           </ScrollView>
         </KeyboardAvoidingView>
@@ -152,5 +229,8 @@ const styles = StyleSheet.create({
   agreeRow: { flexDirection: "row", alignItems: "flex-start", gap: 10, paddingVertical: 2, marginTop: 2 },
   agreeText: { flex: 1, color: theme.textSecondary, fontSize: 12.5, lineHeight: 18 },
   link: { color: theme.primary, fontWeight: "700" },
+  resetTitle: { color: "#fff", fontSize: 17, fontWeight: "800", textAlign: "center", marginBottom: 2 },
+  infoText: { color: theme.primary, fontSize: 12.5, lineHeight: 18, fontWeight: "600" },
+  forgotLink: { color: theme.primary, fontSize: 13, fontWeight: "700", textAlign: "center", marginTop: 10 },
 });
 

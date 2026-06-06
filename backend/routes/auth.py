@@ -1,4 +1,5 @@
 """Auth endpoints (email/password) and user profile updates."""
+import os
 import re
 import secrets
 from datetime import datetime, timezone, timedelta
@@ -28,6 +29,9 @@ router = APIRouter()
 USERNAME_RE = re.compile(r"^[a-z0-9_]{3,20}$")
 MAX_FAILED_ATTEMPTS = 5
 LOCKOUT_MINUTES = 15
+# Owner break-glass recovery: when set on the server, /auth/recover-password lets
+# someone holding this secret reset any account's password (no email needed).
+RECOVERY_SECRET = os.environ.get("RECOVERY_SECRET", "")
 
 
 
@@ -279,6 +283,98 @@ async def login(body: LoginRequest):
     )
     token = await _mint_session(user_doc["user_id"])
     return AuthResponse(session_token=token, user=User(**_user_doc_to_model(user_doc)))
+
+
+# ── Password recovery ────────────────────────────────────────────────────────
+class RecoverPassword(BaseModel):
+    secret: str
+    identifier: str       # email OR username
+    new_password: str
+
+
+@router.post("/auth/recover-password")
+async def recover_password(body: RecoverPassword):
+    """Break-glass reset: anyone holding RECOVERY_SECRET (set on the server by the
+    owner) can reset an account's password. Use this to regain access without
+    email. Disabled unless RECOVERY_SECRET is configured."""
+    if not RECOVERY_SECRET or not secrets.compare_digest(body.secret or "", RECOVERY_SECRET):
+        raise HTTPException(status_code=403, detail="Recovery isn't enabled or the secret is wrong.")
+    if len((body.new_password or "")) < 8:
+        raise HTTPException(status_code=400, detail="Password must be at least 8 characters.")
+    ident = (body.identifier or "").strip().lower()
+    user_doc = await db.users.find_one({"$or": [{"email": ident}, {"username": ident}]}, {"_id": 0, "user_id": 1})
+    if not user_doc:
+        raise HTTPException(status_code=404, detail="No account with that email or username.")
+    await db.users.update_one(
+        {"user_id": user_doc["user_id"]},
+        {"$set": {"hashed_password": _hash_password(body.new_password),
+                  "failed_login_attempts": 0, "locked_until": None}},
+    )
+    return {"ok": True, "message": "Password reset — you can log in now."}
+
+
+class ForgotPassword(BaseModel):
+    email: str
+
+
+@router.post("/auth/forgot-password")
+async def forgot_password(body: ForgotPassword):
+    """Email a one-time reset code. Always returns ok (never reveals whether an
+    account exists). `email_configured` tells the UI whether a code was sent."""
+    from services.email import send_email, email_enabled
+    email = (body.email or "").strip().lower()
+    sent = False
+    if email:
+        user = await db.users.find_one({"email": email}, {"_id": 0, "user_id": 1, "name": 1})
+        if user and email_enabled():
+            code = f"{secrets.randbelow(1000000):06d}"
+            await db.users.update_one(
+                {"user_id": user["user_id"]},
+                {"$set": {"pw_reset_hash": _hash_password(code),
+                          "pw_reset_expires": datetime.now(timezone.utc) + timedelta(minutes=15)}},
+            )
+            try:
+                send_email(email, "Your Nami password reset code",
+                           f"Hi {user.get('name', 'there')},\n\nYour password reset code is {code}.\n"
+                           f"It expires in 15 minutes. If you didn't request this, you can ignore it.")
+                sent = True
+            except Exception:
+                pass
+    return {"ok": True, "sent": sent, "email_configured": email_enabled()}
+
+
+class ResetPassword(BaseModel):
+    email: str
+    code: str
+    new_password: str
+
+
+@router.post("/auth/reset-password")
+async def reset_password(body: ResetPassword):
+    """Set a new password using the emailed code."""
+    email = (body.email or "").strip().lower()
+    if len((body.new_password or "")) < 8:
+        raise HTTPException(status_code=400, detail="Password must be at least 8 characters.")
+    user = await db.users.find_one({"email": email}, {"_id": 0})
+    if not user or not user.get("pw_reset_hash"):
+        raise HTTPException(status_code=400, detail="No reset in progress — request a new code.")
+    exp = user.get("pw_reset_expires")
+    try:
+        if exp and _norm_dt(exp) < datetime.now(timezone.utc):
+            raise HTTPException(status_code=400, detail="That code expired — request a new one.")
+    except HTTPException:
+        raise
+    except Exception:
+        pass
+    if not _verify_password(body.code, user["pw_reset_hash"]):
+        raise HTTPException(status_code=400, detail="Incorrect code.")
+    await db.users.update_one(
+        {"user_id": user["user_id"]},
+        {"$set": {"hashed_password": _hash_password(body.new_password),
+                  "failed_login_attempts": 0, "locked_until": None,
+                  "pw_reset_hash": "", "pw_reset_expires": None}},
+    )
+    return {"ok": True, "message": "Password updated — you can log in now."}
 
 
 @router.get("/auth/username-available")
