@@ -228,6 +228,19 @@ export default function DirectionsScreen() {
   const [nowTick, setNowTick] = useState(Date.now()); // drives the "updated Xs ago" label
   const [transitAllNearby, setTransitAllNearby] = useState(false); // false = only routes toward destination
   const [transitExpanded, setTransitExpanded] = useState(true); // foldable sheet body
+  // Drag-or-tap handle for the foldable transit sheet (mirrors the main panel):
+  // a small move = tap (toggle); a clear vertical drag sets the state directly.
+  const transitHandle = useRef(
+    PanResponder.create({
+      onStartShouldSetPanResponder: () => true,
+      onMoveShouldSetPanResponder: (_e, g) => Math.abs(g.dy) > 4,
+      onPanResponderRelease: (_e, g) => {
+        if (g.dy > 24) setTransitExpanded(false);
+        else if (g.dy < -24) setTransitExpanded(true);
+        else setTransitExpanded((e) => !e);
+      },
+    })
+  ).current;
 
   // Step end-coordinates (where each maneuver "completes") — derived from route coords.
   // We approximate by using the cumulative distance per step against the route.
@@ -1238,19 +1251,14 @@ export default function DirectionsScreen() {
           pointerEvents="box-none"
         >
           <View style={[styles.sarSheet, { paddingBottom: insets.bottom + 14 }]}>
-            {/* Foldable grabber — tap to collapse the list and see the map. */}
-            <TouchableOpacity
-              style={styles.transitGrab}
-              onPress={() => setTransitExpanded((e) => !e)}
-              testID="transit-fold"
-              activeOpacity={0.7}
-            >
+            {/* Foldable grabber — drag or tap to collapse the list and see the map. */}
+            <View style={styles.transitGrab} testID="transit-fold" {...transitHandle.panHandlers}>
               <View style={styles.grabber} />
               <View style={styles.grabberHint}>
                 <Ionicons name={transitExpanded ? "chevron-down" : "chevron-up"} size={15} color={theme.textSecondary} />
                 <Text style={styles.grabberHintText}>{transitExpanded ? "Hide" : "Show departures"}</Text>
               </View>
-            </TouchableOpacity>
+            </View>
 
             <View style={styles.transitHead}>
               <View style={{ flex: 1 }}>
