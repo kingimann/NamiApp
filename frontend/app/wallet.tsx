@@ -337,10 +337,21 @@ export default function WalletScreen() {
               </TouchableOpacity>
             </View>
             {payout?.payouts_enabled && (bal?.balance ?? w?.balance ?? 0) > 0 ? (
-              <TouchableOpacity style={styles.cashoutBtn} onPress={() => { setCashoutAmt(String(bal?.balance ?? w?.balance ?? "")); setCashoutOpen(true); }} testID="wallet-cashout">
-                <Ionicons name="flash" size={16} color={theme.primary} />
-                <Text style={styles.cashoutBtnText}>Cash out to debit card</Text>
-              </TouchableOpacity>
+              payout?.has_debit_card ? (
+                <TouchableOpacity style={styles.cashoutBtn} onPress={() => { setCashoutAmt(String(bal?.balance ?? w?.balance ?? "")); setCashoutOpen(true); }} testID="wallet-cashout">
+                  <Ionicons name="flash" size={16} color={theme.primary} />
+                  <Text style={styles.cashoutBtnText}>Cash out to debit card</Text>
+                </TouchableOpacity>
+              ) : (
+                <TouchableOpacity style={styles.cashoutBtn} onPress={managePayouts} disabled={connecting} testID="wallet-add-card">
+                  {connecting ? <ActivityIndicator color={theme.primary} size="small" /> : (
+                    <>
+                      <Ionicons name="card-outline" size={16} color={theme.primary} />
+                      <Text style={styles.cashoutBtnText}>Add a debit card to cash out</Text>
+                    </>
+                  )}
+                </TouchableOpacity>
+              )
             ) : null}
           </View>
 
