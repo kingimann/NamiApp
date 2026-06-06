@@ -236,8 +236,11 @@ async def payouts_status(authorization: Optional[str] = Header(None)):
     pending = list(reqs.get("pending_verification", []) or [])
     # Needed before payouts turn on but not "due" yet (e.g. external_account / bank).
     eventually = [r for r in (reqs.get("eventually_due", []) or []) if r not in due]
-    # Whether a payout method (bank/debit card) is on file at all.
-    has_external = bool((acct.get("external_accounts", {}) or {}).get("total_count", 0))
+    # Whether a payout method (bank/debit card) is on file at all, and specifically
+    # whether an eligible debit *card* is on file (required for instant cash-out).
+    ext_accounts = (acct.get("external_accounts", {}) or {})
+    has_external = bool(ext_accounts.get("total_count", 0))
+    has_debit_card = any((e.get("object") == "card") for e in (ext_accounts.get("data") or []))
     caps = acct.get("capabilities", {}) or {}
     payouts_enabled = bool(acct.get("payouts_enabled"))
 
@@ -267,6 +270,7 @@ async def payouts_status(authorization: Optional[str] = Header(None)):
         "charges_enabled": bool(acct.get("charges_enabled")),
         "details_submitted": bool(acct.get("details_submitted")),
         "has_external_account": has_external,
+        "has_debit_card": has_debit_card,
         "country": acct.get("country"),
         "capabilities": {"transfers": caps.get("transfers"), "card_payments": caps.get("card_payments")},
         # What Stripe still needs (so the UI can explain why setup won't finish).
@@ -300,6 +304,15 @@ async def cashout_to_card(body: CashoutBody, authorization: Optional[str] = Head
         raise HTTPException(status_code=400, detail={"code": "account_error", "message": "Couldn't reach your payout account."})
     if not acct.get("payouts_enabled"):
         raise HTTPException(status_code=400, detail={"code": "payouts_not_ready", "message": "Finish payout setup before cashing out."})
+
+    # Instant cash-out needs an eligible debit card on file — block early with a
+    # clear message instead of attempting a payout that Stripe would reject.
+    ext_data = (acct.get("external_accounts", {}) or {}).get("data") or []
+    if not any(e.get("object") == "card" for e in ext_data):
+        raise HTTPException(status_code=400, detail={
+            "code": "no_debit_card",
+            "message": "Add a debit card in Manage payouts first — instant cash-out needs an eligible debit card.",
+        })
 
     bal = round(float(user.get("wallet_balance", 0) or 0), 2)
     amount = round(float(body.amount if body.amount is not None else bal), 2)
