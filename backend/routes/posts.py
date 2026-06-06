@@ -641,6 +641,17 @@ async def _rank_docs(docs: list, viewer_id: str, top: int) -> list:
     return ranked[:top]
 
 
+async def _not_interested_ids(viewer_id: str) -> set:
+    """Post ids the viewer marked 'not interested' — skipped in the feeds."""
+    try:
+        rows = await db.post_not_interested.find(
+            {"user_id": viewer_id}, {"_id": 0, "post_id": 1}
+        ).to_list(1000)
+        return {r.get("post_id") for r in rows}
+    except Exception:
+        return set()
+
+
 @router.get("/feed/explore", response_model=List[Post])
 async def explore_feed(authorization: Optional[str] = Header(None)):
     user = await get_current_user(authorization)
@@ -650,6 +661,8 @@ async def explore_feed(authorization: Optional[str] = Header(None)):
         {"_id": 0},
     ).sort("created_at", -1).limit(300)
     docs = await cursor.to_list(300)
+    skip = await _not_interested_ids(user["user_id"])
+    docs = [d for d in docs if d.get("id") not in skip]
     ranked = await _rank_docs(docs, user["user_id"], 100)
     return [await _hydrate_post(d, user["user_id"]) for d in ranked]
 
@@ -668,6 +681,8 @@ async def home_feed(authorization: Optional[str] = Header(None)):
         ).sort("created_at", -1).limit(200)
     )
     docs = await cursor.to_list(200)
+    skip = await _not_interested_ids(user["user_id"])
+    docs = [d for d in docs if d.get("id") not in skip]
     ranked = await _rank_docs(docs, user["user_id"], 100)
     return [await _hydrate_post(d, user["user_id"]) for d in ranked]
 
@@ -1062,6 +1077,57 @@ async def post_viewers(post_id: str, authorization: Optional[str] = Header(None)
     return {"count": int(doc.get("views_count", 0) or 0), "unique": len(viewers), "viewers": viewers}
 
 
+@router.get("/posts/{post_id}/analytics")
+async def post_analytics(post_id: str, authorization: Optional[str] = Header(None)):
+    """Detailed performance for a post — author (or a mod/admin) only."""
+    user = await get_current_user(authorization)
+    doc = await db.posts.find_one({"id": post_id}, {"_id": 0})
+    if not doc:
+        raise HTTPException(status_code=404, detail="Post not found")
+    if doc["user_id"] != user["user_id"] and not (is_mod(user) or is_admin(user)):
+        raise HTTPException(status_code=403, detail="Only the author can see analytics for this post")
+
+    impressions = int(doc.get("views_count", 0) or 0)
+    try:
+        unique_viewers = await db.post_views.count_documents({"post_id": post_id})
+    except Exception:
+        unique_viewers = 0
+    reactions = _reaction_list(doc.get("reactions"))
+    reactions_total = sum(r["count"] for r in reactions)
+    comments = int(doc.get("replies_count", 0) or 0)
+    reposts = int(doc.get("reposts_count", 0) or 0)
+    quotes = int(doc.get("quotes_count", 0) or 0)
+    bookmarks = int(doc.get("bookmarks_count", 0) or 0)
+    clicks = int(doc.get("ad_clicks", 0) or 0)
+    interactions = reactions_total + comments + reposts + quotes + bookmarks
+    engagement_rate = round(interactions / impressions, 4) if impressions > 0 else 0.0
+    promoted = _is_promoted(doc)
+
+    return {
+        "post_id": post_id,
+        "created_at": doc.get("created_at"),
+        "impressions": impressions,
+        "unique_viewers": unique_viewers,
+        "clicks": clicks,
+        "reactions_total": reactions_total,
+        "reactions": reactions,
+        "comments": comments,
+        "reposts": reposts,
+        "quotes": quotes,
+        "bookmarks": bookmarks,
+        "interactions": interactions,
+        "engagement_rate": engagement_rate,  # interactions / impressions
+        "promoted": promoted,
+        "ad": {
+            "impressions": int(doc.get("ad_impressions", 0) or 0),
+            "clicks": clicks,
+            "spent": round(float(doc.get("ad_spent", 0) or 0), 2),
+            "budget": float(doc.get("ad_budget", 0) or 0) or None,
+            "cpc": float(doc.get("ad_cpc", 0) or 0) or None,
+        } if (promoted or doc.get("ad_spent") or doc.get("ad_clicks")) else None,
+    }
+
+
 @router.post("/posts/{post_id}/report")
 async def report_post(
     post_id: str, body: ReportCreate, authorization: Optional[str] = Header(None)
@@ -1082,6 +1148,26 @@ async def report_post(
             "reason": (body.reason or "other")[:200],
             "created_at": datetime.now(timezone.utc),
         })
+    return {"ok": True}
+
+
+@router.post("/posts/{post_id}/not-interested")
+async def not_interested(post_id: str, authorization: Optional[str] = Header(None)):
+    """Hide this post for the viewer and feed fewer like it (records the signal
+    so the home/explore feeds skip it)."""
+    user = await get_current_user(authorization)
+    post = await db.posts.find_one({"id": post_id}, {"_id": 0, "id": 1, "user_id": 1})
+    if not post:
+        raise HTTPException(status_code=404, detail="Post not found")
+    try:
+        await db.post_not_interested.insert_one({
+            "post_id": post_id,
+            "user_id": user["user_id"],
+            "author_id": post.get("user_id"),
+            "created_at": datetime.now(timezone.utc),
+        })
+    except DuplicateKeyError:
+        pass
     return {"ok": True}
 
 

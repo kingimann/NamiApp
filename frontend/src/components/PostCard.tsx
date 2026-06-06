@@ -4,7 +4,7 @@ import {
 } from "react-native";
 import { Ionicons } from "@expo/vector-icons";
 import { useRouter } from "expo-router";
-import { api, Post } from "@/src/api/client";
+import { api, Post, PostAnalytics } from "@/src/api/client";
 import { theme } from "@/src/theme";
 import MediaGrid from "./MediaGrid";
 import RichText from "./RichText";
@@ -61,6 +61,10 @@ export default function PostCard({
   const [reported, setReported] = useState(false);
   const [menuOpen, setMenuOpen] = useState(false);
   const [reactOpen, setReactOpen] = useState(false);
+  const [analyticsOpen, setAnalyticsOpen] = useState(false);
+  const [analytics, setAnalytics] = useState<PostAnalytics | null>(null);
+  const [analyticsLoading, setAnalyticsLoading] = useState(false);
+  const [hidden, setHidden] = useState(false); // removed locally (spam / not interested)
   // Local copy so an emoji reaction updates instantly regardless of the parent.
   const [localPost, setLocalPost] = useState<Post | null>(null);
   // If this entry is a pure repost (no text, has repost_of), render the original
@@ -121,12 +125,32 @@ export default function PostCard({
     } catch {}
   };
 
+  const markSpam = () => {
+    setHidden(true);
+    api.reportPost(display.id, "spam").catch(() => {});
+  };
+  const markNotInterested = () => {
+    setHidden(true);
+    api.notInterested(display.id).catch(() => {});
+  };
+
+  const openAnalytics = async () => {
+    setAnalyticsOpen(true);
+    setAnalytics(null);
+    setAnalyticsLoading(true);
+    try { setAnalytics(await api.postAnalytics(display.id)); }
+    catch { setAnalytics(null); }
+    finally { setAnalyticsLoading(false); }
+  };
+
   // Share a public link to this post (web URL when configured, else deep link).
   const shareLink = async () => {
     const base = (process.env.EXPO_PUBLIC_BACKEND_URL as string) || "";
     const url = base ? `${base.replace(/\/$/, "")}/post/${display.id}` : `atlas://post/${display.id}`;
     try { await Share.share({ message: display.text ? `${display.text}\n\n${url}` : url, url }); } catch {}
   };
+
+  if (hidden) return null;
 
   return (
     <TouchableOpacity
@@ -384,20 +408,124 @@ export default function PostCard({
               <Ionicons name="link-outline" size={20} color={theme.textPrimary} />
               <Text style={styles.menuText}>Share link</Text>
             </TouchableOpacity>
-            {isOwner && onMore ? (
+            {isOwner && (
+              <TouchableOpacity style={styles.menuRow} onPress={() => { setMenuOpen(false); openAnalytics(); }} testID={`menu-analytics-${post.id}`}>
+                <Ionicons name="stats-chart-outline" size={20} color={theme.textPrimary} />
+                <Text style={styles.menuText}>View analytics</Text>
+              </TouchableOpacity>
+            )}
+            {isOwner && onMore && (
               <TouchableOpacity style={styles.menuRow} onPress={() => { setMenuOpen(false); onMore(post); }} testID={`menu-owner-${post.id}`}>
                 <Ionicons name="create-outline" size={20} color={theme.textPrimary} />
                 <Text style={styles.menuText}>Edit or delete…</Text>
               </TouchableOpacity>
-            ) : (
-              <TouchableOpacity style={styles.menuRow} onPress={() => { setMenuOpen(false); reportPost(); }} testID={`menu-report-${post.id}`}>
-                <Ionicons name="flag-outline" size={20} color={theme.error} />
-                <Text style={[styles.menuText, { color: theme.error }]}>Report post</Text>
-              </TouchableOpacity>
+            )}
+            {!isOwner && (
+              <>
+                <TouchableOpacity style={styles.menuRow} onPress={() => { setMenuOpen(false); markNotInterested(); }} testID={`menu-not-interested-${post.id}`}>
+                  <Ionicons name="eye-off-outline" size={20} color={theme.textPrimary} />
+                  <Text style={styles.menuText}>Not interested in this post</Text>
+                </TouchableOpacity>
+                <TouchableOpacity style={styles.menuRow} onPress={() => { setMenuOpen(false); markSpam(); }} testID={`menu-spam-${post.id}`}>
+                  <Ionicons name="warning-outline" size={20} color={theme.warning} />
+                  <Text style={[styles.menuText, { color: theme.warning }]}>Mark as spam</Text>
+                </TouchableOpacity>
+                <TouchableOpacity style={styles.menuRow} onPress={() => { setMenuOpen(false); reportPost(); }} testID={`menu-report-${post.id}`}>
+                  <Ionicons name="flag-outline" size={20} color={theme.error} />
+                  <Text style={[styles.menuText, { color: theme.error }]}>Report post</Text>
+                </TouchableOpacity>
+              </>
             )}
             <TouchableOpacity style={styles.reportCancel} onPress={() => setMenuOpen(false)} testID="menu-cancel">
               <Text style={styles.reportCancelText}>Cancel</Text>
             </TouchableOpacity>
+          </Pressable>
+        </Pressable>
+      </Modal>
+
+      {/* Post analytics (owner) */}
+      <Modal visible={analyticsOpen} transparent animationType="slide" onRequestClose={() => setAnalyticsOpen(false)}>
+        <Pressable style={styles.reportBackdrop} onPress={() => setAnalyticsOpen(false)}>
+          <Pressable style={styles.analyticsSheet} onPress={(e) => e.stopPropagation?.()}>
+            <View style={styles.analyticsHead}>
+              <Text style={styles.reportTitle}>Post analytics</Text>
+              <TouchableOpacity onPress={() => setAnalyticsOpen(false)} testID="analytics-close" style={{ padding: 4 }}>
+                <Ionicons name="close" size={22} color={theme.textPrimary} />
+              </TouchableOpacity>
+            </View>
+            {analyticsLoading ? (
+              <ActivityIndicator color={theme.primary} style={{ marginVertical: 30 }} />
+            ) : !analytics ? (
+              <Text style={styles.reportSub}>Couldn't load analytics. Pull down and try again.</Text>
+            ) : (
+              <>
+                {/* Headline metrics */}
+                <View style={styles.statGrid}>
+                  {[
+                    { label: "Impressions", value: analytics.impressions, icon: "eye-outline" as const },
+                    { label: "Unique viewers", value: analytics.unique_viewers, icon: "people-outline" as const },
+                    { label: "Interactions", value: analytics.interactions, icon: "hand-left-outline" as const },
+                    { label: "Engagement", value: `${(analytics.engagement_rate * 100).toFixed(1)}%`, icon: "trending-up-outline" as const },
+                  ].map((s) => (
+                    <View key={s.label} style={styles.statBox}>
+                      <Ionicons name={s.icon} size={16} color={theme.primary} />
+                      <Text style={styles.statValue}>{typeof s.value === "number" ? s.value.toLocaleString() : s.value}</Text>
+                      <Text style={styles.statLabel}>{s.label}</Text>
+                    </View>
+                  ))}
+                </View>
+
+                {/* Interaction breakdown */}
+                <Text style={styles.analyticsSection}>Breakdown</Text>
+                {[
+                  { label: "Reactions", value: analytics.reactions_total, icon: "heart-outline" as const },
+                  { label: "Comments", value: analytics.comments, icon: "chatbubble-outline" as const },
+                  { label: "Reposts", value: analytics.reposts, icon: "repeat" as const },
+                  { label: "Quotes", value: analytics.quotes, icon: "chatbox-ellipses-outline" as const },
+                  { label: "Bookmarks", value: analytics.bookmarks, icon: "bookmark-outline" as const },
+                  ...(analytics.clicks ? [{ label: "Link clicks", value: analytics.clicks, icon: "open-outline" as const }] : []),
+                ].map((r) => (
+                  <View key={r.label} style={styles.breakdownRow}>
+                    <Ionicons name={r.icon} size={17} color={theme.textSecondary} />
+                    <Text style={styles.breakdownLabel}>{r.label}</Text>
+                    <Text style={styles.breakdownValue}>{r.value.toLocaleString()}</Text>
+                  </View>
+                ))}
+
+                {/* Reaction emoji split */}
+                {analytics.reactions.length > 0 && (
+                  <>
+                    <Text style={styles.analyticsSection}>Reactions</Text>
+                    <View style={styles.reactTally}>
+                      {analytics.reactions.map((r) => (
+                        <View key={r.emoji} style={styles.reactChip}>
+                          <Text style={{ fontSize: 14 }}>{r.emoji}</Text>
+                          <Text style={styles.reactChipCount}>{r.count}</Text>
+                        </View>
+                      ))}
+                    </View>
+                  </>
+                )}
+
+                {/* Ad campaign (promoted posts) */}
+                {analytics.ad && (
+                  <>
+                    <Text style={styles.analyticsSection}>Promotion</Text>
+                    <View style={styles.breakdownRow}>
+                      <Ionicons name="megaphone-outline" size={17} color={theme.textSecondary} />
+                      <Text style={styles.breakdownLabel}>Ad impressions</Text>
+                      <Text style={styles.breakdownValue}>{analytics.ad.impressions.toLocaleString()}</Text>
+                    </View>
+                    <View style={styles.breakdownRow}>
+                      <Ionicons name="cash-outline" size={17} color={theme.textSecondary} />
+                      <Text style={styles.breakdownLabel}>Spent{analytics.ad.budget ? ` of $${analytics.ad.budget}` : ""}</Text>
+                      <Text style={styles.breakdownValue}>${analytics.ad.spent.toFixed(2)}</Text>
+                    </View>
+                  </>
+                )}
+                <Text style={styles.planDisclaimerSmall}>Impressions count unique viewers who loaded the post. Engagement = interactions ÷ impressions.</Text>
+              </>
+            )}
           </Pressable>
         </Pressable>
       </Modal>
@@ -466,6 +594,23 @@ const styles = StyleSheet.create({
   reactPickMine: { borderColor: theme.primary, backgroundColor: "rgba(0,168,132,0.14)" },
   menuRow: { flexDirection: "row", alignItems: "center", gap: 14, paddingVertical: 15, borderBottomWidth: StyleSheet.hairlineWidth, borderBottomColor: theme.border },
   menuText: { color: theme.textPrimary, fontSize: 15.5, fontWeight: "600" },
+  analyticsSheet: {
+    backgroundColor: theme.surface, borderTopLeftRadius: 20, borderTopRightRadius: 20,
+    padding: 18, paddingBottom: 30, gap: 8, maxHeight: "82%",
+  },
+  analyticsHead: { flexDirection: "row", alignItems: "center", justifyContent: "space-between" },
+  analyticsSection: { color: theme.textSecondary, fontSize: 12.5, fontWeight: "800", textTransform: "uppercase", letterSpacing: 0.4, marginTop: 14, marginBottom: 2 },
+  statGrid: { flexDirection: "row", flexWrap: "wrap", gap: 10, marginTop: 6 },
+  statBox: {
+    flexGrow: 1, flexBasis: "44%", backgroundColor: theme.surfaceAlt, borderRadius: 14,
+    padding: 14, gap: 3, borderWidth: 1, borderColor: theme.border,
+  },
+  statValue: { color: theme.textPrimary, fontSize: 22, fontWeight: "800", letterSpacing: -0.5 },
+  statLabel: { color: theme.textSecondary, fontSize: 12, fontWeight: "600" },
+  breakdownRow: { flexDirection: "row", alignItems: "center", gap: 12, paddingVertical: 11, borderBottomWidth: StyleSheet.hairlineWidth, borderBottomColor: theme.border },
+  breakdownLabel: { flex: 1, color: theme.textPrimary, fontSize: 14.5 },
+  breakdownValue: { color: theme.textPrimary, fontSize: 15, fontWeight: "800" },
+  planDisclaimerSmall: { color: theme.textMuted, fontSize: 11, marginTop: 12, lineHeight: 15 },
   reportTitle: { color: theme.textPrimary, fontSize: 18, fontWeight: "800" },
   reportSub: { color: theme.textMuted, fontSize: 13, marginBottom: 8 },
   reportOpt: { flexDirection: "row", alignItems: "center", justifyContent: "space-between", paddingVertical: 14, borderBottomWidth: StyleSheet.hairlineWidth, borderBottomColor: theme.border },
