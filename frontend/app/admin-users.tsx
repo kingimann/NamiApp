@@ -1,12 +1,12 @@
 import React, { useCallback, useState } from "react";
 import {
   View, Text, StyleSheet, TextInput, TouchableOpacity, FlatList, Image,
-  ActivityIndicator, Modal, Pressable, Platform, Alert,
+  ActivityIndicator, Modal, Pressable, Platform, Alert, ScrollView,
 } from "react-native";
 import { SafeAreaView, useSafeAreaInsets } from "react-native-safe-area-context";
 import { Ionicons } from "@expo/vector-icons";
 import { Stack, useFocusEffect, useRouter } from "expo-router";
-import { api, AdminUser } from "@/src/api/client";
+import { api, AdminUser, AdminTxn } from "@/src/api/client";
 import { useAuth } from "@/src/context/AuthContext";
 import { theme } from "@/src/theme";
 import { useConfirm } from "@/src/context/ConfirmContext";
@@ -44,20 +44,81 @@ export default function AdminUsersScreen() {
   const [txnParty, setTxnParty] = useState("");
   const [txnAdjust, setTxnAdjust] = useState(true);
   const [txnBusy, setTxnBusy] = useState(false);
+  const [txnDate, setTxnDate] = useState("");
+  const [txnTime, setTxnTime] = useState("");
+  const [txnEditRef, setTxnEditRef] = useState<string | null>(null);
+  // Transactions list (to pick one to edit)
+  const [txnListUser, setTxnListUser] = useState<AdminUser | null>(null);
+  const [txnList, setTxnList] = useState<AdminTxn[]>([]);
+  const [txnListBusy, setTxnListBusy] = useState(false);
+
+  const pad = (n: number) => String(n).padStart(2, "0");
+  const partsFromISO = (iso?: string) => {
+    const d = iso ? new Date(iso) : new Date();
+    const dd = isNaN(d.getTime()) ? new Date() : d;
+    return { date: `${dd.getFullYear()}-${pad(dd.getMonth() + 1)}-${pad(dd.getDate())}`, time: `${pad(dd.getHours())}:${pad(dd.getMinutes())}` };
+  };
+  const isoFromParts = (date: string, time: string): string | undefined => {
+    const m = /^(\d{4})-(\d{1,2})-(\d{1,2})$/.exec(date.trim());
+    if (!m) return undefined;
+    const tm = /^(\d{1,2}):(\d{1,2})$/.exec((time || "00:00").trim());
+    const dt = new Date(Number(m[1]), Number(m[2]) - 1, Number(m[3]), tm ? Number(tm[1]) : 0, tm ? Number(tm[2]) : 0);
+    return isNaN(dt.getTime()) ? undefined : dt.toISOString();
+  };
+
+  const openAddTxn = (u: AdminUser) => {
+    const p = partsFromISO();
+    setTxnEditRef(null); setTxnKind("topup"); setTxnAmt(""); setTxnNote(""); setTxnParty("");
+    setTxnAdjust(true); setTxnDate(p.date); setTxnTime(p.time); setTxnUser(u);
+  };
+  const openEditTxn = (u: AdminUser, t: AdminTxn) => {
+    const p = partsFromISO(t.created_at);
+    setTxnEditRef(t.ref); setTxnKind(t.kind); setTxnAmt(String(t.amount)); setTxnNote(t.note);
+    setTxnParty(t.counterparty); setTxnAdjust(false); setTxnDate(p.date); setTxnTime(p.time);
+    setTxnListUser(null); setTxnUser(u);
+  };
+
+  const loadTxnList = async (u: AdminUser) => {
+    setSel(null); setTxnListUser(u); setTxnList([]); setTxnListBusy(true);
+    try { setTxnList((await api.adminListTransactions(u.user_id)).transactions); }
+    catch (e: any) { Alert.alert("Couldn't load", String(e?.message || e).replace(/^\d{3}:\s*/, "")); }
+    finally { setTxnListBusy(false); }
+  };
 
   const saveTxn = async () => {
     if (!txnUser) return;
     const amt = Math.round((Number(txnAmt) || 0) * 100) / 100;
     if (amt <= 0) { Alert.alert("Enter an amount", "How much was the transaction?"); return; }
+    const created_at = isoFromParts(txnDate, txnTime);
     setTxnBusy(true);
     try {
-      await api.adminAddTransaction(txnUser.user_id, {
-        kind: txnKind, amount: amt, note: txnNote.trim() || undefined,
-        counterparty: txnParty.trim() || undefined, adjust_balance: txnAdjust,
-      });
-      setTxnUser(null); setTxnAmt(""); setTxnNote(""); setTxnParty("");
-      Alert.alert("Added", "The transaction was re-added to their history.");
-    } catch (e: any) { Alert.alert("Couldn't add", String(e?.message || e).replace(/^\d{3}:\s*/, "")); }
+      if (txnEditRef) {
+        await api.adminEditTransaction(txnUser.user_id, {
+          ref: txnEditRef, amount: amt, note: txnNote.trim(), counterparty: txnParty.trim(),
+          created_at, adjust_balance: txnAdjust,
+        });
+      } else {
+        await api.adminAddTransaction(txnUser.user_id, {
+          kind: txnKind, amount: amt, note: txnNote.trim() || undefined,
+          counterparty: txnParty.trim() || undefined, adjust_balance: txnAdjust, created_at,
+        });
+      }
+      setTxnUser(null);
+      Alert.alert(txnEditRef ? "Saved" : "Added", txnEditRef ? "The transaction was updated." : "The transaction was re-added to their history.");
+    } catch (e: any) { Alert.alert("Couldn't save", String(e?.message || e).replace(/^\d{3}:\s*/, "")); }
+    finally { setTxnBusy(false); }
+  };
+
+  const deleteTxn = async () => {
+    if (!txnUser || !txnEditRef) return;
+    const ok = await confirm({ title: "Delete transaction?", message: "Remove this entry from their history?", confirmLabel: "Delete", cancelLabel: "Keep", destructive: true });
+    if (!ok) return;
+    setTxnBusy(true);
+    try {
+      await api.adminDeleteTransaction(txnUser.user_id, txnEditRef, txnAdjust);
+      setTxnUser(null);
+      Alert.alert("Deleted", "The transaction was removed.");
+    } catch (e: any) { Alert.alert("Couldn't delete", String(e?.message || e).replace(/^\d{3}:\s*/, "")); }
     finally { setTxnBusy(false); }
   };
 
@@ -191,7 +252,8 @@ export default function AdminUsersScreen() {
               )}
               {!sel.banned && <Action icon="ban-outline" label="Ban…" danger onPress={() => openMod(sel, "ban")} />}
               <Action icon="wallet-outline" label="Set wallet balance (USD)…" onPress={() => { const u = sel; setSel(null); setWalletVal(""); setWalletUser(u); }} />
-              <Action icon="add-circle-outline" label="Re-add lost transaction…" onPress={() => { const u = sel; setSel(null); setTxnKind("topup"); setTxnAmt(""); setTxnNote(""); setTxnParty(""); setTxnAdjust(true); setTxnUser(u); }} />
+              <Action icon="add-circle-outline" label="Re-add lost transaction…" onPress={() => { const u = sel; openAddTxn(u); }} />
+              <Action icon="list-outline" label="View / edit transactions…" onPress={() => loadTxnList(sel)} />
               <Action icon="trash-outline" label="Remove account" danger onPress={() => confirmRemove(sel)} />
               <TouchableOpacity onPress={() => setSel(null)}><Text style={styles.cancel}>Close</Text></TouchableOpacity>
             </View>
@@ -278,18 +340,18 @@ export default function AdminUsersScreen() {
         </View>
       </Modal>
 
-      {/* Re-add a lost transaction */}
+      {/* Add or edit a transaction */}
       <Modal visible={!!txnUser} transparent animationType="fade" onRequestClose={() => !txnBusy && setTxnUser(null)}>
         <View style={styles.centerBackdrop}>
           <Pressable style={StyleSheet.absoluteFill} onPress={() => !txnBusy && setTxnUser(null)} />
           {txnUser && (
-            <View style={styles.suspendCard}>
-              <Text style={styles.suspendTitle}>Re-add transaction</Text>
-              <Text style={styles.fieldLabel}>Add a lost transaction to {txnUser.name}'s history.</Text>
+            <ScrollView style={{ maxHeight: "88%" }} contentContainerStyle={styles.suspendCard} keyboardShouldPersistTaps="handled">
+              <Text style={styles.suspendTitle}>{txnEditRef ? "Edit transaction" : "Re-add transaction"}</Text>
+              <Text style={styles.fieldLabel}>{txnUser.name}'s history</Text>
 
               <View style={styles.txnKindRow}>
                 {(["topup", "received", "sent", "cashout"] as const).map((k) => (
-                  <TouchableOpacity key={k} style={[styles.txnChip, txnKind === k && styles.txnChipOn]} onPress={() => setTxnKind(k)} testID={`txn-kind-${k}`}>
+                  <TouchableOpacity key={k} style={[styles.txnChip, txnKind === k && styles.txnChipOn, !!txnEditRef && txnKind !== k && { opacity: 0.35 }]} onPress={() => { if (!txnEditRef) setTxnKind(k); }} disabled={!!txnEditRef} testID={`txn-kind-${k}`}>
                     <Text style={[styles.txnChipText, txnKind === k && { color: "#fff" }]}>
                       {k === "topup" ? "Top-up" : k === "received" ? "Received" : k === "sent" ? "Sent" : "Cash-out"}
                     </Text>
@@ -299,22 +361,67 @@ export default function AdminUsersScreen() {
 
               <View style={styles.walletInputWrap}>
                 <Text style={styles.walletDollar}>$</Text>
-                <TextInput style={styles.walletInput} value={txnAmt} onChangeText={(t) => setTxnAmt(t.replace(/[^0-9.]/g, ""))} keyboardType="decimal-pad" placeholder="0.00" placeholderTextColor={theme.textMuted} autoFocus testID="txn-amount" />
+                <TextInput style={styles.walletInput} value={txnAmt} onChangeText={(t) => setTxnAmt(t.replace(/[^0-9.]/g, ""))} keyboardType="decimal-pad" placeholder="0.00" placeholderTextColor={theme.textMuted} testID="txn-amount" />
               </View>
               {(txnKind === "received" || txnKind === "sent") && (
                 <TextInput style={styles.txnInput} value={txnParty} onChangeText={setTxnParty} placeholder={txnKind === "received" ? "From (name)" : "To (name)"} placeholderTextColor={theme.textMuted} testID="txn-party" />
               )}
               <TextInput style={styles.txnInput} value={txnNote} onChangeText={setTxnNote} placeholder="Note (optional)" placeholderTextColor={theme.textMuted} testID="txn-note" />
 
+              <Text style={styles.fieldLabel}>When it happened</Text>
+              <View style={styles.txnWhenRow}>
+                <TextInput style={[styles.txnInput, { flex: 1.4, marginTop: 0 }]} value={txnDate} onChangeText={setTxnDate} placeholder="YYYY-MM-DD" placeholderTextColor={theme.textMuted} testID="txn-date" />
+                <TextInput style={[styles.txnInput, { flex: 1, marginTop: 0 }]} value={txnTime} onChangeText={setTxnTime} placeholder="HH:MM" placeholderTextColor={theme.textMuted} testID="txn-time" />
+              </View>
+
               <TouchableOpacity style={styles.txnToggle} onPress={() => setTxnAdjust((v) => !v)} testID="txn-adjust">
                 <Ionicons name={txnAdjust ? "checkbox" : "square-outline"} size={20} color={txnAdjust ? theme.primary : theme.textMuted} />
-                <Text style={styles.txnToggleText}>Also update wallet balance ({txnKind === "topup" || txnKind === "received" ? "+" : "−"}${(Number(txnAmt) || 0).toFixed(2)})</Text>
+                <Text style={styles.txnToggleText}>Also {txnEditRef ? "apply the change to" : "update"} wallet balance ({txnKind === "topup" || txnKind === "received" ? "+" : "−"}${(Number(txnAmt) || 0).toFixed(2)})</Text>
               </TouchableOpacity>
 
               <TouchableOpacity style={[styles.modBtn, txnBusy && { opacity: 0.6 }]} onPress={saveTxn} disabled={txnBusy} testID="txn-save">
-                {txnBusy ? <ActivityIndicator color="#fff" /> : <Text style={styles.modBtnText}>Add to history</Text>}
+                {txnBusy ? <ActivityIndicator color="#fff" /> : <Text style={styles.modBtnText}>{txnEditRef ? "Save changes" : "Add to history"}</Text>}
               </TouchableOpacity>
+              {txnEditRef && (
+                <TouchableOpacity onPress={deleteTxn} disabled={txnBusy} testID="txn-delete"><Text style={[styles.cancel, { color: theme.error }]}>Delete transaction</Text></TouchableOpacity>
+              )}
               <TouchableOpacity onPress={() => setTxnUser(null)}><Text style={styles.cancel}>Cancel</Text></TouchableOpacity>
+            </ScrollView>
+          )}
+        </View>
+      </Modal>
+
+      {/* Transactions list (pick one to edit) */}
+      <Modal visible={!!txnListUser} transparent animationType="fade" onRequestClose={() => setTxnListUser(null)}>
+        <View style={styles.centerBackdrop}>
+          <Pressable style={StyleSheet.absoluteFill} onPress={() => setTxnListUser(null)} />
+          {txnListUser && (
+            <View style={[styles.suspendCard, { maxHeight: "82%" }]}>
+              <Text style={styles.suspendTitle}>Transactions</Text>
+              <Text style={styles.fieldLabel}>Tap one to edit · {txnListUser.name}</Text>
+              {txnListBusy ? (
+                <ActivityIndicator color={theme.primary} style={{ marginVertical: 20 }} />
+              ) : txnList.length === 0 ? (
+                <Text style={styles.txnEmpty}>No transactions yet.</Text>
+              ) : (
+                <ScrollView style={{ maxHeight: 360 }}>
+                  {txnList.map((t) => (
+                    <TouchableOpacity key={t.ref} style={styles.txnRow} onPress={() => openEditTxn(txnListUser, t)} testID={`txn-row-${t.ref}`}>
+                      <View style={{ flex: 1 }}>
+                        <Text style={styles.txnRowTitle} numberOfLines={1}>
+                          {t.kind === "topup" ? "Top-up" : t.kind === "cashout" ? "Cash-out" : t.kind === "received" ? `Received${t.counterparty ? ` · ${t.counterparty}` : ""}` : `Sent${t.counterparty ? ` · ${t.counterparty}` : ""}`}
+                        </Text>
+                        <Text style={styles.txnRowMeta} numberOfLines={1}>{t.created_at ? new Date(t.created_at).toLocaleString() : ""}</Text>
+                      </View>
+                      <Text style={[styles.txnRowAmt, { color: t.in ? "#16A34A" : theme.textSecondary }]}>{t.in ? "+" : "−"}${t.amount.toFixed(2)}</Text>
+                    </TouchableOpacity>
+                  ))}
+                </ScrollView>
+              )}
+              <TouchableOpacity style={[styles.modBtn, { marginTop: 12 }]} onPress={() => { const u = txnListUser; setTxnListUser(null); openAddTxn(u); }} testID="txn-list-add">
+                <Text style={styles.modBtnText}>Add a transaction</Text>
+              </TouchableOpacity>
+              <TouchableOpacity onPress={() => setTxnListUser(null)}><Text style={styles.cancel}>Close</Text></TouchableOpacity>
             </View>
           )}
         </View>
@@ -375,6 +482,12 @@ const styles = StyleSheet.create({
   txnInput: { color: theme.textPrimary, fontSize: 14, backgroundColor: theme.bg, borderRadius: 12, borderWidth: 1, borderColor: theme.border, paddingHorizontal: 14, paddingVertical: 12, marginTop: 8, ...(Platform.OS === "web" ? ({ outlineStyle: "none" } as object) : {}) },
   txnToggle: { flexDirection: "row", alignItems: "center", gap: 10, marginTop: 12 },
   txnToggleText: { flex: 1, color: theme.textSecondary, fontSize: 13, fontWeight: "600" },
+  txnWhenRow: { flexDirection: "row", gap: 8, marginTop: 8 },
+  txnEmpty: { color: theme.textMuted, fontSize: 13, textAlign: "center", marginVertical: 20 },
+  txnRow: { flexDirection: "row", alignItems: "center", gap: 10, paddingVertical: 11, borderBottomWidth: StyleSheet.hairlineWidth, borderBottomColor: theme.border },
+  txnRowTitle: { color: theme.textPrimary, fontSize: 14, fontWeight: "700" },
+  txnRowMeta: { color: theme.textMuted, fontSize: 12, marginTop: 2 },
+  txnRowAmt: { fontSize: 14.5, fontWeight: "800" },
   suspendCard: { width: "100%", maxWidth: 380, backgroundColor: theme.surface, borderRadius: 18, borderWidth: 1, borderColor: theme.border, padding: 18 },
   suspendTitle: { color: theme.textPrimary, fontSize: 16, fontWeight: "800", marginBottom: 8 },
   fieldLabel: { color: theme.textMuted, fontSize: 12, fontWeight: "700", marginTop: 12, marginBottom: 6 },

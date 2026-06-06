@@ -257,6 +257,122 @@ async def admin_add_transaction(user_id: str, body: AddTxn, authorization: Optio
     return {"ok": True, "id": nid, "balance": round(float((fresh or {}).get("wallet_balance", 0) or 0), 2)}
 
 
+# Editable manual transactions: kind → (collection, owner field, money-in?, name field, note field)
+_TXN_KINDS = {
+    "topup":    {"coll": "wallet_topups", "owner": "user_id",      "in": True,  "name": None,        "note": None},
+    "received": {"coll": "earnings",      "owner": "user_id",      "in": True,  "name": "from_name", "note": "message"},
+    "sent":     {"coll": "tips",          "owner": "from_user_id", "in": False, "name": "to_name",   "note": "message"},
+    "cashout":  {"coll": "payouts",       "owner": "user_id",      "in": False, "name": None,        "note": None},
+}
+
+
+def _parse_when(s: Optional[str]):
+    if not s:
+        return None
+    try:
+        dt = datetime.fromisoformat(s.replace("Z", "+00:00"))
+        return dt if dt.tzinfo else dt.replace(tzinfo=timezone.utc)
+    except Exception:
+        return None
+
+
+@router.get("/admin/users/{user_id}/transactions")
+async def admin_list_transactions(user_id: str, authorization: Optional[str] = Header(None)):
+    """Admin-only: list a user's editable transactions so they can be corrected."""
+    me = await get_current_user(authorization)
+    if not is_admin(me):
+        raise HTTPException(status_code=403, detail="Admins only")
+    out = []
+    for kind, cfg in _TXN_KINDS.items():
+        coll = getattr(db, cfg["coll"])
+        rows = await coll.find({cfg["owner"]: user_id}, {"_id": 0}).sort("created_at", -1).limit(50).to_list(50)
+        for r in rows:
+            out.append({
+                "ref": f"{kind}:{r.get('id')}", "kind": kind, "in": cfg["in"],
+                "amount": round(float(r.get("amount", 0) or 0), 2),
+                "counterparty": (r.get(cfg["name"]) if cfg["name"] else "") or "",
+                "note": (r.get(cfg["note"]) if cfg["note"] else "") or "",
+                "created_at": r.get("created_at"),
+            })
+    out.sort(key=lambda x: str(x["created_at"]), reverse=True)
+    return {"transactions": out}
+
+
+class EditTxn(BaseModel):
+    ref: str                       # "kind:record_id"
+    amount: Optional[float] = None
+    note: Optional[str] = None
+    counterparty: Optional[str] = None
+    created_at: Optional[str] = None
+    adjust_balance: bool = False   # apply the amount change to the wallet balance
+
+
+@router.patch("/admin/users/{user_id}/transaction")
+async def admin_edit_transaction(user_id: str, body: EditTxn, authorization: Optional[str] = Header(None)):
+    """Admin-only: edit a transaction's amount, name, note, or date/time."""
+    me = await get_current_user(authorization)
+    if not is_admin(me):
+        raise HTTPException(status_code=403, detail="Admins only")
+    kind, _, rec_id = (body.ref or "").partition(":")
+    cfg = _TXN_KINDS.get(kind)
+    if not cfg or not rec_id:
+        raise HTTPException(status_code=400, detail="Unknown transaction")
+    coll = getattr(db, cfg["coll"])
+    rec = await coll.find_one({"id": rec_id, cfg["owner"]: user_id}, {"_id": 0})
+    if not rec:
+        raise HTTPException(status_code=404, detail="Transaction not found")
+    old_amount = round(float(rec.get("amount", 0) or 0), 2)
+    new_amount = old_amount
+    updates: dict = {}
+    if body.amount is not None:
+        new_amount = round(abs(float(body.amount)), 2)
+        updates["amount"] = new_amount
+    if body.note is not None and cfg["note"]:
+        updates[cfg["note"]] = (body.note or "")[:200]
+    if body.counterparty is not None and cfg["name"]:
+        updates[cfg["name"]] = (body.counterparty or "")[:80]
+    when = _parse_when(body.created_at)
+    if when:
+        updates["created_at"] = when
+        if kind == "topup":
+            updates["completed_at"] = when
+    if updates:
+        await coll.update_one({"id": rec_id}, {"$set": updates})
+    if body.adjust_balance and new_amount != old_amount:
+        sign = 1 if cfg["in"] else -1
+        await db.users.update_one({"user_id": user_id}, {"$inc": {"wallet_balance": round(sign * (new_amount - old_amount), 2)}})
+    target = await db.users.find_one({"user_id": user_id}, {"_id": 0, "user_id": 1, "name": 1})
+    await _audit(me, f"edited {kind} → ${new_amount:.2f}", target or {"user_id": user_id, "name": ""})
+    fresh = await db.users.find_one({"user_id": user_id}, {"_id": 0, "wallet_balance": 1})
+    return {"ok": True, "balance": round(float((fresh or {}).get("wallet_balance", 0) or 0), 2)}
+
+
+@router.delete("/admin/users/{user_id}/transaction")
+async def admin_delete_transaction(user_id: str, ref: str = Query(...), adjust_balance: bool = Query(False),
+                                   authorization: Optional[str] = Header(None)):
+    """Admin-only: delete a transaction, optionally reversing its wallet effect."""
+    me = await get_current_user(authorization)
+    if not is_admin(me):
+        raise HTTPException(status_code=403, detail="Admins only")
+    kind, _, rec_id = (ref or "").partition(":")
+    cfg = _TXN_KINDS.get(kind)
+    if not cfg or not rec_id:
+        raise HTTPException(status_code=400, detail="Unknown transaction")
+    coll = getattr(db, cfg["coll"])
+    rec = await coll.find_one({"id": rec_id, cfg["owner"]: user_id}, {"_id": 0, "amount": 1})
+    if not rec:
+        raise HTTPException(status_code=404, detail="Transaction not found")
+    await coll.delete_one({"id": rec_id, cfg["owner"]: user_id})
+    if adjust_balance:
+        amt = round(float(rec.get("amount", 0) or 0), 2)
+        sign = -1 if cfg["in"] else 1   # reverse the original effect
+        await db.users.update_one({"user_id": user_id}, {"$inc": {"wallet_balance": round(sign * amt, 2)}})
+    target = await db.users.find_one({"user_id": user_id}, {"_id": 0, "user_id": 1, "name": 1})
+    await _audit(me, f"deleted {kind} transaction", target or {"user_id": user_id, "name": ""})
+    fresh = await db.users.find_one({"user_id": user_id}, {"_id": 0, "wallet_balance": 1})
+    return {"ok": True, "balance": round(float((fresh or {}).get("wallet_balance", 0) or 0), 2)}
+
+
 @router.delete("/admin/users/{user_id}")
 async def admin_remove_user(user_id: str, authorization: Optional[str] = Header(None)):
     """Remove (delete) a user account and their sessions."""
