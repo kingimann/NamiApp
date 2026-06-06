@@ -1,6 +1,6 @@
 import React, { useCallback, useState } from "react";
 import {
-  View, Text, StyleSheet, ScrollView, TouchableOpacity, ActivityIndicator, Platform, Alert, TextInput,
+  View, Text, StyleSheet, ScrollView, TouchableOpacity, ActivityIndicator, Platform, Alert, TextInput, RefreshControl,
 } from "react-native";
 import { SafeAreaView, useSafeAreaInsets } from "react-native-safe-area-context";
 import { Ionicons } from "@expo/vector-icons";
@@ -22,9 +22,10 @@ export default function AdminPaymentsScreen() {
   const [feePct, setFeePct] = useState("");      // platform's cut % of subscriptions/tips
   const [feeCents, setFeeCents] = useState("");  // flat per-payment fee, in cents
   const [savingFees, setSavingFees] = useState(false);
-  const [revenue, setRevenue] = useState<{ total: number; count: number; by_source: Record<string, number>; transaction_fee_cents: number } | null>(null);
+  const [revenue, setRevenue] = useState<{ total: number; count: number; by_source: Record<string, number>; transfer_fees?: number; cashout_fees?: number; cashout_count?: number; total_paid_out?: number; cashout_fee?: number; transaction_fee_cents: number } | null>(null);
   const [mobileOnly, setMobileOnly] = useState(false);
   const [savingMobile, setSavingMobile] = useState(false);
+  const [refreshing, setRefreshing] = useState(false);
 
   const toggleMobileOnly = async () => {
     const next = !mobileOnly; setMobileOnly(next); setSavingMobile(true);
@@ -40,6 +41,7 @@ export default function AdminPaymentsScreen() {
     catch {}
     try { setRevenue(await api.adminGetRevenue()); } catch {}
     try { setMobileOnly((await api.adminGetMobileOnly()).mobile_only); } catch {}
+    setRefreshing(false);
   }, []);
   useFocusEffect(useCallback(() => { load(); }, [load]));
 
@@ -89,7 +91,10 @@ export default function AdminPaymentsScreen() {
       {loading ? (
         <View style={styles.center}><ActivityIndicator color={theme.primary} /></View>
       ) : (
-        <ScrollView contentContainerStyle={{ padding: 16, paddingBottom: insets.bottom + 40 }}>
+        <ScrollView
+          contentContainerStyle={{ padding: 16, paddingBottom: insets.bottom + 40 }}
+          refreshControl={<RefreshControl refreshing={refreshing} onRefresh={() => { setRefreshing(true); load(); }} tintColor={theme.primary} />}
+        >
           <Text style={styles.section}>Test payments</Text>
           <View style={styles.card}>
             <TouchableOpacity style={styles.toggleRow} onPress={toggle} disabled={saving} testID="ap-toggle">
@@ -134,58 +139,79 @@ export default function AdminPaymentsScreen() {
               <Text style={styles.section}>Platform revenue</Text>
               <View style={styles.card}>
                 <View style={styles.revRow}>
-                  <Text style={styles.revLabel}>Transaction fees collected</Text>
+                  <Text style={styles.revLabel}>Total fees collected</Text>
                   <Text style={styles.revValue}>${revenue.total.toFixed(2)}</Text>
                 </View>
                 <View style={styles.revBreakdown}>
                   <View style={styles.revStat}>
+                    <Text style={styles.revStatNum}>${(revenue.transfer_fees ?? 0).toFixed(2)}</Text>
+                    <Text style={styles.revStatLabel}>from sends</Text>
+                  </View>
+                  <View style={styles.revStat}>
+                    <Text style={styles.revStatNum}>${(revenue.cashout_fees ?? 0).toFixed(2)}</Text>
+                    <Text style={styles.revStatLabel}>cash-out fees</Text>
+                  </View>
+                  <View style={styles.revStat}>
+                    <Text style={styles.revStatNum}>${(revenue.total_paid_out ?? 0).toFixed(2)}</Text>
+                    <Text style={styles.revStatLabel}>paid to creators</Text>
+                  </View>
+                </View>
+                <View style={styles.revBreakdown}>
+                  <View style={styles.revStat}>
                     <Text style={styles.revStatNum}>{revenue.count}</Text>
-                    <Text style={styles.revStatLabel}>fee-paying payments</Text>
+                    <Text style={styles.revStatLabel}>fee-paying events</Text>
                   </View>
                   <View style={styles.revStat}>
                     <Text style={styles.revStatNum}>{revenue.transaction_fee_cents}¢</Text>
-                    <Text style={styles.revStatLabel}>current per-send fee</Text>
+                    <Text style={styles.revStatLabel}>per-send fee</Text>
                   </View>
                   <View style={styles.revStat}>
-                    <Text style={styles.revStatNum}>${(revenue.by_source?.transfer_fee ?? 0).toFixed(2)}</Text>
-                    <Text style={styles.revStatLabel}>from sends</Text>
+                    <Text style={styles.revStatNum}>${(revenue.cashout_fee ?? 0).toFixed(2)}</Text>
+                    <Text style={styles.revStatLabel}>per cash-out</Text>
                   </View>
                 </View>
-                <Text style={styles.revNote}>From in-app flat fees (admins are exempt). The % cut on tips/subscriptions is collected by Stripe — see your Stripe Dashboard.</Text>
+                <Text style={styles.revNote}>In-app flat fees only (admins exempt). The % cut on tips/subscriptions is collected by Stripe — see your Stripe Dashboard.</Text>
               </View>
             </>
-          ) : null}
+          ) : (
+            <>
+              <Text style={styles.section}>Platform revenue</Text>
+              <View style={styles.card}>
+                <Text style={styles.revNote}>Couldn't load revenue right now. Pull down to refresh.</Text>
+              </View>
+            </>
+          )}
 
           <Text style={styles.section}>Fees & revenue split</Text>
           <View style={styles.card}>
             <View style={styles.feeRow}>
-              <View style={{ flex: 1 }}>
-                <Text style={styles.rowLabel}>Platform cut (subscriptions)</Text>
-                <Text style={styles.rowSub}>Your share of each subscription & tip. Creators keep the rest.</Text>
-              </View>
-              <View style={styles.feeInputWrap}>
-                <TextInput
-                  style={styles.feeInput} value={feePct}
-                  onChangeText={(t) => setFeePct(t.replace(/[^0-9.]/g, ""))}
-                  keyboardType="decimal-pad" placeholder="30" placeholderTextColor={theme.textMuted} testID="ap-fee-pct"
-                />
-                <Text style={styles.feeUnit}>%</Text>
+              <Text style={styles.rowLabel}>Platform cut (subscriptions & tips)</Text>
+              <Text style={styles.rowSub}>Your share of each subscription & tip. Creators keep the rest.</Text>
+              <View style={styles.feeInputRow}>
+                <View style={styles.feeInputWrap}>
+                  <TextInput
+                    style={styles.feeInput} value={feePct}
+                    onChangeText={(t) => setFeePct(t.replace(/[^0-9.]/g, ""))}
+                    keyboardType="decimal-pad" placeholder="30" placeholderTextColor={theme.textMuted} testID="ap-fee-pct"
+                  />
+                  <Text style={styles.feeUnit}>%</Text>
+                </View>
+                <Text style={styles.splitText}>creators {creatorShare}% · you {Math.max(0, Math.min(100, Number(feePct) || 0))}%</Text>
               </View>
             </View>
-            <Text style={styles.splitText}>Split: creators {creatorShare}% · you {Math.max(0, Math.min(100, Number(feePct) || 0))}%</Text>
             <View style={styles.feeDivider} />
             <View style={styles.feeRow}>
-              <View style={{ flex: 1 }}>
-                <Text style={styles.rowLabel}>Transaction fee</Text>
-                <Text style={styles.rowSub}>Flat fee charged to the payer on each payment (tips & money sends).</Text>
-              </View>
-              <View style={styles.feeInputWrap}>
-                <TextInput
-                  style={styles.feeInput} value={feeCents}
-                  onChangeText={(t) => setFeeCents(t.replace(/[^0-9]/g, ""))}
-                  keyboardType="number-pad" placeholder="10" placeholderTextColor={theme.textMuted} testID="ap-fee-cents"
-                />
-                <Text style={styles.feeUnit}>¢</Text>
+              <Text style={styles.rowLabel}>Transaction fee</Text>
+              <Text style={styles.rowSub}>Flat fee charged to the payer on each payment (tips & money sends).</Text>
+              <View style={styles.feeInputRow}>
+                <View style={styles.feeInputWrap}>
+                  <TextInput
+                    style={styles.feeInput} value={feeCents}
+                    onChangeText={(t) => setFeeCents(t.replace(/[^0-9]/g, ""))}
+                    keyboardType="number-pad" placeholder="10" placeholderTextColor={theme.textMuted} testID="ap-fee-cents"
+                  />
+                  <Text style={styles.feeUnit}>¢</Text>
+                </View>
               </View>
             </View>
             <TouchableOpacity style={styles.saveBtn} onPress={saveFees} disabled={savingFees} testID="ap-save-fees">
@@ -228,11 +254,12 @@ const styles = StyleSheet.create({
   knob: { width: 22, height: 22, borderRadius: 11, backgroundColor: "#fff" },
   knobOn: { alignSelf: "flex-end" },
   note: { color: theme.textSecondary, fontSize: 13, marginTop: 10, fontWeight: "600" },
-  feeRow: { flexDirection: "row", alignItems: "center", gap: 12, padding: 16 },
-  feeInputWrap: { flexDirection: "row", alignItems: "center", backgroundColor: theme.surfaceAlt, borderRadius: 10, borderWidth: 1, borderColor: theme.border, paddingHorizontal: 10, height: 44, minWidth: 74 },
+  feeRow: { padding: 16 },
+  feeInputRow: { flexDirection: "row", alignItems: "center", gap: 12, marginTop: 12, flexWrap: "wrap" },
+  feeInputWrap: { flexDirection: "row", alignItems: "center", backgroundColor: theme.surfaceAlt, borderRadius: 10, borderWidth: 1, borderColor: theme.border, paddingHorizontal: 10, height: 44, width: 96 },
   feeInput: { flex: 1, color: theme.textPrimary, fontSize: 17, fontWeight: "800", textAlign: "right", ...(Platform.OS === "web" ? ({ outlineStyle: "none" } as object) : {}) },
   feeUnit: { color: theme.textMuted, fontSize: 15, fontWeight: "800", marginLeft: 4 },
-  splitText: { color: theme.primary, fontSize: 13, fontWeight: "700", paddingHorizontal: 16, marginTop: -4 },
+  splitText: { color: theme.primary, fontSize: 13, fontWeight: "700", flexShrink: 1 },
   feeDivider: { height: StyleSheet.hairlineWidth, backgroundColor: theme.border, marginVertical: 6, marginHorizontal: 16 },
   saveBtn: { backgroundColor: theme.primary, borderRadius: 12, paddingVertical: 13, alignItems: "center", margin: 16, marginTop: 10 },
   saveText: { color: "#fff", fontWeight: "800", fontSize: 14 },

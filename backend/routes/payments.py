@@ -1304,23 +1304,34 @@ async def admin_set_fees(body: FeesBody, authorization: Optional[str] = Header(N
 
 @router.get("/admin/revenue")
 async def admin_revenue(authorization: Optional[str] = Header(None)):
-    """Platform revenue from in-app transaction fees (the flat per-payment fee).
-    Computed from the actual settled payments (source of truth), so it always
-    reflects every completed transfer. Note: the percentage cut on
-    tips/subscriptions is collected by Stripe and shows in your Stripe Dashboard."""
+    """Platform revenue from in-app fees — read from the platform_revenue ledger,
+    so it includes every recorded fee: per-payment transaction fees on sends, and
+    the flat instant cash-out fee. (The % cut on tips/subscriptions is collected by
+    Stripe and shows in your Stripe Dashboard.)"""
     me = await get_current_user(authorization)
     _admin_only(me)
-    transfers = await db.money_transfers.find({"status": "accepted"}, {"_id": 0, "fee": 1}).limit(20000).to_list(20000)
-    reqs = await db.money_requests.find({"status": "paid"}, {"_id": 0, "fee": 1}).limit(20000).to_list(20000)
-    transfer_fees = round(sum(float(t.get("fee", 0) or 0) for t in transfers), 2)
-    request_fees = round(sum(float(r.get("fee", 0) or 0) for r in reqs), 2)
-    total = round(transfer_fees + request_fees, 2)
+    rows = await db.platform_revenue.find({}, {"_id": 0, "amount": 1, "source": 1}).limit(50000).to_list(50000)
+    by_source: dict = {}
+    counts: dict = {}
+    for r in rows:
+        src = r.get("source", "other")
+        by_source[src] = round(by_source.get(src, 0) + float(r.get("amount", 0) or 0), 2)
+        counts[src] = counts.get(src, 0) + 1
+    total = round(sum(by_source.values()), 2)
+    payouts = await db.payouts.find({}, {"_id": 0, "amount": 1}).limit(20000).to_list(20000)
+    total_paid_out = round(sum(float(p.get("amount", 0) or 0) for p in payouts), 2)
     return {
         "total": total,
-        "count": len(transfers) + len(reqs),
-        "by_source": {"transfer_fee": transfer_fees, "request_fee": request_fees},
+        "count": len(rows),
+        "by_source": by_source,
+        "transfer_fees": by_source.get("transfer_fee", 0.0) + by_source.get("request_fee", 0.0),
+        "cashout_fees": by_source.get("cashout_fee", 0.0),
+        "cashout_count": counts.get("cashout_fee", 0),
+        "total_paid_out": total_paid_out,
         "platform_fee_percent": await platform_fee_percent(),
         "transaction_fee_cents": await transaction_fee_cents(),
+        "cashout_fee": CASHOUT_FEE,
+        "cashout_min": MIN_CASHOUT,
     }
 
 

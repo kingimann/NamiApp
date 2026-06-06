@@ -1,5 +1,5 @@
 import React, { useCallback, useState } from "react";
-import { View, Text, StyleSheet, ScrollView, TouchableOpacity, ActivityIndicator } from "react-native";
+import { View, Text, StyleSheet, ScrollView, TouchableOpacity, ActivityIndicator, RefreshControl } from "react-native";
 import { SafeAreaView, useSafeAreaInsets } from "react-native-safe-area-context";
 import { Ionicons } from "@expo/vector-icons";
 import { Stack, useFocusEffect, useRouter } from "expo-router";
@@ -11,12 +11,13 @@ export default function AdminRevenueScreen() {
   const insets = useSafeAreaInsets();
   const [data, setData] = useState<AdRevenue | null>(null);
   const [loading, setLoading] = useState(true);
+  const [refreshing, setRefreshing] = useState(false);
   const [err, setErr] = useState<string | null>(null);
 
   const load = useCallback(async () => {
     try { setData(await api.getAdRevenue()); setErr(null); }
     catch (e: any) { setErr(String(e?.message || e).replace(/^\d{3}:\s*/, "")); }
-    finally { setLoading(false); }
+    finally { setLoading(false); setRefreshing(false); }
   }, []);
   useFocusEffect(useCallback(() => { load(); }, [load]));
 
@@ -42,9 +43,17 @@ export default function AdminRevenueScreen() {
       {loading ? (
         <View style={styles.center}><ActivityIndicator color={theme.primary} /></View>
       ) : err ? (
-        <View style={styles.center}><Text style={{ color: theme.textMuted }}>{err}</Text></View>
+        <View style={styles.center}>
+          <Text style={{ color: theme.textMuted, textAlign: "center", marginBottom: 14 }}>{err}</Text>
+          <TouchableOpacity style={styles.retryBtn} onPress={() => { setLoading(true); load(); }} testID="admin-rev-retry">
+            <Text style={styles.retryText}>Try again</Text>
+          </TouchableOpacity>
+        </View>
       ) : data ? (
-        <ScrollView contentContainerStyle={{ padding: 16, paddingBottom: insets.bottom + 40 }}>
+        <ScrollView
+          contentContainerStyle={{ padding: 16, paddingBottom: insets.bottom + 40 }}
+          refreshControl={<RefreshControl refreshing={refreshing} onRefresh={() => { setRefreshing(true); load(); }} tintColor={theme.primary} />}
+        >
           <View style={styles.totalCard}>
             <Text style={styles.totalLabel}>Platform cut</Text>
             <Text style={styles.totalValue}>${data.platform_cut.toFixed(2)}</Text>
@@ -107,4 +116,6 @@ const styles = StyleSheet.create({
   rank: { color: theme.textMuted, fontSize: 13, fontWeight: "800", width: 18 },
   rowName: { flex: 1, color: theme.textPrimary, fontSize: 14, fontWeight: "600" },
   rowAmt: { color: theme.primary, fontSize: 14, fontWeight: "800" },
+  retryBtn: { backgroundColor: theme.surface, borderWidth: 1, borderColor: theme.border, borderRadius: 12, paddingVertical: 11, paddingHorizontal: 22 },
+  retryText: { color: theme.primary, fontWeight: "800", fontSize: 14 },
 });
