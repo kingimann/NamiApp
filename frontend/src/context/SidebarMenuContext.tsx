@@ -34,8 +34,10 @@ export const SIDEBAR_CATALOG: SidebarItem[] = [
 ];
 
 export const DEFAULT_SIDEBAR_IDS = [
-  "notifications", "reels", "bookmarks", "groups", "marketplace", "favorites", "settings",
+  "feed", "notifications", "reels", "bookmarks", "groups", "marketplace", "favorites", "settings",
 ];
+// Items that are always present and can't be removed (only reordered).
+export const LOCKED_SIDEBAR_IDS = ["feed", "settings"];
 const MIN_ITEMS = 1;
 const MAX_ITEMS = 12;
 const STORAGE_KEY = "sidebar_menu_v1";
@@ -50,6 +52,7 @@ type Ctx = {
   reset: () => Promise<void>;
   canAdd: boolean;
   canRemove: boolean;
+  lockedIds: string[];
 };
 
 const SidebarMenuContext = createContext<Ctx | null>(null);
@@ -61,6 +64,11 @@ function clamp(ids: string[]): string[] {
     if (seen.has(id)) continue;
     if (!SIDEBAR_CATALOG.find((s) => s.id === id)) continue;
     seen.add(id); valid.push(id);
+  }
+  // Locked items are always present — inject any that are missing (at the top).
+  for (let k = LOCKED_SIDEBAR_IDS.length - 1; k >= 0; k--) {
+    const id = LOCKED_SIDEBAR_IDS[k];
+    if (!seen.has(id)) { valid.unshift(id); seen.add(id); }
   }
   if (valid.length < MIN_ITEMS) {
     for (const id of DEFAULT_SIDEBAR_IDS) {
@@ -104,6 +112,7 @@ export function SidebarMenuProvider({ children }: { children: React.ReactNode })
       await persist([...ids, id]);
     },
     remove: async (id) => {
+      if (LOCKED_SIDEBAR_IDS.includes(id)) return;   // permanent items can't be removed
       if (ids.length <= MIN_ITEMS) return;
       await persist(ids.filter((x) => x !== id));
     },
@@ -119,6 +128,7 @@ export function SidebarMenuProvider({ children }: { children: React.ReactNode })
     reset: () => persist(DEFAULT_SIDEBAR_IDS),
     canAdd: ids.length < MAX_ITEMS,
     canRemove: ids.length > MIN_ITEMS,
+    lockedIds: LOCKED_SIDEBAR_IDS,
   }), [ids, ready, persist]);
 
   return <SidebarMenuContext.Provider value={value}>{children}</SidebarMenuContext.Provider>;
@@ -137,6 +147,7 @@ export function useSidebarMenu(): Ctx {
       reset: async () => {},
       canAdd: false,
       canRemove: false,
+      lockedIds: LOCKED_SIDEBAR_IDS,
     };
   }
   return ctx;

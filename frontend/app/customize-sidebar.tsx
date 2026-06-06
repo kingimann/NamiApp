@@ -11,7 +11,7 @@ import { theme } from "@/src/theme";
 
 export default function CustomizeSidebarScreen() {
   const router = useRouter();
-  const { ids, items, add, remove, move, reset, canAdd, canRemove } = useSidebarMenu();
+  const { ids, items, add, remove, move, reset, canAdd, canRemove, lockedIds } = useSidebarMenu();
 
   const inMenu = new Set(ids);
   const others: SidebarItem[] = SIDEBAR_CATALOG.filter((s) => !inMenu.has(s.id));
@@ -31,7 +31,7 @@ export default function CustomizeSidebarScreen() {
 
       <ScrollView contentContainerStyle={{ padding: 14, paddingBottom: 80 }}>
         <Text style={styles.sectionTitle}>In your sidebar ({ids.length})</Text>
-        <Text style={styles.sectionSub}>Tap the arrows to reorder, or remove with the red button.</Text>
+        <Text style={styles.sectionSub}>Tap the arrows to reorder, or remove with the red button. Feed and Settings are permanent 🔒.</Text>
 
         <View style={styles.list}>
           {items.map((s, i) => (
@@ -59,14 +59,20 @@ export default function CustomizeSidebarScreen() {
               >
                 <Ionicons name="chevron-down" size={18} color={theme.textPrimary} />
               </TouchableOpacity>
-              <TouchableOpacity
-                onPress={() => remove(s.id)}
-                style={[styles.removeBtn, !canRemove && { opacity: 0.3 }]}
-                disabled={!canRemove}
-                testID={`remove-sb-${s.id}`}
-              >
-                <Ionicons name="remove" size={18} color={theme.error} />
-              </TouchableOpacity>
+              {lockedIds.includes(s.id) ? (
+                <View style={styles.removeBtn} testID={`locked-sb-${s.id}`}>
+                  <Ionicons name="lock-closed" size={16} color={theme.textMuted} />
+                </View>
+              ) : (
+                <TouchableOpacity
+                  onPress={() => remove(s.id)}
+                  style={[styles.removeBtn, !canRemove && { opacity: 0.3 }]}
+                  disabled={!canRemove}
+                  testID={`remove-sb-${s.id}`}
+                >
+                  <Ionicons name="remove" size={18} color={theme.error} />
+                </TouchableOpacity>
+              )}
             </View>
           ))}
         </View>
