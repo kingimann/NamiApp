@@ -193,6 +193,70 @@ async def admin_set_wallet(user_id: str, body: WalletSet, authorization: Optiona
     return {"ok": True, "balance": bal}
 
 
+class AddTxn(BaseModel):
+    kind: str                       # "topup" | "received" | "sent" | "cashout"
+    amount: float
+    note: Optional[str] = ""
+    counterparty: Optional[str] = ""   # name shown on received/sent rows
+    adjust_balance: bool = True        # also move the wallet balance
+    created_at: Optional[str] = None   # ISO date/time to backdate; default now
+
+
+@router.post("/admin/users/{user_id}/transaction")
+async def admin_add_transaction(user_id: str, body: AddTxn, authorization: Optional[str] = Header(None)):
+    """Admin-only: re-add a lost transaction to a user's history so it shows in
+    their All-activity feed, optionally moving their wallet balance to match."""
+    me = await get_current_user(authorization)
+    if not is_admin(me):
+        raise HTTPException(status_code=403, detail="Admins only")
+    target = await db.users.find_one({"user_id": user_id}, {"_id": 0, "user_id": 1, "name": 1})
+    if not target:
+        raise HTTPException(status_code=404, detail="User not found")
+    amount = round(abs(float(body.amount or 0)), 2)
+    if amount <= 0:
+        raise HTTPException(status_code=400, detail="Enter an amount greater than 0")
+    when = datetime.now(timezone.utc)
+    if body.created_at:
+        try:
+            dt = datetime.fromisoformat(body.created_at.replace("Z", "+00:00"))
+            when = dt if dt.tzinfo else dt.replace(tzinfo=timezone.utc)
+        except Exception:
+            pass
+    kind = body.kind
+    nid = str(uuid.uuid4())
+    direction_in = kind in ("topup", "received")
+    if kind == "topup":
+        await db.wallet_topups.insert_one({
+            "id": nid, "user_id": user_id, "amount": amount, "source": "admin",
+            "session_id": None, "status": "completed", "created_at": when, "completed_at": when,
+        })
+    elif kind == "received":
+        await db.earnings.insert_one({
+            "id": nid, "user_id": user_id, "amount": amount, "kind": "tip",
+            "from_user_id": "", "from_name": (body.counterparty or "Someone"),
+            "message": (body.note or ""), "source": "admin", "created_at": when,
+        })
+    elif kind == "sent":
+        await db.tips.insert_one({
+            "id": nid, "from_user_id": user_id, "from_name": target.get("name", "Someone"),
+            "to_user_id": "", "to_name": (body.counterparty or "Someone"), "amount": amount,
+            "currency": "USD", "message": (body.note or ""), "source": "admin", "created_at": when,
+        })
+    elif kind == "cashout":
+        await db.payouts.insert_one({
+            "id": nid, "user_id": user_id, "amount": amount, "status": "paid",
+            "method": "manual", "created_at": when,
+        })
+    else:
+        raise HTTPException(status_code=400, detail="kind must be topup, received, sent or cashout")
+    if body.adjust_balance:
+        delta = amount if direction_in else -amount
+        await db.users.update_one({"user_id": user_id}, {"$inc": {"wallet_balance": round(delta, 2)}})
+    await _audit(me, f"re-added {kind} ${amount:.2f}", target, body.note or "")
+    fresh = await db.users.find_one({"user_id": user_id}, {"_id": 0, "wallet_balance": 1})
+    return {"ok": True, "id": nid, "balance": round(float((fresh or {}).get("wallet_balance", 0) or 0), 2)}
+
+
 @router.delete("/admin/users/{user_id}")
 async def admin_remove_user(user_id: str, authorization: Optional[str] = Header(None)):
     """Remove (delete) a user account and their sessions."""

@@ -157,6 +157,8 @@ export const api = {
     request<{ ok: boolean }>(`/admin/users/${userId}`, { method: "DELETE" }),
   adminSetWallet: (userId: string, balance: number) =>
     request<{ ok: boolean; balance: number }>(`/admin/users/${userId}/wallet`, { method: "POST", body: JSON.stringify({ balance }) }),
+  adminAddTransaction: (userId: string, body: { kind: "topup" | "received" | "sent" | "cashout"; amount: number; note?: string; counterparty?: string; adjust_balance?: boolean; created_at?: string }) =>
+    request<{ ok: boolean; id: string; balance: number }>(`/admin/users/${userId}/transaction`, { method: "POST", body: JSON.stringify(body) }),
   adminAuditLog: () => request<{ entries: AdminAuditEntry[] }>("/admin/audit"),
   adminGetTestPayments: () => request<{ test_payments: boolean; stripe_configured: boolean }>("/admin/test-payments"),
   adminSetTestPayments: (enabled: boolean) =>
