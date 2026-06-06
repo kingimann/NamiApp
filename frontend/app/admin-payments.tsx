@@ -7,9 +7,11 @@ import { Ionicons } from "@expo/vector-icons";
 import { Stack, useFocusEffect, useRouter } from "expo-router";
 import { api } from "@/src/api/client";
 import { theme } from "@/src/theme";
+import { useConfirm } from "@/src/context/ConfirmContext";
 
 export default function AdminPaymentsScreen() {
   const router = useRouter();
+  const confirm = useConfirm();
   const insets = useSafeAreaInsets();
   const [testPayments, setTestPayments] = useState(false);
   const [stripeConfigured, setStripeConfigured] = useState(false);
@@ -52,18 +54,15 @@ export default function AdminPaymentsScreen() {
     finally { setSaving(false); }
   };
 
-  const confirmReset = (kind: "money" | "analytics") => {
+  const confirmReset = async (kind: "money" | "analytics") => {
     const label = kind === "money" ? "all wallets, tips, subscriptions, payouts, transfers and ad balances" : "all ad/view analytics (impressions, clicks, spend, views)";
-    const run = async () => {
-      setBusy(kind); setMsg(null);
-      try {
-        if (kind === "money") await api.adminResetMoney(); else await api.adminResetAnalytics();
-        setMsg(kind === "money" ? "Money data reset." : "Analytics reset.");
-      } catch (e: any) { Alert.alert("Reset failed", String(e?.message || e).replace(/^\d{3}:\s*/, "")); }
-      finally { setBusy(null); }
-    };
-    if (Platform.OS === "web") { if (typeof window !== "undefined" && window.confirm(`Reset ${label}? This can't be undone.`)) run(); }
-    else Alert.alert("Are you sure?", `This resets ${label}. It can't be undone.`, [{ text: "Cancel", style: "cancel" }, { text: "Reset", style: "destructive", onPress: run }]);
+    if (!(await confirm({ title: "Are you sure?", message: `This resets ${label}. It can't be undone.`, confirmLabel: "Reset", destructive: true }))) return;
+    setBusy(kind); setMsg(null);
+    try {
+      if (kind === "money") await api.adminResetMoney(); else await api.adminResetAnalytics();
+      setMsg(kind === "money" ? "Money data reset." : "Analytics reset.");
+    } catch (e: any) { Alert.alert("Reset failed", String(e?.message || e).replace(/^\d{3}:\s*/, "")); }
+    finally { setBusy(null); }
   };
 
   return (

@@ -9,6 +9,7 @@ import { Stack, useFocusEffect, useRouter } from "expo-router";
 import { api, AdminUser } from "@/src/api/client";
 import { useAuth } from "@/src/context/AuthContext";
 import { theme } from "@/src/theme";
+import { useConfirm } from "@/src/context/ConfirmContext";
 
 const webInput = Platform.OS === "web" ? ({ outlineStyle: "none" } as object) : {};
 const SUSPEND_OPTIONS = [
@@ -22,6 +23,7 @@ export default function AdminUsersScreen() {
   const router = useRouter();
   const insets = useSafeAreaInsets();
   const { user, refresh } = useAuth() as any;
+  const confirm = useConfirm();
   const [q, setQ] = useState("");
   const [users, setUsers] = useState<AdminUser[]>([]);
   const [total, setTotal] = useState(0);
@@ -68,13 +70,10 @@ export default function AdminUsersScreen() {
     catch (e: any) { Alert.alert("Couldn't verify", String(e?.message || e).replace(/^\d{3}:\s*/, "")); }
   };
 
-  const confirmRemove = (u: AdminUser) => {
-    const doIt = async () => {
-      try { await api.adminRemoveUser(u.user_id); setSel(null); setUsers((arr) => arr.filter((x) => x.user_id !== u.user_id)); }
-      catch (e: any) { Alert.alert("Couldn't remove", String(e?.message || e).replace(/^\d{3}:\s*/, "")); }
-    };
-    if (Platform.OS === "web") { if (typeof window !== "undefined" && window.confirm(`Remove ${u.name}'s account? This deletes it.`)) doIt(); }
-    else Alert.alert("Remove account?", `This permanently deletes ${u.name}.`, [{ text: "Cancel", style: "cancel" }, { text: "Remove", style: "destructive", onPress: doIt }]);
+  const confirmRemove = async (u: AdminUser) => {
+    if (!(await confirm({ title: "Remove account?", message: `This permanently deletes ${u.name}.`, confirmLabel: "Remove", destructive: true }))) return;
+    try { await api.adminRemoveUser(u.user_id); setSel(null); setUsers((arr) => arr.filter((x) => x.user_id !== u.user_id)); }
+    catch (e: any) { Alert.alert("Couldn't remove", String(e?.message || e).replace(/^\d{3}:\s*/, "")); }
   };
 
   const RoleTag = ({ role }: { role: string }) =>

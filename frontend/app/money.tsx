@@ -8,6 +8,7 @@ import { Ionicons } from "@expo/vector-icons";
 import { Stack, useFocusEffect, useRouter } from "expo-router";
 import { api, MoneyRequest, PublicUser, WalletBalance } from "@/src/api/client";
 import { useAuth } from "@/src/context/AuthContext";
+import { useConfirm } from "@/src/context/ConfirmContext";
 import { theme } from "@/src/theme";
 
 const webInput = Platform.OS === "web" ? ({ outlineStyle: "none" } as object) : {};
@@ -28,6 +29,7 @@ export default function MoneyScreen() {
   const router = useRouter();
   const { user } = useAuth() as any;
   const isAdmin = user?.role === "admin";
+  const confirm = useConfirm();
   const insets = useSafeAreaInsets();
   const [security, setSecurity] = useState<{ is_set: boolean; question?: string | null } | null>(null);
   const [reqs, setReqs] = useState<{ incoming: MoneyRequest[]; outgoing: MoneyRequest[] }>({ incoming: [], outgoing: [] });
@@ -74,9 +76,8 @@ export default function MoneyScreen() {
   const acceptTransfer = async (t: MoneyRequest) => { try { await api.acceptMoneyTransfer(t.id); await load(); } catch (e: any) { Alert.alert("Not yet", String(e?.message || e).replace(/^\d{3}:\s*/, "")); } };
   const declineTransfer = async (t: MoneyRequest) => { try { await api.declineMoneyTransfer(t.id); await load(); } catch {} };
   const reverseTransfer = async (t: MoneyRequest) => {
-    const run = async () => { try { await api.reverseMoneyTransfer(t.id); await load(); } catch (e: any) { Alert.alert("Couldn't reverse", String(e?.message || e).replace(/^\d{3}:\s*/, "")); } };
-    if (Platform.OS === "web") { if (typeof window !== "undefined" && window.confirm(`Reverse the $${t.amount.toFixed(2)} you sent ${t.other_user.name}? You'll be refunded.`)) run(); }
-    else Alert.alert("Reverse transfer?", `Reverse the $${t.amount.toFixed(2)} you sent ${t.other_user.name}? You'll be refunded.`, [{ text: "Cancel", style: "cancel" }, { text: "Reverse", style: "destructive", onPress: run }]);
+    if (!(await confirm({ title: "Reverse transfer?", message: `Reverse the $${t.amount.toFixed(2)} you sent ${t.other_user.name}? You'll be refunded.`, confirmLabel: "Reverse", destructive: true }))) return;
+    try { await api.reverseMoneyTransfer(t.id); await load(); } catch (e: any) { Alert.alert("Couldn't reverse", String(e?.message || e).replace(/^\d{3}:\s*/, "")); }
   };
   // Re-render periodically so the reversal countdown stays current.
   const [, setTick] = useState(0);

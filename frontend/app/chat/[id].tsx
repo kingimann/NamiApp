@@ -30,11 +30,13 @@ import FakePaymentSheet from "@/src/components/FakePaymentSheet";
 import { stripeCheckout } from "@/src/lib/stripeEmbed";
 import { theme } from "@/src/theme";
 import { useAuth } from "@/src/context/AuthContext";
+import { useConfirm } from "@/src/context/ConfirmContext";
 import { ensureKeyPair, getPeerPublicKey, encryptForPeer, encryptForRecipients, encryptDataForRecipients, decryptData, isE2EMedia, isE2E, tryDecrypt } from "@/src/utils/e2e";
 
 export default function ChatScreen() {
   const router = useRouter();
   const { user } = useAuth();
+  const confirm = useConfirm();
   const insets = useSafeAreaInsets();
   const { id, name } = useLocalSearchParams<{ id: string; name?: string }>();
   const [messages, setMessages] = useState<Message[]>([]);
@@ -426,15 +428,11 @@ export default function ChatScreen() {
     setMessages((m) => [...m, msg]);
   };
 
-  const clearConvo = () => {
+  const clearConvo = async () => {
     setOptionsOpen(false);
-    const run = async () => {
-      try { await api.clearConversation(id); setMessages([]); }
-      catch (e: any) { Alert.alert("Couldn't clear", String(e?.message || e).replace(/^\d{3}:\s*/, "")); }
-    };
-    const msg = "Clear this conversation? This hides all messages for you. The other person keeps their copy.";
-    if (Platform.OS === "web") { if (typeof window !== "undefined" && window.confirm(msg)) run(); }
-    else Alert.alert("Clear conversation?", msg, [{ text: "Cancel", style: "cancel" }, { text: "Clear", style: "destructive", onPress: run }]);
+    if (!(await confirm({ title: "Clear conversation?", message: "This hides all messages for you. The other person keeps their copy.", confirmLabel: "Clear", destructive: true }))) return;
+    try { await api.clearConversation(id); setMessages([]); }
+    catch (e: any) { Alert.alert("Couldn't clear", String(e?.message || e).replace(/^\d{3}:\s*/, "")); }
   };
 
   const pickFile = async () => {

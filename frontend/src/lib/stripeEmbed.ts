@@ -28,7 +28,7 @@ function makeOverlay(onClose?: () => void): { container: HTMLDivElement; close: 
     "position:fixed;inset:0;background:rgba(0,0,0,0.6);z-index:99999;display:flex;align-items:center;justify-content:center;padding:16px;";
   const card = document.createElement("div");
   card.style.cssText =
-    "background:#fff;border-radius:18px;max-width:480px;width:100%;max-height:92vh;overflow:auto;position:relative;box-shadow:0 16px 50px rgba(0,0,0,.4);";
+    "background:#fff;border-radius:18px;max-width:400px;width:100%;max-height:80vh;display:flex;flex-direction:column;overflow:hidden;position:relative;box-shadow:0 16px 50px rgba(0,0,0,.4);";
   // Branded header so the embedded Stripe panel feels part of the site.
   const header = document.createElement("div");
   header.style.cssText =
@@ -43,7 +43,7 @@ function makeOverlay(onClose?: () => void): { container: HTMLDivElement; close: 
     "border:0;background:transparent;font-size:20px;line-height:1;cursor:pointer;color:#666;padding:2px 4px;";
   header.appendChild(title); header.appendChild(x);
   const container = document.createElement("div");
-  container.style.cssText = "padding:12px;min-height:60px;";
+  container.style.cssText = "padding:12px;min-height:60px;overflow:auto;flex:1;";
   card.appendChild(header); card.appendChild(container); overlay.appendChild(card);
   document.body.appendChild(overlay);
   let closed = false;
