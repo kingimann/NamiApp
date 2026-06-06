@@ -10,7 +10,7 @@ import { Stack, useFocusEffect, useRouter, useLocalSearchParams } from "expo-rou
 import { api, WalletSummary, WalletTxn, WalletBalance, Topup } from "@/src/api/client";
 import { useAuth } from "@/src/context/AuthContext";
 import { theme } from "@/src/theme";
-import { stripeAddDebitCard, stripeTopup, stripeCardTopup } from "@/src/lib/stripeEmbed";
+import { stripeTopup, stripeCardTopup } from "@/src/lib/stripeEmbed";
 import { useConfirm } from "@/src/context/ConfirmContext";
 
 function fmtWhen(iso: string) {
@@ -204,17 +204,9 @@ export default function WalletScreen() {
   // Identity verification is now a fully in-app form (no Stripe screen).
   const setupPayouts = async () => { router.push("/verify-payouts"); };
 
-  const addPayoutMethod = async () => {
+  const addPayoutMethod = () => {
     if (!payout?.account_id) { router.push("/verify-payouts"); return; }
-    setConnecting(true);
-    try {
-      const added = await stripeAddDebitCard(payout.account_id, payout.account_currency);
-      await load();
-      await pollPayoutStatus(1);
-      if (added) Alert.alert("Card added", "Your debit card is set up. You can now cash out instantly.");
-    } catch (e: any) {
-      Alert.alert("Couldn't add card", String(e?.message || e).replace(/^\d{3}:\s*/, ""));
-    } finally { setConnecting(false); }
+    router.push("/add-card");
   };
 
   const freqLockedUntil = payoutInfo?.frequency_locked_until || null;
@@ -836,7 +828,7 @@ export default function WalletScreen() {
                   {payout?.debit_card?.last4 ? `${payout.debit_card.brand || "Card"} •••• ${payout.debit_card.last4}` : "Not set up yet"}
                 </Text>
               </View>
-              <TouchableOpacity onPress={async () => { setManageOpen(false); await addPayoutMethod(); }} disabled={connecting} testID="mp-card">
+              <TouchableOpacity onPress={() => { setManageOpen(false); addPayoutMethod(); }} testID="mp-card">
                 <Text style={styles.mpAction}>{payout?.debit_card?.last4 ? "Change" : "Add"}</Text>
               </TouchableOpacity>
             </View>
