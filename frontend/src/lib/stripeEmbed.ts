@@ -21,7 +21,7 @@ function loadScript(src: string): Promise<void> {
   });
 }
 
-function makeOverlay(): { container: HTMLDivElement; close: () => void } {
+function makeOverlay(onClose?: () => void): { container: HTMLDivElement; close: () => void } {
   const overlay = document.createElement("div");
   overlay.setAttribute("data-stripe-overlay", "1");
   overlay.style.cssText =
@@ -38,7 +38,12 @@ function makeOverlay(): { container: HTMLDivElement; close: () => void } {
   container.style.cssText = "padding:10px;min-height:60px;";
   card.appendChild(x); card.appendChild(container); overlay.appendChild(card);
   document.body.appendChild(overlay);
-  const close = () => { try { document.body.removeChild(overlay); } catch {} };
+  let closed = false;
+  const close = () => {
+    if (closed) return; closed = true;
+    try { document.body.removeChild(overlay); } catch {}
+    try { onClose && onClose(); } catch {}
+  };
   x.onclick = close;
   overlay.onclick = (e) => { if (e.target === overlay) close(); };
   return { container, close };
@@ -104,22 +109,35 @@ export async function stripeTopup(amount: number): Promise<boolean> {
   }
 }
 
-export async function stripeOnboarding(): Promise<void> {
-  const hosted = async () => { const { url } = await api.setupPayouts(); if (url) await Linking.openURL(url); };
-  if (!isWeb || !PK) return hosted();
-  try {
-    const res = await api.payoutAccountSession();
-    const cs = res.client_secret;
-    if (!cs) return hosted();
-    await loadScript("https://connect-js.stripe.com/v1.0/connect.js");
-    const loader = (window as any).StripeConnect?.loadConnectAndInitialize || (window as any).loadConnectAndInitialize;
-    if (!loader) return hosted();
-    const instance = loader({ publishableKey: PK, fetchClientSecret: async () => cs });
-    const { container, close } = makeOverlay();
-    const comp = instance.create("account-onboarding");
-    if (comp.setOnExit) comp.setOnExit(() => close());
-    container.appendChild(comp);
-  } catch {
-    try { await hosted(); } catch {}
-  }
+/**
+ * Run payout (Connect) onboarding. The returned promise resolves when the user
+ * finishes or closes the flow, so the caller can re-check payout status. On
+ * native (or without a publishable key) it opens the hosted onboarding link.
+ */
+export function stripeOnboarding(): Promise<void> {
+  return new Promise<void>((resolve) => {
+    const hosted = async () => {
+      try { const { url } = await api.setupPayouts(); if (url) await Linking.openURL(url); } catch {}
+      resolve();
+    };
+    if (!isWeb || !PK) return void hosted();
+    (async () => {
+      try {
+        const res = await api.payoutAccountSession();
+        const cs = res.client_secret;
+        if (!cs) return void hosted();
+        await loadScript("https://connect-js.stripe.com/v1.0/connect.js");
+        const loader = (window as any).StripeConnect?.loadConnectAndInitialize || (window as any).loadConnectAndInitialize;
+        if (!loader) return void hosted();
+        const instance = loader({ publishableKey: PK, fetchClientSecret: async () => cs });
+        // resolve() runs once, whether the user exits the component or closes the overlay.
+        const { container, close } = makeOverlay(() => resolve());
+        const comp = instance.create("account-onboarding");
+        if (comp.setOnExit) comp.setOnExit(() => close());
+        container.appendChild(comp);
+      } catch {
+        void hosted();
+      }
+    })();
+  });
 }

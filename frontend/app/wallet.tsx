@@ -6,7 +6,7 @@ import {
 import { SafeAreaView, useSafeAreaInsets } from "react-native-safe-area-context";
 import { Ionicons } from "@expo/vector-icons";
 import * as Clipboard from "expo-clipboard";
-import { Stack, useFocusEffect, useRouter } from "expo-router";
+import { Stack, useFocusEffect, useRouter, useLocalSearchParams } from "expo-router";
 import { api, WalletSummary, WalletTxn, WalletBalance } from "@/src/api/client";
 import { useAuth } from "@/src/context/AuthContext";
 import { theme } from "@/src/theme";
@@ -66,6 +66,11 @@ export default function WalletScreen() {
   }, []);
   useFocusEffect(useCallback(() => { load(); }, [load]));
 
+  // Returning from hosted Stripe onboarding (?payouts=done) — poll until Stripe
+  // flips payouts on, since it can lag a few seconds after submitting details.
+  const params = useLocalSearchParams<{ payouts?: string }>();
+  useEffect(() => { if (params?.payouts === "done") { pollPayoutStatus(); } }, [params?.payouts]);
+
   useEffect(() => { if (user?.payout_threshold != null) setThreshold(String(user.payout_threshold || "")); }, [user?.payout_threshold]);
 
   const runPayoutsNow = async () => {
@@ -101,13 +106,40 @@ export default function WalletScreen() {
     try { return new Date(iso).toLocaleDateString([], { month: "short", day: "numeric" }); } catch { return "—"; }
   };
 
+  // Re-check payout status a few times — Stripe can take a moment to flip
+  // payouts_enabled on after onboarding details are submitted.
+  const pollPayoutStatus = useCallback(async (tries = 5) => {
+    for (let i = 0; i < tries; i++) {
+      try {
+        const st = await api.getPayoutStatus();
+        setPayout(st);
+        if (st.payouts_enabled) return st;
+      } catch {}
+      if (i < tries - 1) await new Promise((r) => setTimeout(r, 2500));
+    }
+    return null;
+  }, []);
+
   const setupPayouts = async () => {
     setConnecting(true);
     try {
       await stripeOnboarding();
+      await load();
+      await pollPayoutStatus();
     } catch (e: any) {
       Alert.alert("Couldn't start payout setup", String(e?.message || e).replace(/^\d{3}:\s*/, ""));
     } finally { setConnecting(false); }
+  };
+
+  const [checkingPayout, setCheckingPayout] = useState(false);
+  const checkPayoutAgain = async () => {
+    setCheckingPayout(true);
+    try {
+      const st = await pollPayoutStatus(1);
+      if (st && !st.payouts_enabled) {
+        Alert.alert("Still verifying", "Stripe hasn't finished verifying your details yet. This can take a few minutes — check back shortly.");
+      }
+    } finally { setCheckingPayout(false); }
   };
 
   const fmtBal = (usd: number) =>
@@ -233,29 +265,45 @@ export default function WalletScreen() {
           </View>
 
           <Text style={styles.section}>Getting paid</Text>
-          {payEnabled ? (
+          {payEnabled ? (() => {
+            const verifying = !!payout?.connected && !!payout?.details_submitted && !payout?.payouts_enabled;
+            const dotColor = payout?.payouts_enabled ? "#22C55E" : verifying ? "#F59E0B" : theme.textMuted;
+            const statusText = payout?.payouts_enabled ? "Payouts active"
+              : verifying ? "Verifying with Stripe"
+              : payout?.connected ? "Setup incomplete" : "Not set up";
+            const subText = payout?.payouts_enabled
+              ? "Tips and subscriptions are paid out to your connected account via Stripe."
+              : verifying
+                ? "You've submitted your details — Stripe is verifying them. This can take a few minutes, then payouts turn on automatically."
+                : "Connect a bank account or card with Stripe to receive real payouts. Until then, payments run in test mode.";
+            const btnText = payout?.payouts_enabled ? "Manage payouts"
+              : verifying ? "Update details"
+              : payout?.connected ? "Finish setup" : "Set up payouts";
+            return (
             <View style={styles.payoutCard}>
               <View style={styles.payoutHead}>
-                <View style={[styles.payoutDot, { backgroundColor: payout?.payouts_enabled ? "#22C55E" : theme.textMuted }]} />
-                <Text style={styles.payoutStatus}>
-                  {payout?.payouts_enabled ? "Payouts active" : payout?.connected ? "Setup incomplete" : "Not set up"}
-                </Text>
+                <View style={[styles.payoutDot, { backgroundColor: dotColor }]} />
+                <Text style={styles.payoutStatus}>{statusText}</Text>
               </View>
-              <Text style={styles.payoutSub}>
-                {payout?.payouts_enabled
-                  ? "Tips and subscriptions are paid out to your connected account via Stripe."
-                  : "Connect a bank account or card with Stripe to receive real payouts. Until then, payments run in test mode."}
-              </Text>
+              <Text style={styles.payoutSub}>{subText}</Text>
               <TouchableOpacity style={styles.payoutBtn} onPress={setupPayouts} disabled={connecting} testID="wallet-setup-payouts">
                 {connecting ? <ActivityIndicator color="#fff" size="small" /> : (
                   <>
                     <Ionicons name="card-outline" size={16} color="#fff" />
-                    <Text style={styles.payoutBtnText}>{payout?.payouts_enabled ? "Manage payouts" : payout?.connected ? "Finish setup" : "Set up payouts"}</Text>
+                    <Text style={styles.payoutBtnText}>{btnText}</Text>
                   </>
                 )}
               </TouchableOpacity>
+              {verifying && (
+                <TouchableOpacity style={styles.checkAgainBtn} onPress={checkPayoutAgain} disabled={checkingPayout} testID="wallet-check-payout">
+                  {checkingPayout ? <ActivityIndicator color={theme.primary} size="small" /> : (
+                    <Text style={styles.checkAgainText}>Check again</Text>
+                  )}
+                </TouchableOpacity>
+              )}
             </View>
-          ) : (
+            );
+          })() : (
             <View style={styles.payoutCard}>
               <View style={styles.payoutHead}>
                 <Ionicons name="flask-outline" size={16} color={theme.primary} />
@@ -559,6 +607,8 @@ const styles = StyleSheet.create({
   payoutSub: { color: theme.textSecondary, fontSize: 13, lineHeight: 19 },
   payoutBtn: { flexDirection: "row", alignItems: "center", justifyContent: "center", gap: 8, backgroundColor: theme.primary, borderRadius: 12, paddingVertical: 12, marginTop: 2 },
   payoutBtnText: { color: "#fff", fontWeight: "800", fontSize: 14 },
+  checkAgainBtn: { alignItems: "center", justifyContent: "center", paddingVertical: 10, borderRadius: 12, borderWidth: 1, borderColor: theme.border, marginTop: 2 },
+  checkAgainText: { color: theme.primary, fontWeight: "800", fontSize: 14 },
   freqRow: { flexDirection: "row", gap: 10 },
   freqChip: { flex: 1, flexDirection: "row", alignItems: "center", justifyContent: "center", gap: 8, backgroundColor: theme.surface, borderWidth: 1, borderColor: theme.border, borderRadius: 12, paddingVertical: 12 },
   freqChipOn: { borderColor: theme.primary, backgroundColor: theme.surfaceAlt },
