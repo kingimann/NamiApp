@@ -725,6 +725,25 @@ async def admin_set_test_payments(body: TestPaymentsBody, authorization: Optiona
     return {"test_payments": val}
 
 
+class ToggleBody(BaseModel):
+    enabled: bool
+
+
+@router.get("/admin/mobile-only")
+async def admin_get_mobile_only(authorization: Optional[str] = Header(None)):
+    me = await get_current_user(authorization)
+    _admin_only(me)
+    return {"mobile_only": bool(await _setting("mobile_only", False))}
+
+
+@router.post("/admin/mobile-only")
+async def admin_set_mobile_only(body: ToggleBody, authorization: Optional[str] = Header(None)):
+    me = await get_current_user(authorization)
+    _admin_only(me)
+    await _set_setting("mobile_only", bool(body.enabled))
+    return {"mobile_only": bool(body.enabled)}
+
+
 class FeesBody(BaseModel):
     platform_fee_percent: Optional[float] = None   # platform's cut of subscriptions/tips
     transaction_fee_cents: Optional[int] = None    # flat per-payment fee

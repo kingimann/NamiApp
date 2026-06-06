@@ -1,7 +1,20 @@
 """API meta endpoints — version + machine-readable capability info for developers."""
 from fastapi import APIRouter
 
+from core import db
+
 router = APIRouter()
+
+
+@router.get("/public/app-config")
+async def public_app_config():
+    """Public client config read at app load (no auth) — e.g. the mobile-only gate."""
+    try:
+        doc = await db.app_settings.find_one({"key": "mobile_only"}, {"_id": 0, "value": 1})
+        mobile_only = bool(doc and doc.get("value"))
+    except Exception:
+        mobile_only = False
+    return {"mobile_only": mobile_only}
 
 API_VERSION = "1.0.0"
 

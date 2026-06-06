@@ -1,7 +1,8 @@
-import React, { useState } from "react";
+import React, { useEffect, useState } from "react";
 import { Platform, View, Text, StyleSheet, TouchableOpacity } from "react-native";
 import { Ionicons } from "@expo/vector-icons";
 import { theme } from "@/src/theme";
+import { api } from "@/src/api/client";
 import QrCode from "@/src/components/QrCode";
 
 const BYPASS_KEY = "nami_allow_desktop";
@@ -23,13 +24,21 @@ function isDesktopWeb(): boolean {
 
 /** Web-only: blocks desktop browsers and tells the user to open on their phone. */
 export default function MobileOnlyGate({ children }: { children: React.ReactNode }) {
-  const [blocked, setBlocked] = useState(isDesktopWeb());
+  const desktop = isDesktopWeb();
+  // Only block when an admin has turned "mobile only" on.
+  const [enabled, setEnabled] = useState(false);
+  const [bypassed, setBypassed] = useState(false);
+  useEffect(() => {
+    if (!desktop) return;
+    api.getPublicAppConfig().then((c) => setEnabled(!!c.mobile_only)).catch(() => {});
+  }, [desktop]);
+  const blocked = desktop && enabled && !bypassed;
   if (!blocked) return <>{children}</>;
 
   const url = typeof window !== "undefined" ? window.location.origin : "https://nampo-web.onrender.com";
   const allowAnyway = () => {
     try { localStorage.setItem(BYPASS_KEY, "1"); } catch {}
-    setBlocked(false);
+    setBypassed(true);
   };
 
   return (

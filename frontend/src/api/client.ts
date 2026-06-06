@@ -158,6 +158,9 @@ export const api = {
   adminResetMoney: () => request<{ ok: boolean }>("/admin/reset/money", { method: "POST" }),
   adminResetAnalytics: () => request<{ ok: boolean }>("/admin/reset/analytics", { method: "POST" }),
   adminGetRevenue: () => request<{ total: number; count: number; by_source: Record<string, number>; platform_fee_percent: number; transaction_fee_cents: number }>("/admin/revenue"),
+  getPublicAppConfig: () => request<{ mobile_only: boolean }>("/public/app-config"),
+  adminGetMobileOnly: () => request<{ mobile_only: boolean }>("/admin/mobile-only"),
+  adminSetMobileOnly: (enabled: boolean) => request<{ mobile_only: boolean }>("/admin/mobile-only", { method: "POST", body: JSON.stringify({ enabled }) }),
   adminGetFees: () => request<{ platform_fee_percent: number; creator_share_percent: number; transaction_fee_cents: number }>("/admin/fees"),
   adminSetFees: (body: { platform_fee_percent?: number; transaction_fee_cents?: number }) =>
     request<{ platform_fee_percent: number; creator_share_percent: number; transaction_fee_cents: number }>("/admin/fees", { method: "POST", body: JSON.stringify(body) }),
