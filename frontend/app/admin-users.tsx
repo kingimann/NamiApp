@@ -37,6 +37,29 @@ export default function AdminUsersScreen() {
   const [walletUser, setWalletUser] = useState<AdminUser | null>(null);
   const [walletVal, setWalletVal] = useState("");
   const [walletBusy, setWalletBusy] = useState(false);
+  const [txnUser, setTxnUser] = useState<AdminUser | null>(null);
+  const [txnKind, setTxnKind] = useState<"topup" | "received" | "sent" | "cashout">("topup");
+  const [txnAmt, setTxnAmt] = useState("");
+  const [txnNote, setTxnNote] = useState("");
+  const [txnParty, setTxnParty] = useState("");
+  const [txnAdjust, setTxnAdjust] = useState(true);
+  const [txnBusy, setTxnBusy] = useState(false);
+
+  const saveTxn = async () => {
+    if (!txnUser) return;
+    const amt = Math.round((Number(txnAmt) || 0) * 100) / 100;
+    if (amt <= 0) { Alert.alert("Enter an amount", "How much was the transaction?"); return; }
+    setTxnBusy(true);
+    try {
+      await api.adminAddTransaction(txnUser.user_id, {
+        kind: txnKind, amount: amt, note: txnNote.trim() || undefined,
+        counterparty: txnParty.trim() || undefined, adjust_balance: txnAdjust,
+      });
+      setTxnUser(null); setTxnAmt(""); setTxnNote(""); setTxnParty("");
+      Alert.alert("Added", "The transaction was re-added to their history.");
+    } catch (e: any) { Alert.alert("Couldn't add", String(e?.message || e).replace(/^\d{3}:\s*/, "")); }
+    finally { setTxnBusy(false); }
+  };
 
   const saveWallet = async () => {
     if (!walletUser) return;
@@ -168,6 +191,7 @@ export default function AdminUsersScreen() {
               )}
               {!sel.banned && <Action icon="ban-outline" label="Ban…" danger onPress={() => openMod(sel, "ban")} />}
               <Action icon="wallet-outline" label="Set wallet balance (USD)…" onPress={() => { const u = sel; setSel(null); setWalletVal(""); setWalletUser(u); }} />
+              <Action icon="add-circle-outline" label="Re-add lost transaction…" onPress={() => { const u = sel; setSel(null); setTxnKind("topup"); setTxnAmt(""); setTxnNote(""); setTxnParty(""); setTxnAdjust(true); setTxnUser(u); }} />
               <Action icon="trash-outline" label="Remove account" danger onPress={() => confirmRemove(sel)} />
               <TouchableOpacity onPress={() => setSel(null)}><Text style={styles.cancel}>Close</Text></TouchableOpacity>
             </View>
@@ -253,6 +277,48 @@ export default function AdminUsersScreen() {
           )}
         </View>
       </Modal>
+
+      {/* Re-add a lost transaction */}
+      <Modal visible={!!txnUser} transparent animationType="fade" onRequestClose={() => !txnBusy && setTxnUser(null)}>
+        <View style={styles.centerBackdrop}>
+          <Pressable style={StyleSheet.absoluteFill} onPress={() => !txnBusy && setTxnUser(null)} />
+          {txnUser && (
+            <View style={styles.suspendCard}>
+              <Text style={styles.suspendTitle}>Re-add transaction</Text>
+              <Text style={styles.fieldLabel}>Add a lost transaction to {txnUser.name}'s history.</Text>
+
+              <View style={styles.txnKindRow}>
+                {(["topup", "received", "sent", "cashout"] as const).map((k) => (
+                  <TouchableOpacity key={k} style={[styles.txnChip, txnKind === k && styles.txnChipOn]} onPress={() => setTxnKind(k)} testID={`txn-kind-${k}`}>
+                    <Text style={[styles.txnChipText, txnKind === k && { color: "#fff" }]}>
+                      {k === "topup" ? "Top-up" : k === "received" ? "Received" : k === "sent" ? "Sent" : "Cash-out"}
+                    </Text>
+                  </TouchableOpacity>
+                ))}
+              </View>
+
+              <View style={styles.walletInputWrap}>
+                <Text style={styles.walletDollar}>$</Text>
+                <TextInput style={styles.walletInput} value={txnAmt} onChangeText={(t) => setTxnAmt(t.replace(/[^0-9.]/g, ""))} keyboardType="decimal-pad" placeholder="0.00" placeholderTextColor={theme.textMuted} autoFocus testID="txn-amount" />
+              </View>
+              {(txnKind === "received" || txnKind === "sent") && (
+                <TextInput style={styles.txnInput} value={txnParty} onChangeText={setTxnParty} placeholder={txnKind === "received" ? "From (name)" : "To (name)"} placeholderTextColor={theme.textMuted} testID="txn-party" />
+              )}
+              <TextInput style={styles.txnInput} value={txnNote} onChangeText={setTxnNote} placeholder="Note (optional)" placeholderTextColor={theme.textMuted} testID="txn-note" />
+
+              <TouchableOpacity style={styles.txnToggle} onPress={() => setTxnAdjust((v) => !v)} testID="txn-adjust">
+                <Ionicons name={txnAdjust ? "checkbox" : "square-outline"} size={20} color={txnAdjust ? theme.primary : theme.textMuted} />
+                <Text style={styles.txnToggleText}>Also update wallet balance ({txnKind === "topup" || txnKind === "received" ? "+" : "−"}${(Number(txnAmt) || 0).toFixed(2)})</Text>
+              </TouchableOpacity>
+
+              <TouchableOpacity style={[styles.modBtn, txnBusy && { opacity: 0.6 }]} onPress={saveTxn} disabled={txnBusy} testID="txn-save">
+                {txnBusy ? <ActivityIndicator color="#fff" /> : <Text style={styles.modBtnText}>Add to history</Text>}
+              </TouchableOpacity>
+              <TouchableOpacity onPress={() => setTxnUser(null)}><Text style={styles.cancel}>Cancel</Text></TouchableOpacity>
+            </View>
+          )}
+        </View>
+      </Modal>
     </SafeAreaView>
   );
 }
@@ -302,6 +368,13 @@ const styles = StyleSheet.create({
   walletInputWrap: { flexDirection: "row", alignItems: "center", gap: 6, backgroundColor: theme.bg, borderRadius: 12, borderWidth: 1, borderColor: theme.border, paddingHorizontal: 14, height: 52, marginTop: 8 },
   walletDollar: { color: theme.textPrimary, fontSize: 20, fontWeight: "900" },
   walletInput: { flex: 1, color: theme.textPrimary, fontSize: 20, fontWeight: "800", ...(Platform.OS === "web" ? ({ outlineStyle: "none" } as object) : {}) },
+  txnKindRow: { flexDirection: "row", flexWrap: "wrap", gap: 8, marginTop: 10 },
+  txnChip: { paddingVertical: 8, paddingHorizontal: 12, borderRadius: 10, borderWidth: 1, borderColor: theme.border, backgroundColor: theme.bg },
+  txnChipOn: { backgroundColor: theme.primary, borderColor: theme.primary },
+  txnChipText: { color: theme.textSecondary, fontSize: 13, fontWeight: "700" },
+  txnInput: { color: theme.textPrimary, fontSize: 14, backgroundColor: theme.bg, borderRadius: 12, borderWidth: 1, borderColor: theme.border, paddingHorizontal: 14, paddingVertical: 12, marginTop: 8, ...(Platform.OS === "web" ? ({ outlineStyle: "none" } as object) : {}) },
+  txnToggle: { flexDirection: "row", alignItems: "center", gap: 10, marginTop: 12 },
+  txnToggleText: { flex: 1, color: theme.textSecondary, fontSize: 13, fontWeight: "600" },
   suspendCard: { width: "100%", maxWidth: 380, backgroundColor: theme.surface, borderRadius: 18, borderWidth: 1, borderColor: theme.border, padding: 18 },
   suspendTitle: { color: theme.textPrimary, fontSize: 16, fontWeight: "800", marginBottom: 8 },
   fieldLabel: { color: theme.textMuted, fontSize: 12, fontWeight: "700", marginTop: 12, marginBottom: 6 },
