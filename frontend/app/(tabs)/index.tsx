@@ -108,10 +108,12 @@ export default function MapScreen() {
   const [reviewText, setReviewText] = useState("");
   const [submittingReview, setSubmittingReview] = useState(false);
   const [permissionDenied, setPermissionDenied] = useState(false);
+  const [placeCollapsed, setPlaceCollapsed] = useState(false);
 
   // Load reviews + foursquare profile whenever a place is selected
   useEffect(() => {
     if (!selected) { setReviews([]); setFsq(null); return; }
+    setPlaceCollapsed(false); // each new place opens expanded
     const key = buildPlaceKey(selected.name, selected.longitude, selected.latitude);
     (async () => {
       try { setReviews(await api.listReviews(key)); } catch { setReviews([]); }
@@ -740,8 +742,16 @@ export default function MapScreen() {
           testID="place-card-sheet"
         >
           <TouchableOpacity style={StyleSheet.absoluteFill} onPress={() => setSelected(null)} />
-          <View style={[styles.sheet, { paddingBottom: insets.bottom + 24 }]}>
-            <View style={styles.sheetHandle} />
+          <View style={[styles.sheet, { paddingBottom: insets.bottom + (placeCollapsed ? 12 : 20) }]}>
+            <TouchableOpacity
+              onPress={() => setPlaceCollapsed((c) => !c)}
+              style={styles.sheetGrab}
+              activeOpacity={0.7}
+              testID="place-fold"
+            >
+              <View style={styles.sheetHandle} />
+              <Ionicons name={placeCollapsed ? "chevron-up" : "chevron-down"} size={16} color={theme.textMuted} />
+            </TouchableOpacity>
             <View style={styles.pcHeader}>
               <View style={{ flex: 1 }}>
                 <Text style={styles.pcTitle} numberOfLines={2}>{selected.name}</Text>
@@ -815,6 +825,8 @@ export default function MapScreen() {
               )}
             </View>
 
+            {!placeCollapsed && (
+            <>
             <View style={styles.pcButtonsRow}>
               <TouchableOpacity
                 style={styles.pcSecondary}
@@ -922,6 +934,8 @@ export default function MapScreen() {
                 ))
               )}
             </View>
+            </>
+            )}
           </View>
         </KeyboardAvoidingView>
       )}
@@ -1134,20 +1148,19 @@ const styles = StyleSheet.create({
   },
   sheet: {
     backgroundColor: "#0E0E10",
-    borderTopLeftRadius: 24,
-    borderTopRightRadius: 24,
-    paddingTop: 12,
-    paddingHorizontal: 20,
+    borderTopLeftRadius: 22,
+    borderTopRightRadius: 22,
+    paddingTop: 8,
+    paddingHorizontal: 18,
     borderTopWidth: 1,
     borderColor: theme.border,
   },
+  sheetGrab: { alignSelf: "center", alignItems: "center", gap: 2, paddingTop: 2, paddingBottom: 8, paddingHorizontal: 30 },
   sheetHandle: {
-    alignSelf: "center",
     width: 40,
     height: 4,
     borderRadius: 2,
     backgroundColor: theme.borderStrong,
-    marginBottom: 16,
   },
   sheetTitle: { color: theme.textPrimary, fontSize: 18, fontWeight: "700", marginBottom: 12 },
   styleGrid: { flexDirection: "row", flexWrap: "wrap", gap: 12, marginTop: 4 },
@@ -1183,15 +1196,15 @@ const styles = StyleSheet.create({
   },
   overlaySub: { color: theme.textSecondary, fontSize: 11, marginTop: 2 },
 
-  pcHeader: { flexDirection: "row", gap: 12, marginBottom: 14 },
+  pcHeader: { flexDirection: "row", gap: 12, marginBottom: 10 },
   pcTitle: {
     color: theme.textPrimary,
-    fontSize: 22,
+    fontSize: 18,
     fontWeight: "800",
-    letterSpacing: -0.4,
+    letterSpacing: -0.3,
   },
-  pcAddress: { color: theme.textSecondary, fontSize: 13, marginTop: 4 },
-  pcMeta: { flexDirection: "row", gap: 12, marginTop: 8, flexWrap: "wrap" },
+  pcAddress: { color: theme.textSecondary, fontSize: 12.5, marginTop: 3 },
+  pcMeta: { flexDirection: "row", gap: 10, marginTop: 6, flexWrap: "wrap" },
   pcMetaItem: { flexDirection: "row", alignItems: "center", gap: 4 },
   pcMetaText: { color: theme.textSecondary, fontSize: 12 },
   closeBtn: {
@@ -1199,28 +1212,28 @@ const styles = StyleSheet.create({
     backgroundColor: theme.surface,
     alignItems: "center", justifyContent: "center",
   },
-  pcButtonsRow: { flexDirection: "row", gap: 10, marginBottom: 10 },
+  pcButtonsRow: { flexDirection: "row", gap: 10, marginBottom: 8 },
   pcPrimary: {
     flex: 1,
-    flexDirection: "row", gap: 8,
+    flexDirection: "row", gap: 7,
     backgroundColor: theme.primary,
-    paddingVertical: 14,
-    borderRadius: 14,
+    paddingVertical: 10,
+    borderRadius: 12,
     alignItems: "center", justifyContent: "center",
   },
   pcPrimaryText: { color: "#fff", fontSize: 14, fontWeight: "700" },
   pcSecondary: {
     flex: 1,
-    flexDirection: "row", gap: 8,
+    flexDirection: "row", gap: 7,
     backgroundColor: theme.surface,
     borderWidth: 1, borderColor: theme.border,
-    paddingVertical: 14,
-    borderRadius: 14,
+    paddingVertical: 10,
+    borderRadius: 12,
     alignItems: "center", justifyContent: "center",
   },
   pcSecondaryText: { color: theme.textPrimary, fontSize: 14, fontWeight: "600" },
 
-  reviewsSection: { marginTop: 18, paddingTop: 14, borderTopWidth: StyleSheet.hairlineWidth, borderTopColor: theme.border },
+  reviewsSection: { marginTop: 12, paddingTop: 10, borderTopWidth: StyleSheet.hairlineWidth, borderTopColor: theme.border },
   fsqCard: {
     backgroundColor: theme.surface,
     borderRadius: 16, borderWidth: 1, borderColor: theme.border,
