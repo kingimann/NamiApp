@@ -99,6 +99,23 @@ async def _resolve_video_url(url: str) -> Optional[dict]:
         return None
     if _VIDEO_EXT_RE.search(u.split("?")[0]) or "cloudinary.com" in u.lower():
         return {"url": u}
+
+    # Player embeds (can't be served as a raw file) — play via their iframe.
+    yt = re.search(r"(?:youtube\.com/(?:watch\?v=|shorts/|live/)|youtu\.be/)([A-Za-z0-9_-]{11})", u)
+    if yt:
+        vid = yt.group(1)
+        return {"embed": "youtube",
+                "url": f"https://www.youtube.com/embed/{vid}?autoplay=1&mute=1&loop=1&playlist={vid}&playsinline=1&rel=0&modestbranding=1",
+                "thumbnail": f"https://i.ytimg.com/vi/{vid}/hqdefault.jpg"}
+    vm = re.search(r"vimeo\.com/(?:video/)?(\d+)", u)
+    if vm:
+        return {"embed": "vimeo",
+                "url": f"https://player.vimeo.com/video/{vm.group(1)}?autoplay=1&muted=1&loop=1&playsinline=1",
+                "thumbnail": None}
+    tt = re.search(r"tiktok\.com/.*?/video/(\d+)", u) or re.search(r"tiktok\.com/v/(\d+)", u)
+    if tt:
+        return {"embed": "tiktok", "url": f"https://www.tiktok.com/embed/v2/{tt.group(1)}", "thumbnail": None}
+
     try:
         parsed = urlparse(u)
     except Exception:
@@ -182,6 +199,7 @@ def _normalize_media(items: Optional[list]) -> list:
         if not url and len(b) > MAX_MEDIA_BYTES_EACH:
             raise HTTPException(status_code=413, detail="Media too large (25MB limit)")
         d["type"] = d.get("type") or "image"
+        d.pop("embed", None)   # player embeds (YouTube/TikTok) are never reel media
         # Pasted video links must be a direct, playable https video file.
         if d["type"] == "video" and url and not b and not _trusted_video_url(url):
             raise HTTPException(status_code=400, detail="Video links must be a direct https video file (.mp4, .webm, …), e.g. an i.imgur.com/…mp4 link.")
@@ -1064,7 +1082,8 @@ def _has_playable_video(doc: dict) -> bool:
     for m in (doc.get("media") or []):
         if m.get("type") == "video":
             b = m.get("base64") or ""
-            if b.startswith("data:") or b.startswith("http"):
+            u = m.get("url") or ""
+            if b.startswith("data:") or b.startswith("http") or u.startswith("http"):
                 return True
     return False
 

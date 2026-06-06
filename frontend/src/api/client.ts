@@ -132,7 +132,7 @@ export const api = {
   recordPostView: (id: string) =>
     request<{ viewed: boolean }>(`/posts/${id}/view`, { method: "POST" }),
   resolveVideoLink: (url: string) =>
-    request<{ url: string; thumbnail?: string | null }>("/media/resolve-video", { method: "POST", body: JSON.stringify({ url }) }),
+    request<{ url: string; thumbnail?: string | null; embed?: string | null }>("/media/resolve-video", { method: "POST", body: JSON.stringify({ url }) }),
   reelsFeed: (focus?: string) =>
     request<Post[]>(`/feed/reels${focus ? `?focus=${encodeURIComponent(focus)}` : ""}`),
   listUserPostsAll: (uid: string) => request<Post[]>(`/posts/user/${uid}/all`),
