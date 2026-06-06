@@ -54,8 +54,8 @@ function buildHtml(token: string, center: [number, number], zoom: number, style:
 <head>
 <meta charset="utf-8" />
 <meta name="viewport" content="initial-scale=1, maximum-scale=1, user-scalable=no, width=device-width" />
-<link href="https://api.mapbox.com/mapbox-gl-js/v3.6.0/mapbox-gl.css" rel="stylesheet" />
-<script src="https://api.mapbox.com/mapbox-gl-js/v3.6.0/mapbox-gl.js"></script>
+<link href="https://api.mapbox.com/mapbox-gl-js/v3.24.0/mapbox-gl.css" rel="stylesheet" />
+<script src="https://api.mapbox.com/mapbox-gl-js/v3.24.0/mapbox-gl.js"></script>
 <style>
   html, body, #map { margin:0; padding:0; height:100%; width:100%; background:#0A0A0A; }
   .custom-marker {
