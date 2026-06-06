@@ -142,6 +142,13 @@ const transitStatus = (
     ? { text: `${mins} min late`, color: theme.warning }
     : { text: `${mins} min early`, color: theme.textSecondary };
 };
+// Walking distance + rough time from meters (~80 m/min ≈ 4.8 km/h).
+const walkLabel = (m?: number | null): string | null => {
+  if (m == null || !isFinite(m) || m < 0) return null;
+  const dist = m < 1000 ? `${Math.round(m / 10) * 10} m` : `${(m / 1000).toFixed(1)} km`;
+  const mins = Math.max(1, Math.round(m / 80));
+  return `${mins} min walk · ${dist}`;
+};
 const agoLabel = (fetchedAt: number | null, now: number): string => {
   if (!fetchedAt) return "";
   const s = Math.max(0, Math.round((now - fetchedAt) / 1000));
@@ -220,6 +227,7 @@ export default function DirectionsScreen() {
   const [transitFetchedAt, setTransitFetchedAt] = useState<number | null>(null);
   const [nowTick, setNowTick] = useState(Date.now()); // drives the "updated Xs ago" label
   const [transitAllNearby, setTransitAllNearby] = useState(false); // false = only routes toward destination
+  const [transitExpanded, setTransitExpanded] = useState(true); // foldable sheet body
 
   // Step end-coordinates (where each maneuver "completes") — derived from route coords.
   // We approximate by using the cumulative distance per step against the route.
@@ -531,6 +539,7 @@ export default function DirectionsScreen() {
   const openTransit = useCallback(() => {
     setTransitOpen(true);
     setTransitAllNearby(false);
+    setTransitExpanded(true);
     loadTransit(false);
   }, [loadTransit]);
 
@@ -1224,21 +1233,39 @@ export default function DirectionsScreen() {
 
       {/* Nearby public transit departures (TransitLand) */}
       {transitOpen && (
-        <View style={styles.sarSheetWrap} pointerEvents="box-none">
+        <View
+          style={[styles.sarSheetWrap, !transitExpanded && { backgroundColor: "transparent" }]}
+          pointerEvents="box-none"
+        >
           <View style={[styles.sarSheet, { paddingBottom: insets.bottom + 14 }]}>
-            <View style={styles.sarHeader}>
+            {/* Foldable grabber — tap to collapse the list and see the map. */}
+            <TouchableOpacity
+              style={styles.transitGrab}
+              onPress={() => setTransitExpanded((e) => !e)}
+              testID="transit-fold"
+              activeOpacity={0.7}
+            >
+              <View style={styles.grabber} />
+              <View style={styles.grabberHint}>
+                <Ionicons name={transitExpanded ? "chevron-down" : "chevron-up"} size={15} color={theme.textSecondary} />
+                <Text style={styles.grabberHintText}>{transitExpanded ? "Hide" : "Show departures"}</Text>
+              </View>
+            </TouchableOpacity>
+
+            <View style={styles.transitHead}>
               <View style={{ flex: 1 }}>
-                <Text style={styles.sarTitle}>
+                <Text style={styles.transitTitle}>
                   {destFeature && !transitAllNearby ? "Routes toward your stop" : "Nearby transit"}
                 </Text>
                 <View style={styles.transitSubRow}>
                   {destFeature && !transitAllNearby && (
-                    <Text style={styles.transitTowardText} numberOfLines={1}>
-                      → {destFeature.name}
-                    </Text>
+                    <Text style={styles.transitTowardText} numberOfLines={1}>→ {destFeature.name}</Text>
                   )}
-                  {transitData?.configured && transitFetchedAt && !transitLoading && (
-                    <Text style={styles.transitUpdated}>{agoLabel(transitFetchedAt, nowTick)}</Text>
+                  {transitData?.configured && !transitLoading && (
+                    <Text style={styles.transitUpdated}>
+                      {transitData.departures.length} departures
+                      {transitFetchedAt ? ` · ${agoLabel(transitFetchedAt, nowTick)}` : ""}
+                    </Text>
                   )}
                 </View>
               </View>
@@ -1246,82 +1273,119 @@ export default function DirectionsScreen() {
                 onPress={() => loadTransit(transitAllNearby)}
                 disabled={transitLoading}
                 testID="transit-refresh"
-                style={{ padding: 4, marginRight: 6 }}
+                style={styles.transitHeadBtn}
                 activeOpacity={0.7}
               >
                 <Ionicons name="refresh" size={20} color={transitLoading ? theme.textMuted : theme.primary} />
               </TouchableOpacity>
-              <TouchableOpacity onPress={() => setTransitOpen(false)} testID="transit-close" style={{ padding: 4 }}>
+              <TouchableOpacity onPress={() => setTransitOpen(false)} testID="transit-close" style={styles.transitHeadBtn}>
                 <Ionicons name="close" size={22} color={theme.textPrimary} />
               </TouchableOpacity>
             </View>
-            {/* Toggle: only routes heading toward the destination vs everything nearby. */}
-            {destFeature && (
-              <TouchableOpacity
-                onPress={toggleTransitScope}
-                style={styles.transitScopeChip}
-                testID="transit-scope-toggle"
-                activeOpacity={0.8}
-              >
-                <Ionicons
-                  name={transitAllNearby ? "git-network-outline" : "navigate"}
-                  size={14}
-                  color={theme.primary}
-                />
-                <Text style={styles.transitScopeText}>
-                  {transitAllNearby ? "Showing all nearby — tap for toward destination" : "Toward destination — tap to show all nearby"}
-                </Text>
-              </TouchableOpacity>
+
+            {/* Collapsed: a one-line peek at the very next departure. */}
+            {!transitExpanded && transitData?.departures?.[0] && (
+              <Text style={styles.transitPeek} numberOfLines={1}>
+                Next: {transitData.departures[0].route} · {transitWhen(transitData.departures[0])}
+                {transitData.departures[0].headsign ? ` → ${transitData.departures[0].headsign}` : ""}
+              </Text>
             )}
-            {transitLoading ? (
-              <ActivityIndicator color={theme.primary} style={{ marginVertical: 30 }} />
-            ) : !transitData?.configured ? (
-              <Text style={styles.sarEmpty}>
-                Transit isn’t set up yet. Add a free TransitLand API key
-                (TRANSITLAND_API_KEY) to enable live departures.
-              </Text>
-            ) : transitData.departures.length === 0 ? (
-              <Text style={styles.sarEmpty}>
-                {destFeature && !transitAllNearby
-                  ? "No nearby routes head toward your destination. Tap “show all nearby” above to see every departure."
-                  : "No upcoming departures found near you."}
-              </Text>
-            ) : (
-              <FlatList
-                data={transitData.departures}
-                keyExtractor={(_i, idx) => String(idx)}
-                style={{ maxHeight: 360 }}
-                renderItem={({ item }) => {
-                  const st = transitStatus(item);
-                  // Tint the countdown amber when the trip is actually running late.
-                  const isLate = (item.delay ?? 0) >= 60 && item.realtime;
-                  return (
-                    <View style={styles.transitRow} testID="transit-departure">
-                      <View style={styles.transitBadge}>
-                        <Ionicons name={transitIcon(item.kind)} size={14} color="#fff" />
-                        <Text style={styles.transitBadgeText} numberOfLines={1}>{item.route}</Text>
-                      </View>
-                      <View style={{ flex: 1 }}>
-                        <Text style={styles.transitHeadsign} numberOfLines={1}>
-                          {item.headsign || item.route_long || "—"}
-                        </Text>
-                        <Text style={styles.transitStop} numberOfLines={1}>{item.stop_name}</Text>
-                      </View>
-                      <View style={styles.transitWhenWrap}>
-                        <Text style={[styles.transitWhen, isLate && { color: theme.warning }]}>
-                          {transitWhen(item)}
-                        </Text>
-                        {st && (
-                          <View style={styles.transitLiveRow}>
-                            <View style={[styles.transitLiveDot, { backgroundColor: st.color }]} />
-                            <Text style={[styles.transitLiveText, { color: st.color }]}>{st.text}</Text>
+
+            {transitExpanded && (
+              <>
+                {/* Toggle: only routes toward the destination vs everything nearby. */}
+                {destFeature && (
+                  <TouchableOpacity
+                    onPress={toggleTransitScope}
+                    style={styles.transitScopeChip}
+                    testID="transit-scope-toggle"
+                    activeOpacity={0.8}
+                  >
+                    <Ionicons
+                      name={transitAllNearby ? "git-network-outline" : "navigate"}
+                      size={14}
+                      color={theme.primary}
+                    />
+                    <Text style={styles.transitScopeText}>
+                      {transitAllNearby ? "Showing all nearby — tap for toward destination" : "Toward destination — tap to show all nearby"}
+                    </Text>
+                  </TouchableOpacity>
+                )}
+                {transitLoading ? (
+                  <ActivityIndicator color={theme.primary} style={{ marginVertical: 30 }} />
+                ) : !transitData?.configured ? (
+                  <Text style={styles.sarEmpty}>
+                    Transit isn’t set up yet. Add a free TransitLand API key
+                    (TRANSITLAND_API_KEY) to enable live departures.
+                  </Text>
+                ) : transitData.departures.length === 0 ? (
+                  <Text style={styles.sarEmpty}>
+                    {destFeature && !transitAllNearby
+                      ? "No nearby routes head toward your destination. Tap “show all nearby” above to see every departure."
+                      : "No upcoming departures found near you."}
+                  </Text>
+                ) : (
+                  <FlatList
+                    data={transitData.departures}
+                    keyExtractor={(_i, idx) => String(idx)}
+                    style={{ maxHeight: 420 }}
+                    ItemSeparatorComponent={() => <View style={styles.transitSep} />}
+                    renderItem={({ item }) => {
+                      const st = transitStatus(item);
+                      // Tint the countdown amber when the trip is actually running late.
+                      const isLate = (item.delay ?? 0) >= 60 && item.realtime;
+                      const walk = walkLabel(item.stop_distance);
+                      // Only show the full route name when it adds info beyond the badge.
+                      const longName =
+                        item.route_long && item.route_long !== item.route && item.route_long !== item.headsign
+                          ? item.route_long
+                          : null;
+                      return (
+                        <View style={styles.transitRow} testID="transit-departure">
+                          <View style={[styles.transitBadge, isLate && { backgroundColor: theme.warning }]}>
+                            <Ionicons name={transitIcon(item.kind)} size={16} color="#fff" />
+                            <Text style={styles.transitBadgeText} numberOfLines={1}>{item.route}</Text>
                           </View>
-                        )}
-                      </View>
-                    </View>
-                  );
-                }}
-              />
+                          <View style={{ flex: 1 }}>
+                            <Text style={styles.transitHeadsign} numberOfLines={1}>
+                              {item.headsign || item.route_long || "—"}
+                            </Text>
+                            {longName && (
+                              <Text style={styles.transitRouteLong} numberOfLines={1}>{longName}</Text>
+                            )}
+                            <View style={styles.transitMetaRow}>
+                              <Ionicons name="location-outline" size={12} color={theme.textMuted} />
+                              <Text style={styles.transitStop} numberOfLines={1}>{item.stop_name}</Text>
+                            </View>
+                            {walk && (
+                              <View style={styles.transitMetaRow}>
+                                <Ionicons name="walk-outline" size={12} color={theme.textMuted} />
+                                <Text style={styles.transitWalk} numberOfLines={1}>{walk}</Text>
+                              </View>
+                            )}
+                          </View>
+                          <View style={styles.transitWhenWrap}>
+                            <Text style={[styles.transitWhen, isLate && { color: theme.warning }]}>
+                              {transitWhen(item)}
+                            </Text>
+                            {item.time_label ? (
+                              <Text style={styles.transitSched}>
+                                {item.realtime ? "sched " : ""}{item.time_label}
+                              </Text>
+                            ) : null}
+                            {st && (
+                              <View style={styles.transitLiveRow}>
+                                <View style={[styles.transitLiveDot, { backgroundColor: st.color }]} />
+                                <Text style={[styles.transitLiveText, { color: st.color }]}>{st.text}</Text>
+                              </View>
+                            )}
+                          </View>
+                        </View>
+                      );
+                    }}
+                  />
+                )}
+              </>
             )}
           </View>
         </View>
@@ -1621,34 +1685,51 @@ const styles = StyleSheet.create({
   sarRowSub: { color: theme.textSecondary, fontSize: 12, marginTop: 2 },
 
   // ── Transit departures ──
-  transitRow: {
-    flexDirection: "row", alignItems: "center", gap: 12,
-    paddingVertical: 11, paddingHorizontal: 4,
+  transitGrab: {
+    alignSelf: "stretch", alignItems: "center",
+    paddingTop: 4, paddingBottom: 10, gap: 5,
+    marginTop: -8, marginHorizontal: -16,
+  },
+  transitHead: {
+    flexDirection: "row", alignItems: "center", gap: 6,
+    paddingBottom: 12,
     borderBottomWidth: StyleSheet.hairlineWidth, borderBottomColor: theme.border,
   },
+  transitHeadBtn: { padding: 6 },
+  transitTitle: { color: theme.textPrimary, fontSize: 18, fontWeight: "800", letterSpacing: -0.3 },
+  transitPeek: { color: theme.textSecondary, fontSize: 13, fontWeight: "600", paddingVertical: 12 },
+  transitSep: { height: StyleSheet.hairlineWidth, backgroundColor: theme.border },
+  transitRow: {
+    flexDirection: "row", alignItems: "center", gap: 14,
+    paddingVertical: 15, paddingHorizontal: 2,
+  },
   transitBadge: {
-    flexDirection: "row", alignItems: "center", gap: 5,
-    backgroundColor: theme.primary, borderRadius: 8,
-    paddingHorizontal: 8, paddingVertical: 5, minWidth: 52, maxWidth: 96,
+    flexDirection: "row", alignItems: "center", gap: 6,
+    backgroundColor: theme.primary, borderRadius: 10,
+    paddingHorizontal: 10, paddingVertical: 8, minWidth: 60, maxWidth: 104,
     justifyContent: "center",
   },
-  transitBadgeText: { color: "#fff", fontSize: 13, fontWeight: "800" },
-  transitHeadsign: { color: theme.textPrimary, fontSize: 14, fontWeight: "700" },
-  transitStop: { color: theme.textSecondary, fontSize: 12, marginTop: 2 },
-  transitWhenWrap: { alignItems: "flex-end", minWidth: 72 },
-  transitWhen: { color: theme.textPrimary, fontSize: 14, fontWeight: "800" },
-  transitSubRow: { flexDirection: "row", alignItems: "center", gap: 8, marginTop: 2, flexWrap: "wrap" },
-  transitTowardText: { color: theme.primary, fontSize: 12, fontWeight: "700", maxWidth: 180 },
-  transitUpdated: { color: theme.textMuted, fontSize: 11 },
+  transitBadgeText: { color: "#fff", fontSize: 15, fontWeight: "800" },
+  transitHeadsign: { color: theme.textPrimary, fontSize: 15.5, fontWeight: "800", letterSpacing: -0.2 },
+  transitRouteLong: { color: theme.textSecondary, fontSize: 12.5, marginTop: 1 },
+  transitMetaRow: { flexDirection: "row", alignItems: "center", gap: 4, marginTop: 4 },
+  transitStop: { color: theme.textSecondary, fontSize: 12.5, flex: 1 },
+  transitWalk: { color: theme.textMuted, fontSize: 12 },
+  transitWhenWrap: { alignItems: "flex-end", minWidth: 80, gap: 2 },
+  transitWhen: { color: theme.textPrimary, fontSize: 19, fontWeight: "800", letterSpacing: -0.5 },
+  transitSched: { color: theme.textMuted, fontSize: 11 },
+  transitSubRow: { flexDirection: "row", alignItems: "center", gap: 8, marginTop: 3, flexWrap: "wrap" },
+  transitTowardText: { color: theme.primary, fontSize: 12.5, fontWeight: "700", maxWidth: 200 },
+  transitUpdated: { color: theme.textMuted, fontSize: 11.5 },
   transitScopeChip: {
     flexDirection: "row", alignItems: "center", gap: 6,
-    alignSelf: "flex-start", marginBottom: 8,
+    alignSelf: "flex-start", marginTop: 12, marginBottom: 4,
     backgroundColor: theme.surfaceAlt, borderRadius: 999,
     borderWidth: 1, borderColor: theme.border,
-    paddingHorizontal: 10, paddingVertical: 6,
+    paddingHorizontal: 12, paddingVertical: 8,
   },
-  transitScopeText: { color: theme.textSecondary, fontSize: 11, fontWeight: "600" },
-  transitLiveRow: { flexDirection: "row", alignItems: "center", gap: 4, marginTop: 2 },
-  transitLiveDot: { width: 6, height: 6, borderRadius: 3, backgroundColor: theme.success },
-  transitLiveText: { color: theme.success, fontSize: 10, fontWeight: "700" },
+  transitScopeText: { color: theme.textSecondary, fontSize: 12, fontWeight: "600" },
+  transitLiveRow: { flexDirection: "row", alignItems: "center", gap: 4, marginTop: 1 },
+  transitLiveDot: { width: 7, height: 7, borderRadius: 3.5, backgroundColor: theme.success },
+  transitLiveText: { color: theme.success, fontSize: 11, fontWeight: "700" },
 });

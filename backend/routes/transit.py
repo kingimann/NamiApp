@@ -90,7 +90,9 @@ def _delay_seconds(dep: dict) -> Optional[int]:
     return None
 
 
-async def _departures_for_stop(client: httpx.AsyncClient, onestop_id: str) -> list:
+async def _departures_for_stop(
+    client: httpx.AsyncClient, onestop_id: str, stop_distance: Optional[float] = None,
+) -> list:
     try:
         resp = await client.get(
             f"{TRANSITLAND_BASE}/stops/{onestop_id}/departures",
@@ -117,6 +119,7 @@ async def _departures_for_stop(client: httpx.AsyncClient, onestop_id: str) -> li
             d = dep.get("departure") or {}
             out.append({
                 "stop_name": stop_name,
+                "stop_distance": stop_distance,
                 "route": short or long or "—",
                 "route_long": long,
                 "route_id": route.get("onestop_id"),
@@ -201,8 +204,10 @@ async def transit_nearby(
         ]
 
         # Fetch departures for the closest few stops concurrently.
-        ids = [s["onestop_id"] for s in stop_list[:6]]
-        results = await asyncio.gather(*[_departures_for_stop(client, i) for i in ids])
+        near_stops = stop_list[:6]
+        results = await asyncio.gather(
+            *[_departures_for_stop(client, s["onestop_id"], s.get("distance")) for s in near_stops]
+        )
 
     departures: list = []
     for r in results:
