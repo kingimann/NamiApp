@@ -18,7 +18,7 @@ type Mode = "signin" | "signup";
 
 export default function LoginScreen() {
   const router = useRouter();
-  const { user, loginLocal, registerLocal } = useAuth();
+  const { user, loginLocal, registerLocal, applySessionToken } = useAuth();
   const { shortcuts, ready: navReady } = useNavBar();
   const [mode, setMode] = useState<Mode>("signin");
   const [busy, setBusy] = useState(false);
@@ -33,21 +33,42 @@ export default function LoginScreen() {
   // Forgot-password flow
   const [forgot, setForgot] = useState(false);
   const [resetStage, setResetStage] = useState<"request" | "code">("request");
+  const [resetVia, setResetVia] = useState<"email" | "sms">("email");
   const [resetEmail, setResetEmail] = useState("");
   const [resetCode, setResetCode] = useState("");
   const [newPassword, setNewPassword] = useState("");
+  // Two-factor challenge (after a correct password on a 2FA account)
+  const [twofa, setTwofa] = useState<{ identifier: string; masked: string } | null>(null);
+  const [twofaCode, setTwofaCode] = useState("");
+  // Phone OTP login
+  const [phoneMode, setPhoneMode] = useState(false);
+  const [loginPhone, setLoginPhone] = useState("");
+  const [phoneStage, setPhoneStage] = useState<"request" | "code">("request");
+  const [phoneCode, setPhoneCode] = useState("");
 
   const sendResetCode = async () => {
     setBusy(true); setError(null); setInfo(null);
     try {
-      if (!resetEmail.trim()) throw new Error("Enter your account email");
-      const r = await api.forgotPassword(resetEmail.trim());
-      if (!r.email_configured) {
-        setError("Email isn't set up on this server, so a reset code can't be sent. Ask the site owner to reset your password.");
-        return;
+      if (!resetEmail.trim()) throw new Error(resetVia === "sms" ? "Enter your email, username, or phone" : "Enter your account email");
+      if (resetVia === "sms") {
+        const r = await api.forgotPasswordSms(resetEmail.trim());
+        if (!r.sms_configured && !r.dev_code) {
+          setError("SMS isn't set up on this server. Try the email option or ask the site owner to reset your password.");
+          return;
+        }
+        setResetStage("code");
+        setInfo(r.dev_code
+          ? `SMS isn't configured — your code is ${r.dev_code}.`
+          : `If a matching account has a verified phone, a code was texted to ${r.masked_phone || "it"}.`);
+      } else {
+        const r = await api.forgotPassword(resetEmail.trim());
+        if (!r.email_configured) {
+          setError("Email isn't set up on this server, so a reset code can't be sent. Try the text option or ask the site owner to reset your password.");
+          return;
+        }
+        setResetStage("code");
+        setInfo("If an account exists for that email, a 6-digit code is on its way. Enter it below with a new password.");
       }
-      setResetStage("code");
-      setInfo("If an account exists for that email, a 6-digit code is on its way. Enter it below with a new password.");
     } catch (e: any) { setError(e?.message || String(e)); }
     finally { setBusy(false); }
   };
@@ -55,12 +76,46 @@ export default function LoginScreen() {
   const doReset = async () => {
     setBusy(true); setError(null);
     try {
-      if (!resetCode.trim()) throw new Error("Enter the code from your email");
+      if (!resetCode.trim()) throw new Error("Enter the code we sent you");
       if (newPassword.length < 8) throw new Error("Password must be at least 8 characters");
-      await api.resetPassword(resetEmail.trim(), resetCode.trim(), newPassword);
+      if (resetVia === "sms") await api.resetPasswordCode(resetEmail.trim(), resetCode.trim(), newPassword);
+      else await api.resetPassword(resetEmail.trim(), resetCode.trim(), newPassword);
       setForgot(false); setResetStage("request"); setMode("signin");
       setIdentifier(resetEmail.trim()); setPassword(""); setResetCode(""); setNewPassword("");
       setInfo("Password updated — sign in with your new password.");
+    } catch (e: any) { setError(e?.message || String(e)); }
+    finally { setBusy(false); }
+  };
+
+  const submitTwofa = async () => {
+    setBusy(true); setError(null);
+    try {
+      if (!twofa) return;
+      if (!twofaCode.trim()) throw new Error("Enter the code we texted you");
+      const { session_token } = await api.login2fa(twofa.identifier, twofaCode.trim());
+      await applySessionToken(session_token);
+    } catch (e: any) { setError(e?.message || String(e)); }
+    finally { setBusy(false); }
+  };
+
+  const sendPhoneLoginCode = async () => {
+    setBusy(true); setError(null); setInfo(null);
+    try {
+      if (!loginPhone.trim()) throw new Error("Enter your phone number (e.g. +14155551234)");
+      const r = await api.loginPhoneStart(loginPhone.trim());
+      if (!r.exists) throw new Error("No account with a verified phone for that number. Sign in with your password instead.");
+      setPhoneStage("code"); setPhoneCode("");
+      setInfo(r.dev_code ? `SMS isn't configured — your code is ${r.dev_code}.` : `Code sent to ${r.masked_phone || "your phone"}.`);
+    } catch (e: any) { setError(e?.message || String(e)); }
+    finally { setBusy(false); }
+  };
+
+  const verifyPhoneLogin = async () => {
+    setBusy(true); setError(null);
+    try {
+      if (!phoneCode.trim()) throw new Error("Enter the code we texted you");
+      const { session_token } = await api.loginPhoneVerify(loginPhone.trim(), phoneCode.trim());
+      await applySessionToken(session_token);
     } catch (e: any) { setError(e?.message || String(e)); }
     finally { setBusy(false); }
   };
@@ -79,7 +134,15 @@ export default function LoginScreen() {
     try {
       if (mode === "signin") {
         if (!identifier.trim() || !password) throw new Error("Enter email/username and password");
-        await loginLocal(identifier.trim(), password);
+        const res = await loginLocal(identifier.trim(), password);
+        if (res && "twofa_required" in res) {
+          // Account has SMS two-factor on — collect the texted code next.
+          setTwofa({ identifier: res.identifier, masked: res.masked_phone });
+          setTwofaCode("");
+          setInfo(res.dev_code
+            ? `SMS isn't configured — your login code is ${res.dev_code}.`
+            : `We texted a login code to ${res.masked_phone}.`);
+        }
       } else {
         if (!email.trim() || !password || !name.trim() || !username.trim())
           throw new Error("All fields required");
@@ -105,7 +168,55 @@ export default function LoginScreen() {
             <Text style={styles.tagline}>Sign in to your account</Text>
 
             <View style={styles.card}>
-              {forgot ? (
+              {twofa ? (
+                <>
+                  <Text style={styles.resetTitle}>Two-factor verification</Text>
+                  {!!error && (
+                    <View style={styles.errorBox} testID="auth-error">
+                      <Ionicons name="alert-circle" size={16} color="#FCA5A5" />
+                      <Text style={styles.errorText}>{error}</Text>
+                    </View>
+                  )}
+                  {!!info && <Text style={styles.infoText}>{info}</Text>}
+                  <Text style={styles.helpText}>Enter the 6-digit code we texted to {twofa.masked}.</Text>
+                  <TextInput style={styles.input} placeholder="6-digit code" placeholderTextColor={theme.textMuted} value={twofaCode} onChangeText={(t) => setTwofaCode(t.replace(/[^0-9]/g, ""))} keyboardType="number-pad" maxLength={6} testID="twofa-code" />
+                  <TouchableOpacity style={[styles.submitBtn, busy && { opacity: 0.5 }]} onPress={submitTwofa} disabled={busy} testID="twofa-submit">
+                    {busy ? <ActivityIndicator color="#fff" /> : <Text style={styles.submitText}>Verify & sign in</Text>}
+                  </TouchableOpacity>
+                  <TouchableOpacity onPress={() => { setTwofa(null); setError(null); setInfo(null); setPassword(""); }} testID="twofa-back">
+                    <Text style={styles.forgotLink}>← Back to sign in</Text>
+                  </TouchableOpacity>
+                </>
+              ) : phoneMode ? (
+                <>
+                  <Text style={styles.resetTitle}>Sign in with phone</Text>
+                  {!!error && (
+                    <View style={styles.errorBox} testID="auth-error">
+                      <Ionicons name="alert-circle" size={16} color="#FCA5A5" />
+                      <Text style={styles.errorText}>{error}</Text>
+                    </View>
+                  )}
+                  {!!info && <Text style={styles.infoText}>{info}</Text>}
+                  {phoneStage === "request" ? (
+                    <>
+                      <TextInput style={styles.input} placeholder="Phone number (e.g. +14155551234)" placeholderTextColor={theme.textMuted} value={loginPhone} onChangeText={setLoginPhone} keyboardType="phone-pad" autoCapitalize="none" testID="login-phone" />
+                      <TouchableOpacity style={[styles.submitBtn, busy && { opacity: 0.5 }]} onPress={sendPhoneLoginCode} disabled={busy} testID="login-phone-send">
+                        {busy ? <ActivityIndicator color="#fff" /> : <Text style={styles.submitText}>Text me a code</Text>}
+                      </TouchableOpacity>
+                    </>
+                  ) : (
+                    <>
+                      <TextInput style={styles.input} placeholder="6-digit code" placeholderTextColor={theme.textMuted} value={phoneCode} onChangeText={(t) => setPhoneCode(t.replace(/[^0-9]/g, ""))} keyboardType="number-pad" maxLength={6} testID="login-phone-code" />
+                      <TouchableOpacity style={[styles.submitBtn, busy && { opacity: 0.5 }]} onPress={verifyPhoneLogin} disabled={busy} testID="login-phone-verify">
+                        {busy ? <ActivityIndicator color="#fff" /> : <Text style={styles.submitText}>Verify & sign in</Text>}
+                      </TouchableOpacity>
+                    </>
+                  )}
+                  <TouchableOpacity onPress={() => { setPhoneMode(false); setPhoneStage("request"); setError(null); setInfo(null); }} testID="login-phone-back">
+                    <Text style={styles.forgotLink}>← Back to sign in</Text>
+                  </TouchableOpacity>
+                </>
+              ) : forgot ? (
                 <>
                   <Text style={styles.resetTitle}>Reset your password</Text>
                   {!!error && (
@@ -115,9 +226,19 @@ export default function LoginScreen() {
                     </View>
                   )}
                   {!!info && <Text style={styles.infoText}>{info}</Text>}
+                  {resetStage === "request" && (
+                    <View style={styles.segRow}>
+                      <TouchableOpacity onPress={() => setResetVia("email")} style={[styles.seg, resetVia === "email" && styles.segActive]} testID="reset-via-email">
+                        <Text style={[styles.segText, resetVia === "email" && { color: "#fff" }]}>Email</Text>
+                      </TouchableOpacity>
+                      <TouchableOpacity onPress={() => setResetVia("sms")} style={[styles.seg, resetVia === "sms" && styles.segActive]} testID="reset-via-sms">
+                        <Text style={[styles.segText, resetVia === "sms" && { color: "#fff" }]}>Text (SMS)</Text>
+                      </TouchableOpacity>
+                    </View>
+                  )}
                   {resetStage === "request" ? (
                     <>
-                      <TextInput style={styles.input} placeholder="Your account email" placeholderTextColor={theme.textMuted} value={resetEmail} onChangeText={setResetEmail} keyboardType="email-address" autoCapitalize="none" testID="reset-email" />
+                      <TextInput style={styles.input} placeholder={resetVia === "sms" ? "Email, username, or phone" : "Your account email"} placeholderTextColor={theme.textMuted} value={resetEmail} onChangeText={setResetEmail} keyboardType={resetVia === "sms" ? "default" : "email-address"} autoCapitalize="none" testID="reset-email" />
                       <TouchableOpacity style={[styles.submitBtn, busy && { opacity: 0.5 }]} onPress={sendResetCode} disabled={busy} testID="reset-send">
                         {busy ? <ActivityIndicator color="#fff" /> : <Text style={styles.submitText}>Send reset code</Text>}
                       </TouchableOpacity>
@@ -183,9 +304,14 @@ export default function LoginScreen() {
               </TouchableOpacity>
 
               {mode === "signin" && (
-                <TouchableOpacity onPress={() => { setForgot(true); setError(null); setInfo(null); setResetEmail(identifier.includes("@") ? identifier.trim() : ""); }} testID="forgot-link">
-                  <Text style={styles.forgotLink}>Forgot password?</Text>
-                </TouchableOpacity>
+                <>
+                  <TouchableOpacity onPress={() => { setPhoneMode(true); setError(null); setInfo(null); setPhoneStage("request"); }} testID="phone-login-link">
+                    <Text style={styles.forgotLink}>Sign in with phone instead</Text>
+                  </TouchableOpacity>
+                  <TouchableOpacity onPress={() => { setForgot(true); setError(null); setInfo(null); setResetEmail(identifier.includes("@") ? identifier.trim() : ""); }} testID="forgot-link">
+                    <Text style={styles.forgotLink}>Forgot password?</Text>
+                  </TouchableOpacity>
+                </>
               )}
               </>
               )}
@@ -231,6 +357,11 @@ const styles = StyleSheet.create({
   link: { color: theme.primary, fontWeight: "700" },
   resetTitle: { color: "#fff", fontSize: 17, fontWeight: "800", textAlign: "center", marginBottom: 2 },
   infoText: { color: theme.primary, fontSize: 12.5, lineHeight: 18, fontWeight: "600" },
+  helpText: { color: theme.textSecondary, fontSize: 12.5, lineHeight: 18 },
   forgotLink: { color: theme.primary, fontSize: 13, fontWeight: "700", textAlign: "center", marginTop: 10 },
+  segRow: { flexDirection: "row", gap: 6, padding: 4, backgroundColor: theme.surface, borderRadius: 12, borderWidth: 1, borderColor: theme.border },
+  seg: { flex: 1, paddingVertical: 8, borderRadius: 9, alignItems: "center" },
+  segActive: { backgroundColor: theme.primary },
+  segText: { color: theme.textSecondary, fontWeight: "700", fontSize: 12.5 },
 });
 

@@ -37,6 +37,46 @@ export default function AccountScreen() {
   const [codeSent, setCodeSent] = useState(false);
   const [code, setCode] = useState("");
 
+  // Security / notifications (SMS-backed)
+  const [secBusy, setSecBusy] = useState(false);
+  const [secMsg, setSecMsg] = useState<Status>(null);
+  const [disablePw, setDisablePw] = useState("");
+  const [askDisable2fa, setAskDisable2fa] = useState(false);
+
+  const toggle2fa = async (enable: boolean) => {
+    setSecMsg(null);
+    if (enable && !user?.phone_verified) {
+      setSecMsg({ kind: "err", text: "Verify your phone number first to enable two-factor." });
+      return;
+    }
+    if (!enable && !askDisable2fa) { setAskDisable2fa(true); return; }
+    setSecBusy(true);
+    try {
+      await api.setTwofa(enable, enable ? undefined : disablePw);
+      await refresh();
+      setAskDisable2fa(false); setDisablePw("");
+      setSecMsg({ kind: "ok", text: enable ? "Two-factor turned on." : "Two-factor turned off." });
+    } catch (e: any) {
+      setSecMsg({ kind: "err", text: cleanErr(e) });
+    } finally { setSecBusy(false); }
+  };
+
+  const toggleSmsNotifs = async (enable: boolean) => {
+    setSecMsg(null);
+    if (enable && !user?.phone_verified) {
+      setSecMsg({ kind: "err", text: "Verify your phone number first to get SMS notifications." });
+      return;
+    }
+    setSecBusy(true);
+    try {
+      await api.updateMe({ sms_notifications: enable });
+      await refresh();
+      setSecMsg({ kind: "ok", text: enable ? "SMS notifications on." : "SMS notifications off." });
+    } catch (e: any) {
+      setSecMsg({ kind: "err", text: cleanErr(e) });
+    } finally { setSecBusy(false); }
+  };
+
   const saveEmail = async () => {
     setEmailMsg(null);
     if (!newEmail.trim()) return setEmailMsg({ kind: "err", text: "Enter a new email." });
@@ -203,6 +243,58 @@ export default function AccountScreen() {
             </TouchableOpacity>
           )}
         </View>
+
+        {/* Security & SMS (need a verified phone) */}
+        <Text style={styles.groupTitle}>Security & SMS</Text>
+        <View style={styles.group}>
+          <View style={styles.toggleRow}>
+            <View style={{ flex: 1, paddingRight: 12 }}>
+              <Text style={styles.toggleTitle}>Two-factor (SMS)</Text>
+              <Text style={styles.hint}>Require a texted code when signing in.</Text>
+            </View>
+            <TouchableOpacity
+              onPress={() => toggle2fa(!user?.twofa_enabled)}
+              disabled={secBusy}
+              testID="account-2fa-toggle"
+              style={[styles.switch, user?.twofa_enabled && styles.switchOn]}
+            >
+              <View style={[styles.knob, user?.twofa_enabled && styles.knobOn]} />
+            </TouchableOpacity>
+          </View>
+
+          {askDisable2fa && user?.twofa_enabled && (
+            <>
+              <TextInput
+                style={[styles.input, { marginTop: 10 }]}
+                placeholder="Current password to turn off" placeholderTextColor={theme.textMuted}
+                value={disablePw} onChangeText={setDisablePw} secureTextEntry testID="account-2fa-disable-pw"
+              />
+              <TouchableOpacity style={[styles.btn, styles.btnGhost, secBusy && styles.btnDim]} onPress={() => toggle2fa(false)} disabled={secBusy} testID="account-2fa-disable">
+                {secBusy ? <ActivityIndicator color={theme.primary} /> : <Text style={[styles.btnText, { color: theme.primary }]}>Turn off two-factor</Text>}
+              </TouchableOpacity>
+            </>
+          )}
+
+          <View style={[styles.toggleRow, { marginTop: 14 }]}>
+            <View style={{ flex: 1, paddingRight: 12 }}>
+              <Text style={styles.toggleTitle}>SMS notifications</Text>
+              <Text style={styles.hint}>Text me about messages, money, and friend requests.</Text>
+            </View>
+            <TouchableOpacity
+              onPress={() => toggleSmsNotifs(!user?.sms_notifications)}
+              disabled={secBusy}
+              testID="account-sms-toggle"
+              style={[styles.switch, user?.sms_notifications && styles.switchOn]}
+            >
+              <View style={[styles.knob, user?.sms_notifications && styles.knobOn]} />
+            </TouchableOpacity>
+          </View>
+
+          {!user?.phone_verified && (
+            <Text style={[styles.hint, { marginTop: 10 }]}>Verify your phone number above to use these.</Text>
+          )}
+          {secMsg && <Text style={secMsg.kind === "ok" ? styles.ok : styles.err}>{secMsg.text}</Text>}
+        </View>
       </ScrollView>
     </SafeAreaView>
   );
@@ -247,6 +339,16 @@ const styles = StyleSheet.create({
     ...(Platform.OS === "web" ? ({ outlineStyle: "none" } as object) : {}),
   },
   hint: { color: theme.textMuted, fontSize: 12.5, lineHeight: 17 },
+  toggleRow: { flexDirection: "row", alignItems: "center" },
+  toggleTitle: { color: theme.textPrimary, fontSize: 14, fontWeight: "700" },
+  switch: {
+    width: 48, height: 28, borderRadius: 14, padding: 3,
+    backgroundColor: theme.surfaceAlt, borderWidth: 1, borderColor: theme.border,
+    justifyContent: "center",
+  },
+  switchOn: { backgroundColor: theme.primary, borderColor: theme.primary },
+  knob: { width: 20, height: 20, borderRadius: 10, backgroundColor: "#fff" },
+  knobOn: { alignSelf: "flex-end" },
   err: { color: theme.error, fontSize: 13, fontWeight: "600" },
   ok: { color: theme.primary, fontSize: 13, fontWeight: "600" },
   btn: {

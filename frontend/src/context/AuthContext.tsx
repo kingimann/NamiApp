@@ -8,7 +8,7 @@ import React, {
 } from "react";
 import { Platform } from "react-native";
 import * as Linking from "expo-linking";
-import { api, SESSION_TOKEN_KEY, User } from "@/src/api/client";
+import { api, SESSION_TOKEN_KEY, User, LoginResponse } from "@/src/api/client";
 import { storage } from "@/src/utils/storage";
 import { ensureKeyPair } from "@/src/utils/e2e";
 
@@ -18,7 +18,7 @@ type AuthState = {
   signOut: () => Promise<void>;
   applySessionToken: (token: string) => Promise<boolean>;
   refresh: () => Promise<void>;
-  loginLocal: (identifier: string, password: string) => Promise<void>;
+  loginLocal: (identifier: string, password: string) => Promise<LoginResponse>;
   registerLocal: (email: string, password: string, name: string, username: string) => Promise<void>;
 };
 
@@ -87,9 +87,13 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({
   }, []);
 
   const loginLocal = useCallback(async (identifier: string, password: string) => {
-    const { session_token, user: u } = await api.loginLocal({ identifier, password });
-    await storage.secureSet(SESSION_TOKEN_KEY, session_token);
-    setUser(u);
+    const res = await api.loginLocal({ identifier, password });
+    // Two-factor accounts get a challenge instead of a session — let the caller
+    // collect the SMS code and finish via api.login2fa + applySessionToken.
+    if ("twofa_required" in res) return res;
+    await storage.secureSet(SESSION_TOKEN_KEY, res.session_token);
+    setUser(res.user);
+    return res;
   }, []);
 
   const registerLocal = useCallback(async (email: string, password: string, name: string, username: string) => {
