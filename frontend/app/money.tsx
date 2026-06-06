@@ -63,7 +63,7 @@ export default function MoneyScreen() {
   const [bal, setBal] = useState<WalletBalance | null>(null);
   const [feeCents, setFeeCents] = useState(0);
   const [history, setHistory] = useState<MoneyRequest[]>([]);
-  const [showHistory, setShowHistory] = useState(false);
+  const [showHistory, setShowHistory] = useState(true);
   const load = useCallback(async () => {
     try {
       const [s, r, t] = await Promise.all([api.getMoneySecurity(), api.listMoneyRequests(), api.listMoneyTransfers()]);
