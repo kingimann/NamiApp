@@ -465,6 +465,12 @@ export const api = {
   // React to a post with any emoji (toggles off if it's already your reaction).
   reactToPost: (id: string, emoji: string) =>
     request<Post>(`/posts/${id}/react`, { method: "POST", body: JSON.stringify({ emoji }) }),
+  // Detailed analytics for one of your posts (author/mod/admin only).
+  postAnalytics: (id: string) =>
+    request<PostAnalytics>(`/posts/${id}/analytics`),
+  // "Not interested" — hide this post and feed fewer like it.
+  notInterested: (id: string) =>
+    request<{ ok: boolean }>(`/posts/${id}/not-interested`, { method: "POST" }),
   promotePost: (id: string, days = 7, opts?: { budget?: number; cpc?: number }) =>
     request<Post>(`/posts/${id}/promote`, { method: "POST", body: JSON.stringify({ days, ...(opts || {}) }) }),
   getCampaigns: () => request<{ campaigns: AdCampaign[] }>("/ads/campaigns"),
@@ -1133,6 +1139,8 @@ export type Post = {
   reactions_total?: number;
   my_reaction?: string | null;
   quotes_count?: number;
+  // note: PostAnalytics type is declared after the Post type below
+
   bookmarks_count?: number;
   views_count?: number;
   likes_disabled?: boolean;
@@ -1147,6 +1155,23 @@ export type Post = {
 };
 export type PostViewer = { user_id: string; name: string; username?: string | null; picture?: string | null; verified?: boolean; viewed_at?: string };
 export type PostViewers = { count: number; unique: number; viewers: PostViewer[] };
+export type PostAnalytics = {
+  post_id: string;
+  created_at?: string;
+  impressions: number;
+  unique_viewers: number;
+  clicks: number;
+  reactions_total: number;
+  reactions: { emoji: string; count: number }[];
+  comments: number;
+  reposts: number;
+  quotes: number;
+  bookmarks: number;
+  interactions: number;
+  engagement_rate: number; // interactions / impressions
+  promoted: boolean;
+  ad?: { impressions: number; clicks: number; spent: number; budget?: number | null; cpc?: number | null } | null;
+};
 export type PostCreate = {
   text?: string; parent_id?: string;
   quote_of?: string;
