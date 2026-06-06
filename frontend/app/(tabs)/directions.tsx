@@ -1146,23 +1146,23 @@ const styles = StyleSheet.create({
     textShadowColor: "rgba(0,0,0,0.7)", textShadowRadius: 6,
   },
 
-  topWrap: { paddingHorizontal: 16, paddingTop: 8 },
+  topWrap: { paddingHorizontal: 16, paddingTop: 6 },
   card: {
     backgroundColor: "rgba(15,15,17,0.97)",
-    borderRadius: 20,
+    borderRadius: 16,
     borderWidth: 1, borderColor: theme.border,
-    paddingHorizontal: 14, paddingVertical: 10,
+    paddingHorizontal: 14, paddingVertical: 7,
     shadowColor: "#000", shadowOpacity: 0.4, shadowRadius: 12, elevation: 6,
     position: "relative",
   },
   cardTop: { flexDirection: "row", alignItems: "center", gap: 8 },
   swapBtn: {
-    width: 36, height: 36, borderRadius: 18,
+    width: 30, height: 30, borderRadius: 15,
     backgroundColor: theme.surfaceAlt, borderWidth: 1, borderColor: theme.border,
     alignItems: "center", justifyContent: "center",
   },
   cardActions: { flexDirection: "row", alignItems: "center", justifyContent: "space-between" },
-  row: { flexDirection: "row", alignItems: "center", gap: 10, paddingVertical: 13 },
+  row: { flexDirection: "row", alignItems: "center", gap: 10, paddingVertical: 9 },
   dot: { width: 10, height: 10, borderRadius: 5 },
   input: {
     flex: 1, color: theme.textPrimary, fontSize: 14,
@@ -1171,7 +1171,7 @@ const styles = StyleSheet.create({
   divider: { height: StyleSheet.hairlineWidth, backgroundColor: theme.border, marginLeft: 22 },
   addStopBtn: {
     flexDirection: "row", alignItems: "center", gap: 6,
-    paddingVertical: 12, paddingLeft: 22,
+    paddingVertical: 8, paddingLeft: 22,
   },
   addStopText: { color: theme.primary, fontSize: 13, fontWeight: "700" },
 
@@ -1239,26 +1239,26 @@ const styles = StyleSheet.create({
   grabberHint: { flexDirection: "row", alignItems: "center", gap: 4 },
   grabberHintText: { color: theme.textSecondary, fontSize: 12.5, fontWeight: "700" },
   navCollapsedLine: { color: theme.textSecondary, fontSize: 14, fontWeight: "600", textAlign: "center", paddingVertical: 2 },
-  profileRow: { gap: 10, paddingRight: 16 },
+  profileRow: { gap: 8, paddingRight: 16 },
   profileChip: {
-    height: 42, flexShrink: 0,
-    flexDirection: "row", alignItems: "center", gap: 6,
-    paddingHorizontal: 16, borderRadius: 21,
+    height: 34, flexShrink: 0,
+    flexDirection: "row", alignItems: "center", gap: 5,
+    paddingHorizontal: 13, borderRadius: 17,
     backgroundColor: theme.surface, borderWidth: 1, borderColor: theme.border,
   },
   profileChipActive: { borderColor: theme.primary },
-  profileLabel: { fontSize: 13.5, fontWeight: "600" },
+  profileLabel: { fontSize: 12.5, fontWeight: "600" },
 
   routeOptions: { flexDirection: "row", gap: 12 },
   routeOption: {
-    flex: 1, backgroundColor: theme.surface, borderRadius: 14,
+    flex: 1, backgroundColor: theme.surface, borderRadius: 12,
     borderWidth: 1, borderColor: theme.border,
-    paddingVertical: 14, paddingHorizontal: 12, alignItems: "center",
+    paddingVertical: 9, paddingHorizontal: 12, alignItems: "center",
   },
   routeOptionActive: { borderColor: theme.primary, backgroundColor: theme.surfaceAlt },
-  routeOptDur: { color: theme.textPrimary, fontSize: 16, fontWeight: "800" },
-  routeOptDist: { color: theme.textSecondary, fontSize: 12, marginTop: 1 },
-  routeOptTag: { color: theme.textMuted, fontSize: 10.5, fontWeight: "700", marginTop: 3, textTransform: "uppercase", letterSpacing: 0.3 },
+  routeOptDur: { color: theme.textPrimary, fontSize: 14.5, fontWeight: "800" },
+  routeOptDist: { color: theme.textSecondary, fontSize: 11, marginTop: 1 },
+  routeOptTag: { color: theme.textMuted, fontSize: 9.5, fontWeight: "700", marginTop: 2, textTransform: "uppercase", letterSpacing: 0.3 },
 
   routeBox: {
     flexDirection: "row", justifyContent: "space-between", alignItems: "center",
@@ -1286,17 +1286,17 @@ const styles = StyleSheet.create({
   secondaryBtnText: { color: theme.primary, fontSize: 14, fontWeight: "700" },
 
   // Apple-style GO row
-  goRow: { flexDirection: "row", alignItems: "center", gap: 16 },
-  goDur: { color: theme.textPrimary, fontSize: 27, fontWeight: "800", letterSpacing: -0.6 },
-  goSub: { color: theme.textSecondary, fontSize: 14, marginTop: 2, fontWeight: "500" },
+  goRow: { flexDirection: "row", alignItems: "center", gap: 12 },
+  goDur: { color: theme.textPrimary, fontSize: 20, fontWeight: "800", letterSpacing: -0.5 },
+  goSub: { color: theme.textSecondary, fontSize: 12.5, marginTop: 1, fontWeight: "500" },
   goBtn: {
-    width: 74, height: 74, borderRadius: 37,
+    width: 56, height: 56, borderRadius: 28,
     backgroundColor: theme.primary,
     alignItems: "center", justifyContent: "center",
   },
-  goText: { color: "#fff", fontSize: 22, fontWeight: "800", letterSpacing: 0.5 },
-  goLinks: { flexDirection: "row", alignItems: "center", gap: 10 },
-  linkText: { color: theme.primary, fontSize: 14, fontWeight: "600" },
+  goText: { color: "#fff", fontSize: 17, fontWeight: "800", letterSpacing: 0.5 },
+  goLinks: { flexDirection: "row", alignItems: "center", gap: 8 },
+  linkText: { color: theme.primary, fontSize: 12.5, fontWeight: "600" },
   linkDot: { color: theme.textMuted, fontSize: 14 },
 
   // Navigation footer
