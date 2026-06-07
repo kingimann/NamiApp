@@ -15,6 +15,7 @@ import { theme } from "@/src/theme";
 import { SidebarMenuButton } from "@/src/components/LeftSidebar";
 import RestrictionBanner from "@/src/components/RestrictionBanner";
 import FadeIn from "@/src/components/FadeIn";
+import BouncyPressable from "@/src/components/BouncyPressable";
 
 const CATEGORIES = [
   { key: "all", label: "All" },
@@ -501,14 +502,14 @@ export default function MarketplaceScreen() {
         />
       )}
 
-      <TouchableOpacity
+      <BouncyPressable
         style={[styles.fab, { bottom: 16 }, marketOff && styles.fabDisabled]}
         onPress={() => { if (marketOff) return; openCompose(); }}
         disabled={marketOff}
         testID="new-listing-fab"
       >
         <Ionicons name="add" size={26} color="#fff" />
-      </TouchableOpacity>
+      </BouncyPressable>
 
       <Modal visible={composeOpen} transparent animationType="slide" onRequestClose={() => { setComposeOpen(false); setEditingId(null); }}>
         <KeyboardAvoidingView

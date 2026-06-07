@@ -14,6 +14,7 @@ import PostCard from "@/src/components/PostCard";
 import AdSlot from "@/src/components/AdSlot";
 import FadeIn from "@/src/components/FadeIn";
 import PostSkeleton from "@/src/components/PostSkeleton";
+import BouncyPressable from "@/src/components/BouncyPressable";
 import { interleaveAds, isAd } from "@/src/lib/ads";
 import PostComposer from "@/src/components/PostComposer";
 import RestrictionBanner from "@/src/components/RestrictionBanner";
@@ -353,15 +354,14 @@ export default function FeedScreen() {
         onCommented={(postId) => onCommented(postId)}
       />
 
-      <TouchableOpacity
+      <BouncyPressable
         style={[styles.fab, { bottom: 20 }, postingOff && styles.fabDisabled]}
         onPress={() => { if (postingOff) return; setEditing(null); setReplyTo(null); setComposeOpen(true); }}
         disabled={postingOff}
         testID="open-composer"
-        activeOpacity={0.9}
       >
         <Ionicons name="create" size={22} color="#fff" />
-      </TouchableOpacity>
+      </BouncyPressable>
 
       {/* Floating chat button — tap opens Chat, long-press moves it left/right. */}
       <ChatFab />

@@ -1,9 +1,10 @@
 import React, { useCallback, useState } from "react";
-import { StyleSheet, TouchableOpacity } from "react-native";
+import { StyleSheet } from "react-native";
 import { Ionicons } from "@expo/vector-icons";
 import { useFocusEffect, useRouter } from "expo-router";
 import { theme } from "@/src/theme";
 import { storage } from "@/src/utils/storage";
+import BouncyPressable from "@/src/components/BouncyPressable";
 
 export const CHAT_FAB_SIDE_KEY = "chat_fab_side"; // "left" | "right"
 
@@ -32,17 +33,16 @@ export default function ChatFab() {
   };
 
   return (
-    <TouchableOpacity
+    <BouncyPressable
       style={[styles.fab, side === "right" ? { right: 18, bottom: 90 } : { left: 18, bottom: 20 }]}
       onPress={() => router.push("/(tabs)/messages")}
       onLongPress={flip}
       delayLongPress={350}
       testID="chat-fab"
-      activeOpacity={0.9}
       accessibilityLabel="Open chat (long-press to move sides)"
     >
       <Ionicons name="chatbubbles" size={22} color={theme.primary} />
-    </TouchableOpacity>
+    </BouncyPressable>
   );
 }
 
