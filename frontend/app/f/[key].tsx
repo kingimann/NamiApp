@@ -112,6 +112,19 @@ export default function PublicFormScreen() {
                       </TouchableOpacity>
                     );
                   })
+                ) : f.type === "signature" ? (
+                  <View>
+                    <TextInput
+                      style={[styles.input, styles.sigInput]}
+                      value={values[k] || ""}
+                      onChangeText={(t) => setVal(k, t)}
+                      placeholder="Type your full name to sign"
+                      placeholderTextColor={theme.textMuted}
+                      autoCapitalize="words"
+                      testID={`pf-${k}`}
+                    />
+                    <Text style={styles.sigHint}>Typing your name here counts as your signature.</Text>
+                  </View>
                 ) : (
                   <TextInput
                     style={styles.input}
@@ -158,6 +171,8 @@ const styles = StyleSheet.create({
   chipText: { color: theme.textPrimary, fontSize: 13.5, fontWeight: "700" },
   optRow: { flexDirection: "row", alignItems: "center", gap: 10, paddingVertical: 8 },
   optText: { color: theme.textPrimary, fontSize: 15, flex: 1 },
+  sigInput: { fontStyle: "italic", fontSize: 18 },
+  sigHint: { color: theme.textMuted, fontSize: 12, marginTop: 5 },
   err: { color: theme.error, fontSize: 13.5, marginTop: 14, fontWeight: "600" },
   submit: { backgroundColor: theme.primary, borderRadius: 12, paddingVertical: 14, alignItems: "center", marginTop: 20 },
   submitText: { color: "#fff", fontWeight: "800", fontSize: 15 },

@@ -25,9 +25,10 @@ from core import db, get_current_user
 
 router = APIRouter()
 
-FIELD_TYPES = {"text", "email", "phone", "number", "textarea", "select", "checkbox", "radio", "date"}
+FIELD_TYPES = {"text", "email", "phone", "number", "textarea", "select", "checkbox", "radio", "date", "signature"}
 MAX_FIELDS = 40
 MAX_VALUE_LEN = 5000
+SIG_MAX_LEN = 400_000   # a drawn signature is a PNG data URL — much larger than a text field
 MAX_TITLE = 120
 
 # Lightweight in-memory rate limit for the public submit endpoint (single
@@ -308,7 +309,8 @@ async def public_submit(request: Request, body: FormSubmit, form: str = Query(..
     clean: dict = {}
     for f in fields:
         raw = values.get(f["id"])
-        val = (", ".join(str(x) for x in raw) if isinstance(raw, list) else ("" if raw is None else str(raw)))[:MAX_VALUE_LEN]
+        cap = SIG_MAX_LEN if f.get("type") == "signature" else MAX_VALUE_LEN
+        val = (", ".join(str(x) for x in raw) if isinstance(raw, list) else ("" if raw is None else str(raw)))[:cap]
         if f.get("required") and not val.strip():
             raise HTTPException(status_code=400, detail=f"{f.get('label') or 'A field'} is required.")
         clean[f["id"]] = val
@@ -391,6 +393,9 @@ _UNIT_HTML = """<!doctype html><html><head><meta charset="utf-8">
   textarea{min-height:96px;resize:vertical}
   .opt{display:flex;align-items:center;gap:8px;font-weight:400;margin:6px 0}
   .opt input{width:auto}
+  .sigwrap{position:relative}
+  .sig{width:100%;height:150px;border:1px solid var(--border);border-radius:var(--rad);background:var(--field);touch-action:none;display:block;cursor:crosshair}
+  .sigclear{position:absolute;top:8px;right:8px;width:auto;margin:0;background:transparent;color:var(--muted);font-size:12px;font-weight:600;padding:4px 9px;border:1px solid var(--border);border-radius:8px}
   button{margin-top:16px;width:100%;background:var(--acc);color:#fff;border:0;border-radius:var(--rad);padding:12px;font-size:15px;font-weight:700;cursor:pointer}
   button:disabled{opacity:.6}
   .hp{position:absolute;left:-9999px;width:1px;height:1px;overflow:hidden}
@@ -423,11 +428,29 @@ _UNIT_HTML = """<!doctype html><html><head><meta charset="utf-8">
       if(t==='textarea'){h+='<textarea data-fid="'+esc(fl.id)+'" placeholder="'+esc(fl.placeholder||"")+'"'+(fl.required?' required':'')+'>'+esc(pv)+'</textarea>';}
       else if(t==='select'){h+='<select data-fid="'+esc(fl.id)+'"'+(fl.required?' required':'')+'><option value="">Choose…</option>';(fl.options||[]).forEach(function(o){h+='<option'+(o===pv?' selected':'')+'>'+esc(o)+'</option>';});h+='</select>';}
       else if(t==='radio'||t==='checkbox'){(fl.options||[]).forEach(function(o){var ck=(t==='radio'?o===pv:String(pv).split(",").indexOf(o)>=0)?' checked':'';h+='<label class="opt"><input type="'+t+'" name="'+esc(fl.id)+'" value="'+esc(o)+'"'+ck+'>'+esc(o)+'</label>';});}
+      else if(t==='signature'){h+='<div class="sigwrap"><canvas class="sig" data-sig="'+esc(fl.id)+'"></canvas><button type="button" class="sigclear" data-sigclear="'+esc(fl.id)+'">Clear</button></div>';}
       else {var it=(t==='email'||t==='number'||t==='date')?t:(t==='phone'?'tel':'text');h+='<input type="'+it+'" data-fid="'+esc(fl.id)+'" placeholder="'+esc(fl.placeholder||"")+'" value="'+esc(pv)+'"'+(fl.required?' required':'')+'>';}
     });
     h+='<button type="submit">'+esc(f.submit_label||"Submit")+'</button><div id="err" class="err" style="display:none"></div></form>';
     root.innerHTML=h;
     var form=document.getElementById("nf");
+    // Wire up any signature canvases (mouse + touch drawing).
+    form.querySelectorAll('canvas[data-sig]').forEach(function(cv){
+      var ctx=cv.getContext('2d'); var r=cv.getBoundingClientRect();
+      cv.width=Math.max(1,Math.floor(r.width)); cv.height=150;
+      ctx.lineWidth=2.2; ctx.lineCap='round'; ctx.lineJoin='round'; ctx.strokeStyle=CFG.text;
+      var drawing=false, dirty=false;
+      function pos(e){var b=cv.getBoundingClientRect();var t=(e.touches&&e.touches[0])||e;return {x:t.clientX-b.left,y:t.clientY-b.top};}
+      function down(e){drawing=true;dirty=true;var p=pos(e);ctx.beginPath();ctx.moveTo(p.x,p.y);e.preventDefault();}
+      function mv(e){if(!drawing)return;var p=pos(e);ctx.lineTo(p.x,p.y);ctx.stroke();e.preventDefault();}
+      function up(){drawing=false;}
+      cv.addEventListener('mousedown',down);cv.addEventListener('mousemove',mv);window.addEventListener('mouseup',up);
+      cv.addEventListener('touchstart',down,{passive:false});cv.addEventListener('touchmove',mv,{passive:false});cv.addEventListener('touchend',up);
+      cv.__dirty=function(){return dirty;};cv.__clear=function(){ctx.clearRect(0,0,cv.width,cv.height);dirty=false;};
+    });
+    form.querySelectorAll('[data-sigclear]').forEach(function(b){
+      b.addEventListener('click',function(e){e.preventDefault();var cv=form.querySelector('canvas[data-sig="'+b.getAttribute('data-sigclear')+'"]');if(cv&&cv.__clear)cv.__clear();});
+    });
     form.addEventListener("submit",function(e){
       e.preventDefault();
       var btn=form.querySelector("button"); btn.disabled=true;
@@ -435,6 +458,7 @@ _UNIT_HTML = """<!doctype html><html><head><meta charset="utf-8">
       (f.fields||[]).forEach(function(fl){
         if(fl.type==='checkbox'){var arr=[];form.querySelectorAll('input[name="'+fl.id+'"]:checked').forEach(function(c){arr.push(c.value)});vals[fl.id]=arr;}
         else if(fl.type==='radio'){var c=form.querySelector('input[name="'+fl.id+'"]:checked');vals[fl.id]=c?c.value:"";}
+        else if(fl.type==='signature'){var sc=form.querySelector('canvas[data-sig="'+fl.id+'"]');vals[fl.id]=(sc&&sc.__dirty&&sc.__dirty())?sc.toDataURL('image/png'):"";}
         else {var el=form.querySelector('[data-fid="'+fl.id+'"]');vals[fl.id]=el?el.value:"";}
       });
       var hp=form.querySelector('input[name="_hp"]');

@@ -1,7 +1,7 @@
 import React, { useCallback, useState } from "react";
 import {
   View, Text, StyleSheet, ScrollView, TouchableOpacity, TextInput,
-  ActivityIndicator, Modal, Platform, Switch, Share, Linking,
+  ActivityIndicator, Modal, Platform, Switch, Share, Linking, Image,
 } from "react-native";
 import { SafeAreaView, useSafeAreaInsets } from "react-native-safe-area-context";
 import { Ionicons } from "@expo/vector-icons";
@@ -28,6 +28,7 @@ const TYPES: { k: FormFieldType; label: string; icon: any }[] = [
   { k: "select", label: "Dropdown", icon: "chevron-down-circle-outline" },
   { k: "radio", label: "Single choice", icon: "radio-button-on-outline" },
   { k: "checkbox", label: "Checkboxes", icon: "checkbox-outline" },
+  { k: "signature", label: "Signature", icon: "create-outline" },
 ];
 // Accent presets for the embed customizer ("" = default theme green).
 const ACCENTS = ["", "7C3AED", "0EA5E9", "F97316", "EF4444", "EAB308", "EC4899"];
@@ -378,7 +379,11 @@ export default function FormBuilderScreen() {
                     {(subFields.length ? subFields : Object.keys(s.values).map((k) => ({ id: k, label: k, type: "text" as FormFieldType }))).map((f) => (
                       <View key={f.id} style={styles.subRow}>
                         <Text style={styles.subKey}>{f.label}</Text>
-                        <Text style={styles.subVal}>{s.values[f.id || ""] || "—"}</Text>
+                        {(s.values[f.id || ""] || "").startsWith("data:image") ? (
+                          <Image source={{ uri: s.values[f.id || ""] }} style={styles.sigImg} resizeMode="contain" />
+                        ) : (
+                          <Text style={styles.subVal}>{s.values[f.id || ""] || "—"}</Text>
+                        )}
                       </View>
                     ))}
                   </View>
@@ -466,6 +471,7 @@ const styles = StyleSheet.create({
   subRow: { marginBottom: 6 },
   subKey: { color: theme.textMuted, fontSize: 11.5, fontWeight: "700", textTransform: "uppercase", letterSpacing: 0.3 },
   subVal: { color: theme.textPrimary, fontSize: 14.5, lineHeight: 20, marginTop: 1 },
+  sigImg: { width: 220, height: 90, backgroundColor: "#fff", borderRadius: 8, marginTop: 4, borderWidth: 1, borderColor: theme.border },
   pickerBackdrop: { flex: 1, backgroundColor: "rgba(0,0,0,0.5)", alignItems: "center", justifyContent: "center", padding: 28 },
   pickerCard: { width: "100%", maxWidth: 360, backgroundColor: theme.surface, borderRadius: 18, borderWidth: 1, borderColor: theme.border, paddingVertical: 8 },
   pickerTitle: { color: theme.textMuted, fontSize: 12, fontWeight: "800", textTransform: "uppercase", letterSpacing: 0.5, paddingHorizontal: 16, paddingTop: 10, paddingBottom: 6 },
