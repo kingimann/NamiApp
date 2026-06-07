@@ -1148,7 +1148,7 @@ export type Place = {
   id: string; user_id: string; title: string; notes?: string;
   longitude: number; latitude: number; address?: string; category: string; created_at: string;
 };
-export type FormFieldType = "text" | "email" | "phone" | "number" | "textarea" | "select" | "checkbox" | "radio" | "date" | "time" | "url" | "rating" | "heading" | "signature" | "photo" | "consent" | "payment";
+export type FormFieldType = "text" | "email" | "phone" | "number" | "textarea" | "select" | "checkbox" | "radio" | "date" | "time" | "url" | "address" | "password" | "rating" | "heading" | "signature" | "photo" | "consent" | "payment";
 export type FormField = {
   id?: string; type: FormFieldType; label: string; required?: boolean;
   placeholder?: string | null; options?: string[] | null; text?: string | null;
@@ -1156,10 +1156,10 @@ export type FormField = {
 };
 export type FormDef = {
   id: string; owner_id?: string; form_key: string; title: string;
-  description?: string | null; submit_label?: string; notify_email?: string | null; fields: FormField[];
+  description?: string | null; submit_label?: string; notify_email?: string | null; ai_validate?: boolean; fields: FormField[];
   submissions: number; created_at?: string;
 };
-export type FormCreate = { title: string; description?: string; submit_label?: string; notify_email?: string | null; fields: FormField[] };
+export type FormCreate = { title: string; description?: string; submit_label?: string; notify_email?: string | null; ai_validate?: boolean; fields: FormField[] };
 export type FormSubmission = { id: string; form_id: string; values: Record<string, string>; ip?: string; submitted_at: string };
 export type PlaceCreate = {
   title: string; notes?: string; longitude: number; latitude: number; address?: string; category?: string;

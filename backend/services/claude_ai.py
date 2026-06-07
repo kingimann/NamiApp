@@ -182,3 +182,42 @@ async def classify_listing_spam(title: str, description: str) -> Optional[dict]:
     if isinstance(parsed, dict):
         return {"spam": bool(parsed.get("spam")), "reason": str(parsed.get("reason") or "").strip()[:200]}
     return None
+
+
+async def validate_form_submission(fields: list, values: dict) -> list:
+    """Ask Claude whether each answer is filled out properly for its field.
+    Returns a list of human-readable issues (empty = looks good). Best-effort:
+    returns [] when disabled or on any error so it never blocks a real submission
+    unfairly."""
+    if not claude_ai_enabled():
+        return []
+    lines = []
+    for f in (fields or []):
+        t = f.get("type")
+        if t in ("heading", "payment", "signature", "photo", "consent"):
+            continue
+        v = values.get(f.get("id"), "")
+        v = str(v)[:300] if v is not None else ""
+        req = ", required" if f.get("required") else ""
+        lines.append(f'- "{f.get("label")}" (type {t}{req}): {v!r}')
+    if not lines:
+        return []
+    prompt = (
+        "You are validating a form submission. For each field, decide if the answer is "
+        "filled out properly and plausibly matches the field's label and type (an email "
+        "looks like an email, a name isn't gibberish or blank, a phone has digits, a "
+        "required field isn't empty, an address looks like an address). Be lenient — only "
+        "flag clear problems, not style.\n\n"
+        + "\n".join(lines)
+        + '\n\nReply with ONLY JSON: {"issues": ["<short message naming the field and the problem>"]}'
+        " — use an empty list if everything looks fine."
+    )
+    text = await _ask(CLAUDE_TEXT_MODEL, prompt, max_tokens=400)
+    if not text:
+        return []
+    try:
+        data = json.loads(_extract_json(text))
+        issues = data.get("issues") if isinstance(data, dict) else None
+        return [str(x)[:200] for x in (issues or [])][:12]
+    except Exception:
+        return []

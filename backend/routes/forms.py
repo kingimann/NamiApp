@@ -11,11 +11,14 @@ import csv
 import html
 import io
 import json
+import os
 import re
 import time
 import uuid
 from datetime import datetime, timezone
 from typing import List, Optional
+
+import httpx
 
 from fastapi import APIRouter, Header, HTTPException, Query, Request
 from fastapi.responses import HTMLResponse, Response
@@ -26,7 +29,8 @@ from core import db, get_current_user
 router = APIRouter()
 
 FIELD_TYPES = {"text", "email", "phone", "number", "textarea", "select", "checkbox", "radio",
-               "date", "time", "url", "rating", "heading", "signature", "photo", "consent", "payment"}
+               "date", "time", "url", "rating", "heading", "address", "password",
+               "signature", "photo", "consent", "payment"}
 MAX_FIELDS = 40
 MAX_VALUE_LEN = 5000
 SIG_MAX_LEN = 400_000     # drawn signature → PNG data URL
@@ -39,6 +43,21 @@ MAX_TITLE = 120
 _RATE: dict = {}
 RATE_MAX = 5
 RATE_WINDOW = 60.0
+
+# A more permissive limiter for address autocomplete (it fires while typing).
+_GEO_RATE: dict = {}
+GEO_MAX = 40
+
+
+def _geo_ok(ip: str) -> bool:
+    now = time.time()
+    hits = [t for t in _GEO_RATE.get(ip, []) if now - t < RATE_WINDOW]
+    if len(hits) >= GEO_MAX:
+        _GEO_RATE[ip] = hits
+        return False
+    hits.append(now)
+    _GEO_RATE[ip] = hits
+    return True
 
 
 def _client_ip(request: Request) -> str:
@@ -85,6 +104,7 @@ class FormCreate(BaseModel):
     description: Optional[str] = None
     submit_label: Optional[str] = None
     notify_email: Optional[str] = None        # send submissions here instead of the owner's account email
+    ai_validate: Optional[bool] = None        # run an AI completeness/plausibility check on each submission
     fields: List[FormField] = []
 
 
@@ -182,6 +202,7 @@ def _form_view(f: dict) -> dict:
         "title": f.get("title"), "description": f.get("description"),
         "submit_label": f.get("submit_label") or "Submit",
         "notify_email": f.get("notify_email"),
+        "ai_validate": bool(f.get("ai_validate")),
         "fields": f.get("fields") or [],
         "submissions": int(f.get("submissions", 0) or 0),
         "created_at": f.get("created_at"),
@@ -210,6 +231,7 @@ async def create_form(body: FormCreate, authorization: Optional[str] = Header(No
         "description": (body.description or "").strip()[:500] or None,
         "submit_label": (body.submit_label or "").strip()[:40] or "Submit",
         "notify_email": _clean_notify_email(body.notify_email),
+        "ai_validate": bool(body.ai_validate),
         "fields": _clean_fields(body.fields),
         "submissions": 0,
         "created_at": datetime.now(timezone.utc),
@@ -248,6 +270,7 @@ async def update_form(form_id: str, body: FormCreate, authorization: Optional[st
         "description": (body.description or "").strip()[:500] or None,
         "submit_label": (body.submit_label or "").strip()[:40] or "Submit",
         "notify_email": _clean_notify_email(body.notify_email),
+        "ai_validate": bool(body.ai_validate),
         "fields": _clean_fields(body.fields),
     }
     await db.forms.update_one({"id": form_id}, {"$set": updates})
@@ -309,6 +332,38 @@ async def public_form(form: str = Query(...)):
     return _public_form_view(doc)
 
 
+@router.get("/pub/geocode")
+async def pub_geocode(request: Request, q: str = Query(...)):
+    """Address autocomplete for form 'address' fields — proxies Mapbox forward
+    geocoding with the backend MAPBOX_TOKEN so the public form never sees a token.
+    Returns [] when MAPBOX_TOKEN isn't set (the field still works as plain text)."""
+    if not _geo_ok(_client_ip(request)):
+        return {"results": []}
+    token = os.environ.get("MAPBOX_TOKEN", "")
+    if not token or len((q or "").strip()) < 3:
+        return {"results": []}
+    try:
+        async with httpx.AsyncClient(timeout=8) as c:
+            r = await c.get(
+                "https://api.mapbox.com/search/geocode/v6/forward",
+                params={"q": q, "limit": 6, "access_token": token},
+            )
+        feats = (r.json() or {}).get("features", []) if r.status_code == 200 else []
+    except Exception:
+        feats = []
+    out = []
+    for f in feats:
+        p = f.get("properties") or {}
+        g = f.get("geometry") or {}
+        coords = g.get("coordinates") or [None, None]
+        out.append({
+            "name": p.get("name") or "",
+            "full_address": p.get("full_address") or p.get("place_formatted") or p.get("name") or "",
+            "lng": coords[0], "lat": coords[1],
+        })
+    return {"results": out}
+
+
 def _payment_field(doc: dict) -> Optional[dict]:
     for f in (doc.get("fields") or []):
         if f.get("type") == "payment":
@@ -333,9 +388,25 @@ def _clean_values(fields: list, values: dict) -> dict:
     return clean
 
 
-def _email_short(v) -> str:
+def _email_short(v, ftype: str = "") -> str:
+    if ftype == "password":
+        return "••••••" if str(v).strip() else ""
     s = str(v)
     return "[attachment]" if s.startswith("data:") else s[:500]
+
+
+async def _ai_check(doc: dict, clean: dict) -> None:
+    """When the form has AI validation on, ask Claude to confirm answers look
+    properly filled in; raise 400 listing issues so the filler can fix them."""
+    if not doc.get("ai_validate"):
+        return
+    try:
+        from services.claude_ai import validate_form_submission
+        issues = await validate_form_submission(doc.get("fields") or [], clean)
+    except Exception:
+        issues = []
+    if issues:
+        raise HTTPException(status_code=400, detail="Please review: " + "; ".join(issues))
 
 
 async def _record_submission(doc: dict, clean: dict, ip: str, payment: Optional[dict] = None) -> str:
@@ -376,7 +447,7 @@ async def _record_submission(doc: dict, clean: dict, ip: str, payment: Optional[
         if recipient:
             from services.email import send_email, email_enabled
             if email_enabled():
-                lines = "\n".join(f"- {by_id.get(k, {}).get('label', k)}: {_email_short(v)}" for k, v in clean.items())
+                lines = "\n".join(f"- {by_id.get(k, {}).get('label', k)}: {_email_short(v, by_id.get(k, {}).get('type', ''))}" for k, v in clean.items())
                 if payment:
                     lines = f"- Payment: {payment.get('currency', 'USD')} {payment.get('amount')} (paid)\n" + lines
                 send_email(recipient, f"New submission: {doc.get('title')}",
@@ -399,6 +470,7 @@ async def public_submit(request: Request, body: FormSubmit, form: str = Query(..
     if not _rate_ok(form, ip):
         raise HTTPException(status_code=429, detail="Too many submissions — wait a minute and try again.")
     clean = _clean_values(doc.get("fields") or [], body.values)
+    await _ai_check(doc, clean)
     await _record_submission(doc, clean, ip)
     return {"ok": True}
 
@@ -436,6 +508,7 @@ async def form_checkout(request: Request, body: FormSubmit, form: str = Query(..
     if not _rate_ok(form, ip):
         raise HTTPException(status_code=429, detail="Too many attempts — wait a minute.")
     clean = _clean_values(doc.get("fields") or [], body.values)
+    await _ai_check(doc, clean)
     cur = (pay.get("currency") or "USD").upper()
     if pay.get("amount_open"):
         try:
@@ -547,6 +620,10 @@ _UNIT_HTML = """<!doctype html><html><head><meta charset="utf-8">
   .sigwrap{position:relative}
   .sig{width:100%;height:150px;border:1px solid var(--border);border-radius:var(--rad);background:var(--field);touch-action:none;display:block;cursor:crosshair}
   .sigclear{position:absolute;top:8px;right:8px;width:auto;margin:0;background:transparent;color:var(--muted);font-size:12px;font-weight:600;padding:4px 9px;border:1px solid var(--border);border-radius:8px}
+  .sigtabs{display:flex;gap:6px;margin-bottom:8px}
+  .sigtab{width:auto;margin:0;background:var(--field);color:var(--muted);border:1px solid var(--border);font-size:13px;font-weight:700;padding:6px 16px;border-radius:999px;cursor:pointer}
+  .sigtab.on{background:var(--acc);color:#fff;border-color:var(--acc)}
+  .sigtype{font-style:italic;font-size:18px}
   .photo{display:flex;align-items:center;gap:12px}
   .photo input[type=file]{display:none}
   .photobtn{width:auto;margin:0;background:var(--field);color:var(--text);border:1px solid var(--border);font-size:14px;font-weight:600;padding:10px 14px;border-radius:var(--rad);cursor:pointer}
@@ -554,6 +631,9 @@ _UNIT_HTML = """<!doctype html><html><head><meta charset="utf-8">
   .consent{border:1px solid var(--border);border-radius:var(--rad);background:var(--field);max-height:170px;overflow:auto;padding:12px;font-size:13px;line-height:1.5;white-space:pre-wrap;margin-bottom:8px}
   .prog{height:5px;background:var(--border);border-radius:3px;overflow:hidden;margin:2px 0 16px}
   .prog>span{display:block;height:100%;width:0;background:var(--acc);transition:width .25s ease}
+  .addrwrap{position:relative}
+  .addrsug{position:absolute;left:0;right:0;top:100%;background:var(--field);border:1px solid var(--border);border-top:0;border-radius:0 0 var(--rad) var(--rad);z-index:5;max-height:220px;overflow:auto}
+  .addrsug .item{padding:10px 12px;cursor:pointer;font-size:14px;border-top:1px solid var(--border)}
   h3.sec{font-size:16px;font-weight:800;margin:22px 0 2px;border-top:1px solid var(--border);padding-top:16px}
   .payamt{font-size:22px;font-weight:800;color:var(--acc)}
   .rating{display:flex;gap:6px}
@@ -583,6 +663,7 @@ _UNIT_HTML = """<!doctype html><html><head><meta charset="utf-8">
   fetch(BASE+"/api/pub/form?form="+encodeURIComponent(FORM)).then(function(r){return r.json()}).then(function(f){
     if(!f||!f.fields){root.innerHTML='<div class="msg err">This form is unavailable.</div>';return;}
     var pf=CFG.prefill||{};
+    var sigMode={};
     var payFld=null;(f.fields||[]).forEach(function(fl){if(fl.type==='payment')payFld=fl;});
     var h='';
     if(!CFG.hideTitle){h+='<h2>'+esc(f.title||"Form")+'</h2>';if(f.description) h+='<p class="desc">'+esc(f.description)+'</p>';}
@@ -596,11 +677,13 @@ _UNIT_HTML = """<!doctype html><html><head><meta charset="utf-8">
       h+='<label>'+esc(fl.label)+req+'</label>';
       if(t==='textarea'){h+='<textarea data-fid="'+esc(fl.id)+'" placeholder="'+esc(fl.placeholder||"")+'"'+(fl.required?' required':'')+'>'+esc(pv)+'</textarea>';}
       else if(t==='time'||t==='url'){var ut=(t==='url')?'url':'time';h+='<input type="'+ut+'" data-fid="'+esc(fl.id)+'" placeholder="'+esc(fl.placeholder||"")+'" value="'+esc(pv)+'"'+(fl.required?' required':'')+'>';}
+      else if(t==='password'){h+='<input type="password" data-fid="'+esc(fl.id)+'" placeholder="'+esc(fl.placeholder||"")+'" autocomplete="new-password"'+(fl.required?' required':'')+'>';}
+      else if(t==='address'){h+='<div class="addrwrap"><input type="text" data-fid="'+esc(fl.id)+'" data-addr="'+esc(fl.id)+'" autocomplete="off" placeholder="'+esc(fl.placeholder||"Start typing an address")+'" value="'+esc(pv)+'"'+(fl.required?' required':'')+'><div class="addrsug" data-sug="'+esc(fl.id)+'"></div></div>';}
       else if(t==='rating'){h+='<div class="rating" data-rating="'+esc(fl.id)+'">';for(var s=1;s<=5;s++){h+='<span class="star" data-val="'+s+'">\\u2605</span>';}h+='</div>';}
       else if(t==='payment'){if(fl.amount_open){h+='<input type="number" min="0.5" step="0.01" data-fid="'+esc(fl.id)+'" placeholder="Amount in '+esc(fl.currency||"USD")+'"'+(fl.required?' required':'')+'>';}else{h+='<div class="payamt">'+esc(fl.currency||"USD")+' '+esc(Number(fl.amount||0).toFixed(2))+'</div>';}}
       else if(t==='select'){h+='<select data-fid="'+esc(fl.id)+'"'+(fl.required?' required':'')+'><option value="">Choose…</option>';(fl.options||[]).forEach(function(o){h+='<option'+(o===pv?' selected':'')+'>'+esc(o)+'</option>';});h+='</select>';}
       else if(t==='radio'||t==='checkbox'){(fl.options||[]).forEach(function(o){var ck=(t==='radio'?o===pv:String(pv).split(",").indexOf(o)>=0)?' checked':'';h+='<label class="opt"><input type="'+t+'" name="'+esc(fl.id)+'" value="'+esc(o)+'"'+ck+'>'+esc(o)+'</label>';});}
-      else if(t==='signature'){h+='<div class="sigwrap"><canvas class="sig" data-sig="'+esc(fl.id)+'"></canvas><button type="button" class="sigclear" data-sigclear="'+esc(fl.id)+'">Clear</button></div>';}
+      else if(t==='signature'){h+='<div class="sigtabs"><button type="button" class="sigtab on" data-sigmode="'+esc(fl.id)+'" data-m="draw">Draw</button><button type="button" class="sigtab" data-sigmode="'+esc(fl.id)+'" data-m="type">Type</button></div><div class="sigwrap" data-sigdraw="'+esc(fl.id)+'"><canvas class="sig" data-sig="'+esc(fl.id)+'"></canvas><button type="button" class="sigclear" data-sigclear="'+esc(fl.id)+'">Clear</button></div><input class="sigtype" data-sigtype="'+esc(fl.id)+'" type="text" placeholder="Type your full name" style="display:none">';}
       else if(t==='photo'){h+='<div class="photo"><label class="photobtn" for="ph_'+esc(fl.id)+'">Take or upload photo</label><input id="ph_'+esc(fl.id)+'" type="file" accept="image/*" data-photo="'+esc(fl.id)+'"><img class="photoprev" data-prev="'+esc(fl.id)+'"></div>';}
       else if(t==='consent'){h+='<div class="consent">'+esc(fl.text||"I agree to the terms above.")+'</div><label class="opt"><input type="checkbox" data-consent="'+esc(fl.id)+'"'+(fl.required?' required':'')+'> I agree</label>';}
       else {var it=(t==='email'||t==='number'||t==='date')?t:(t==='phone'?'tel':'text');h+='<input type="'+it+'" data-fid="'+esc(fl.id)+'" placeholder="'+esc(fl.placeholder||"")+'" value="'+esc(pv)+'"'+(fl.required?' required':'')+'>';}
@@ -613,7 +696,7 @@ _UNIT_HTML = """<!doctype html><html><head><meta charset="utf-8">
     function fieldFilled(fl){
       if(fl.type==='checkbox'){return form.querySelectorAll('input[name="'+fl.id+'"]:checked').length>0;}
       if(fl.type==='radio'){return !!form.querySelector('input[name="'+fl.id+'"]:checked');}
-      if(fl.type==='signature'){var sc=form.querySelector('canvas[data-sig="'+fl.id+'"]');return !!(sc&&sc.__dirty&&sc.__dirty());}
+      if(fl.type==='signature'){if((sigMode[fl.id]||'draw')==='type'){var ti=form.querySelector('[data-sigtype="'+fl.id+'"]');return !!(ti&&ti.value.trim());}var sc=form.querySelector('canvas[data-sig="'+fl.id+'"]');return !!(sc&&sc.__dirty&&sc.__dirty());}
       if(fl.type==='photo'){var pi=form.querySelector('input[data-photo="'+fl.id+'"]');return !!(pi&&pi.__data);}
       if(fl.type==='consent'){var cc=form.querySelector('input[data-consent="'+fl.id+'"]');return !!(cc&&cc.checked);}
       if(fl.type==='rating'){var rt=form.querySelector('.rating[data-rating="'+fl.id+'"]');return !!(rt&&rt.__val);}
@@ -646,6 +729,34 @@ _UNIT_HTML = """<!doctype html><html><head><meta charset="utf-8">
         rd.readAsDataURL(file);
       });
     });
+    // Wire up address autocomplete (debounced; proxied through /pub/geocode).
+    form.querySelectorAll('input[data-addr]').forEach(function(inp){
+      var box=form.querySelector('[data-sug="'+inp.getAttribute('data-addr')+'"]');var tmr;
+      inp.addEventListener('input',function(){
+        clearTimeout(tmr);var q=inp.value.trim();if(q.length<3){if(box)box.innerHTML='';return;}
+        tmr=setTimeout(function(){
+          fetch(BASE+"/api/pub/geocode?q="+encodeURIComponent(q)).then(function(r){return r.json()}).then(function(j){
+            if(!box)return;box.innerHTML='';(j.results||[]).forEach(function(it){
+              var d=document.createElement('div');d.className='item';d.textContent=it.full_address||it.name;
+              d.addEventListener('mousedown',function(e){e.preventDefault();inp.value=it.full_address||it.name;box.innerHTML='';updateProgress();});
+              box.appendChild(d);
+            });
+          }).catch(function(){});
+        },280);
+      });
+      inp.addEventListener('blur',function(){setTimeout(function(){if(box)box.innerHTML='';},160);});
+    });
+    // Wire up signature Draw/Type tabs.
+    form.querySelectorAll('.sigtab').forEach(function(b){
+      b.addEventListener('click',function(){
+        var id=b.getAttribute('data-sigmode'),m=b.getAttribute('data-m');sigMode[id]=m;
+        form.querySelectorAll('.sigtab[data-sigmode="'+id+'"]').forEach(function(x){x.className='sigtab'+(x.getAttribute('data-m')===m?' on':'');});
+        var dw=form.querySelector('[data-sigdraw="'+id+'"]'),ty=form.querySelector('[data-sigtype="'+id+'"]');
+        if(dw)dw.style.display=(m==='draw')?'block':'none';
+        if(ty)ty.style.display=(m==='type')?'block':'none';
+        updateProgress();
+      });
+    });
     // Wire up rating stars.
     form.querySelectorAll('.rating').forEach(function(rt){
       var stars=rt.querySelectorAll('.star');
@@ -662,7 +773,7 @@ _UNIT_HTML = """<!doctype html><html><head><meta charset="utf-8">
       (f.fields||[]).forEach(function(fl){
         if(fl.type==='checkbox'){var arr=[];form.querySelectorAll('input[name="'+fl.id+'"]:checked').forEach(function(c){arr.push(c.value)});vals[fl.id]=arr;}
         else if(fl.type==='radio'){var c=form.querySelector('input[name="'+fl.id+'"]:checked');vals[fl.id]=c?c.value:"";}
-        else if(fl.type==='signature'){var sc=form.querySelector('canvas[data-sig="'+fl.id+'"]');vals[fl.id]=(sc&&sc.__dirty&&sc.__dirty())?sc.toDataURL('image/png'):"";}
+        else if(fl.type==='signature'){if((sigMode[fl.id]||'draw')==='type'){var ti=form.querySelector('[data-sigtype="'+fl.id+'"]');vals[fl.id]=ti?ti.value:"";}else{var sc=form.querySelector('canvas[data-sig="'+fl.id+'"]');vals[fl.id]=(sc&&sc.__dirty&&sc.__dirty())?sc.toDataURL('image/png'):"";}}
         else if(fl.type==='photo'){var pi=form.querySelector('input[data-photo="'+fl.id+'"]');vals[fl.id]=(pi&&pi.__data)||"";}
         else if(fl.type==='consent'){var cc=form.querySelector('input[data-consent="'+fl.id+'"]');vals[fl.id]=(cc&&cc.checked)?"I agree":"";}
         else if(fl.type==='rating'){var rt=form.querySelector('.rating[data-rating="'+fl.id+'"]');vals[fl.id]=(rt&&rt.__val)||"";}

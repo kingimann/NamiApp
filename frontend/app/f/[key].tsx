@@ -1,4 +1,4 @@
-import React, { useCallback, useState } from "react";
+import React, { useCallback, useRef, useState } from "react";
 import {
   View, Text, StyleSheet, ScrollView, TouchableOpacity, TextInput,
   ActivityIndicator, Platform, Image, Linking,
@@ -7,6 +7,9 @@ import { SafeAreaView, useSafeAreaInsets } from "react-native-safe-area-context"
 import { Ionicons } from "@expo/vector-icons";
 import * as ImagePicker from "expo-image-picker";
 import { Stack, useFocusEffect, useLocalSearchParams } from "expo-router";
+import SignaturePad from "@/src/components/SignaturePad";
+import DatePickerField from "@/src/components/DatePickerField";
+import { forwardGeocode } from "@/src/api/mapbox";
 
 const FALLBACK_BACKEND = "https://nampo-backend.onrender.com";
 const apiOrigin = () => ((process.env.EXPO_PUBLIC_BACKEND_URL as string) || FALLBACK_BACKEND).replace(/\/$/, "");
@@ -25,6 +28,18 @@ export default function PublicFormScreen() {
   const [submitting, setSubmitting] = useState(false);
   const [done, setDone] = useState(false);
   const [err, setErr] = useState<string | null>(null);
+  const [sigModes, setSigModes] = useState<Record<string, "draw" | "type">>({});
+  const [addr, setAddr] = useState<{ k: string | null; items: { full_address: string; name: string }[] }>({ k: null, items: [] });
+  const addrTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
+
+  const searchAddr = (k: string, q: string) => {
+    setVal(k, q);
+    if (addrTimer.current) clearTimeout(addrTimer.current);
+    if (q.trim().length < 3) { setAddr({ k, items: [] }); return; }
+    addrTimer.current = setTimeout(async () => {
+      try { const r = await forwardGeocode(q); setAddr({ k, items: r.slice(0, 6) }); } catch { setAddr({ k, items: [] }); }
+    }, 300);
+  };
 
   const load = useCallback(async () => {
     if (!key) return;
@@ -128,6 +143,24 @@ export default function PublicFormScreen() {
                     </Text>
                     <Text style={styles.payNote}>Payment is processed securely in your browser.</Text>
                   </View>
+                ) : f.type === "date" ? (
+                  <DatePickerField value={values[k] || ""} onChange={(v) => setVal(k, v)} testID={`pf-${k}`} />
+                ) : f.type === "password" ? (
+                  <TextInput style={styles.input} value={values[k] || ""} onChangeText={(t) => setVal(k, t)} placeholder={f.placeholder || ""} placeholderTextColor={theme.textMuted} secureTextEntry autoCapitalize="none" autoCorrect={false} testID={`pf-${k}`} />
+                ) : f.type === "address" ? (
+                  <View>
+                    <TextInput style={styles.input} value={values[k] || ""} onChangeText={(t) => searchAddr(k, t)} placeholder={f.placeholder || "Start typing an address"} placeholderTextColor={theme.textMuted} autoCapitalize="none" autoCorrect={false} testID={`pf-${k}`} />
+                    {addr.k === k && addr.items.length > 0 && (
+                      <View style={styles.addrBox}>
+                        {addr.items.map((it, idx) => (
+                          <TouchableOpacity key={idx} style={styles.addrItem} onPress={() => { setVal(k, it.full_address || it.name); setAddr({ k: null, items: [] }); }} testID={`pf-${k}-sug-${idx}`}>
+                            <Ionicons name="location-outline" size={15} color={theme.textMuted} />
+                            <Text style={styles.addrText} numberOfLines={2}>{it.full_address || it.name}</Text>
+                          </TouchableOpacity>
+                        ))}
+                      </View>
+                    )}
+                  </View>
                 ) : f.type === "textarea" ? (
                   <TextInput style={[styles.input, styles.area]} value={values[k] || ""} onChangeText={(t) => setVal(k, t)} placeholder={f.placeholder || ""} placeholderTextColor={theme.textMuted} multiline testID={`pf-${k}`} />
                 ) : f.type === "select" ? (
@@ -182,16 +215,33 @@ export default function PublicFormScreen() {
                   </View>
                 ) : f.type === "signature" ? (
                   <View>
-                    <TextInput
-                      style={[styles.input, styles.sigInput]}
-                      value={values[k] || ""}
-                      onChangeText={(t) => setVal(k, t)}
-                      placeholder="Type your full name to sign"
-                      placeholderTextColor={theme.textMuted}
-                      autoCapitalize="words"
-                      testID={`pf-${k}`}
-                    />
-                    <Text style={styles.sigHint}>Typing your name here counts as your signature.</Text>
+                    <View style={styles.sigTabs}>
+                      {(["draw", "type"] as const).map((m) => {
+                        const on = (sigModes[k] || "type") === m;
+                        return (
+                          <TouchableOpacity key={m} style={[styles.sigTab, on && styles.sigTabOn]} onPress={() => { setSigModes((s) => ({ ...s, [k]: m })); setVal(k, ""); }} testID={`pf-${k}-${m}`}>
+                            <Ionicons name={m === "draw" ? "brush-outline" : "text-outline"} size={14} color={on ? "#fff" : theme.textMuted} />
+                            <Text style={[styles.sigTabText, on && { color: "#fff" }]}>{m === "draw" ? "Draw" : "Type"}</Text>
+                          </TouchableOpacity>
+                        );
+                      })}
+                    </View>
+                    {(sigModes[k] || "type") === "draw" ? (
+                      <SignaturePad onChange={(v) => setVal(k, v)} />
+                    ) : (
+                      <>
+                        <TextInput
+                          style={[styles.input, styles.sigInput]}
+                          value={values[k] || ""}
+                          onChangeText={(t) => setVal(k, t)}
+                          placeholder="Type your full name to sign"
+                          placeholderTextColor={theme.textMuted}
+                          autoCapitalize="words"
+                          testID={`pf-${k}`}
+                        />
+                        <Text style={styles.sigHint}>Typing your name here counts as your signature.</Text>
+                      </>
+                    )}
                   </View>
                 ) : (
                   <TextInput
@@ -245,6 +295,13 @@ const styles = StyleSheet.create({
   chipText: { color: theme.textPrimary, fontSize: 13.5, fontWeight: "700" },
   optRow: { flexDirection: "row", alignItems: "center", gap: 10, paddingVertical: 8 },
   optText: { color: theme.textPrimary, fontSize: 15, flex: 1 },
+  addrBox: { marginTop: 6, borderWidth: 1, borderColor: theme.border, borderRadius: 12, backgroundColor: theme.surface, overflow: "hidden" },
+  addrItem: { flexDirection: "row", alignItems: "center", gap: 8, paddingHorizontal: 12, paddingVertical: 11, borderBottomWidth: StyleSheet.hairlineWidth, borderBottomColor: theme.border },
+  addrText: { flex: 1, color: theme.textPrimary, fontSize: 14, lineHeight: 19 },
+  sigTabs: { flexDirection: "row", gap: 8, marginBottom: 8 },
+  sigTab: { flexDirection: "row", alignItems: "center", gap: 5, paddingHorizontal: 14, paddingVertical: 7, borderRadius: 999, borderWidth: 1, borderColor: theme.border, backgroundColor: theme.surface },
+  sigTabOn: { backgroundColor: theme.primary, borderColor: theme.primary },
+  sigTabText: { color: theme.textMuted, fontSize: 13, fontWeight: "700" },
   sigInput: { fontStyle: "italic", fontSize: 18 },
   sigHint: { color: theme.textMuted, fontSize: 12, marginTop: 5 },
   sectionHead: { color: theme.textPrimary, fontSize: 17, fontWeight: "800", marginTop: 24, marginBottom: 2, borderTopWidth: StyleSheet.hairlineWidth, borderTopColor: theme.border, paddingTop: 16 },
