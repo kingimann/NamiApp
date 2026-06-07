@@ -1,11 +1,15 @@
 import React, { useCallback, useState } from "react";
 import {
   View, Text, StyleSheet, ScrollView, TouchableOpacity, TextInput,
-  ActivityIndicator, Platform,
+  ActivityIndicator, Platform, Image, Linking,
 } from "react-native";
 import { SafeAreaView, useSafeAreaInsets } from "react-native-safe-area-context";
 import { Ionicons } from "@expo/vector-icons";
+import * as ImagePicker from "expo-image-picker";
 import { Stack, useFocusEffect, useLocalSearchParams } from "expo-router";
+
+const FALLBACK_BACKEND = "https://nampo-backend.onrender.com";
+const apiOrigin = () => ((process.env.EXPO_PUBLIC_BACKEND_URL as string) || FALLBACK_BACKEND).replace(/\/$/, "");
 import { safeBack } from "@/src/utils/nav";
 import { api, FormField } from "@/src/api/client";
 import { theme } from "@/src/theme";
@@ -30,6 +34,29 @@ export default function PublicFormScreen() {
 
   const fid = (f: FormField, i: number) => f.id || `f${i + 1}`;
   const setVal = (k: string, v: any) => setValues((s) => ({ ...s, [k]: v }));
+
+  const pickPhoto = async (k: string, fromCamera: boolean) => {
+    try {
+      if (fromCamera) {
+        const perm = await ImagePicker.requestCameraPermissionsAsync();
+        if (!perm.granted) { setErr("Camera permission denied."); return; }
+      }
+      const res = fromCamera
+        ? await ImagePicker.launchCameraAsync({ base64: true, quality: 0.6 })
+        : await ImagePicker.launchImageLibraryAsync({ base64: true, quality: 0.6 });
+      const a = !res.canceled ? res.assets?.[0] : null;
+      if (a?.base64) setVal(k, `data:image/jpeg;base64,${a.base64}`);
+    } catch { setErr("Couldn't add the photo."); }
+  };
+
+  // Completion progress (0..1) across all fields.
+  const filledCount = (form?.fields || []).reduce((n, f, i) => {
+    const v = values[fid(f, i)];
+    const has = f.type === "checkbox" ? (Array.isArray(v) && v.length > 0) : !!String(v ?? "").trim();
+    return n + (has ? 1 : 0);
+  }, 0);
+  const progress = form && form.fields.length ? filledCount / form.fields.length : 0;
+  const payField = (form?.fields || []).find((f) => f.type === "payment");
   const toggleCheck = (k: string, opt: string) => setValues((s) => {
     const arr: string[] = Array.isArray(s[k]) ? s[k] : [];
     return { ...s, [k]: arr.includes(opt) ? arr.filter((x) => x !== opt) : [...arr, opt] };
@@ -75,14 +102,33 @@ export default function PublicFormScreen() {
         <ScrollView contentContainerStyle={{ padding: 18, paddingBottom: insets.bottom + 40 }} keyboardShouldPersistTaps="handled">
           <Text style={styles.title}>{form.title}</Text>
           {!!form.description && <Text style={styles.desc}>{form.description}</Text>}
+          {form.fields.length > 1 && (
+            <View style={styles.progTrack}><View style={[styles.progBar, { width: `${Math.round(progress * 100)}%` }]} /></View>
+          )}
 
           {form.fields.map((f, i) => {
             const k = fid(f, i);
             const req = f.required ? <Text style={styles.req}> *</Text> : null;
+            if (f.type === "heading") return <Text key={k} style={styles.sectionHead}>{f.label}</Text>;
             return (
               <View key={k} style={{ marginTop: 16 }}>
                 <Text style={styles.label}>{f.label}{req}</Text>
-                {f.type === "textarea" ? (
+                {f.type === "rating" ? (
+                  <View style={styles.ratingRow}>
+                    {[1, 2, 3, 4, 5].map((n) => (
+                      <TouchableOpacity key={n} onPress={() => setVal(k, String(n))} testID={`pf-${k}-${n}`}>
+                        <Ionicons name={Number(values[k]) >= n ? "star" : "star-outline"} size={32} color={Number(values[k]) >= n ? theme.primary : theme.textMuted} />
+                      </TouchableOpacity>
+                    ))}
+                  </View>
+                ) : f.type === "payment" ? (
+                  <View>
+                    <Text style={styles.payInfo}>
+                      {f.amount_open ? "You'll choose the amount at checkout." : `Amount: ${f.currency || "USD"} ${Number(f.amount || 0).toFixed(2)}`}
+                    </Text>
+                    <Text style={styles.payNote}>Payment is processed securely in your browser.</Text>
+                  </View>
+                ) : f.type === "textarea" ? (
                   <TextInput style={[styles.input, styles.area]} value={values[k] || ""} onChangeText={(t) => setVal(k, t)} placeholder={f.placeholder || ""} placeholderTextColor={theme.textMuted} multiline testID={`pf-${k}`} />
                 ) : f.type === "select" ? (
                   <View style={styles.optWrap}>
@@ -112,6 +158,41 @@ export default function PublicFormScreen() {
                       </TouchableOpacity>
                     );
                   })
+                ) : f.type === "consent" ? (
+                  <View>
+                    <ScrollView style={styles.consentBox} nestedScrollEnabled>
+                      <Text style={styles.consentText}>{f.text || "I agree to the terms above."}</Text>
+                    </ScrollView>
+                    <TouchableOpacity style={styles.optRow} onPress={() => setVal(k, values[k] === "I agree" ? "" : "I agree")} testID={`pf-${k}`}>
+                      <Ionicons name={values[k] === "I agree" ? "checkbox" : "square-outline"} size={20} color={values[k] === "I agree" ? theme.primary : theme.textMuted} />
+                      <Text style={styles.optText}>I agree</Text>
+                    </TouchableOpacity>
+                  </View>
+                ) : f.type === "photo" ? (
+                  <View>
+                    {!!values[k] && <Image source={{ uri: values[k] }} style={styles.photoPrev} resizeMode="cover" />}
+                    <View style={styles.photoBtns}>
+                      <TouchableOpacity style={styles.photoBtn} onPress={() => pickPhoto(k, true)} testID={`pf-${k}-camera`}>
+                        <Ionicons name="camera-outline" size={18} color={theme.primary} /><Text style={styles.photoBtnText}>Take photo</Text>
+                      </TouchableOpacity>
+                      <TouchableOpacity style={styles.photoBtn} onPress={() => pickPhoto(k, false)} testID={`pf-${k}-upload`}>
+                        <Ionicons name="image-outline" size={18} color={theme.primary} /><Text style={styles.photoBtnText}>Upload</Text>
+                      </TouchableOpacity>
+                    </View>
+                  </View>
+                ) : f.type === "signature" ? (
+                  <View>
+                    <TextInput
+                      style={[styles.input, styles.sigInput]}
+                      value={values[k] || ""}
+                      onChangeText={(t) => setVal(k, t)}
+                      placeholder="Type your full name to sign"
+                      placeholderTextColor={theme.textMuted}
+                      autoCapitalize="words"
+                      testID={`pf-${k}`}
+                    />
+                    <Text style={styles.sigHint}>Typing your name here counts as your signature.</Text>
+                  </View>
                 ) : (
                   <TextInput
                     style={styles.input}
@@ -129,9 +210,15 @@ export default function PublicFormScreen() {
           })}
 
           {!!err && <Text style={styles.err}>{err}</Text>}
+          {payField ? (
+            <TouchableOpacity style={styles.submit} onPress={() => Linking.openURL(`${apiOrigin()}/api/pub/form-unit?form=${encodeURIComponent(String(key))}`)} testID="pf-pay">
+              <Text style={styles.submitText}>Continue to payment →</Text>
+            </TouchableOpacity>
+          ) : (
           <TouchableOpacity style={[styles.submit, submitting && { opacity: 0.6 }]} onPress={submit} disabled={submitting} testID="pf-submit">
             {submitting ? <ActivityIndicator color="#fff" /> : <Text style={styles.submitText}>{form.submit_label || "Submit"}</Text>}
           </TouchableOpacity>
+          )}
         </ScrollView>
       )}
     </SafeAreaView>
@@ -158,6 +245,20 @@ const styles = StyleSheet.create({
   chipText: { color: theme.textPrimary, fontSize: 13.5, fontWeight: "700" },
   optRow: { flexDirection: "row", alignItems: "center", gap: 10, paddingVertical: 8 },
   optText: { color: theme.textPrimary, fontSize: 15, flex: 1 },
+  sigInput: { fontStyle: "italic", fontSize: 18 },
+  sigHint: { color: theme.textMuted, fontSize: 12, marginTop: 5 },
+  sectionHead: { color: theme.textPrimary, fontSize: 17, fontWeight: "800", marginTop: 24, marginBottom: 2, borderTopWidth: StyleSheet.hairlineWidth, borderTopColor: theme.border, paddingTop: 16 },
+  ratingRow: { flexDirection: "row", gap: 6, marginTop: 4 },
+  payInfo: { color: theme.textPrimary, fontSize: 16, fontWeight: "800" },
+  payNote: { color: theme.textMuted, fontSize: 12.5, marginTop: 4 },
+  progTrack: { height: 5, borderRadius: 3, backgroundColor: theme.surfaceAlt, overflow: "hidden", marginTop: 14 },
+  progBar: { height: 5, borderRadius: 3, backgroundColor: theme.primary },
+  consentBox: { maxHeight: 170, borderWidth: 1, borderColor: theme.border, borderRadius: 12, backgroundColor: theme.surface, padding: 12, marginBottom: 8 },
+  consentText: { color: theme.textSecondary, fontSize: 13, lineHeight: 19 },
+  photoPrev: { width: "100%", height: 180, borderRadius: 12, backgroundColor: theme.surfaceAlt, marginBottom: 8 },
+  photoBtns: { flexDirection: "row", gap: 10 },
+  photoBtn: { flex: 1, flexDirection: "row", alignItems: "center", justifyContent: "center", gap: 7, backgroundColor: theme.surface, borderWidth: 1, borderColor: theme.border, borderRadius: 12, paddingVertical: 12 },
+  photoBtnText: { color: theme.primary, fontSize: 14, fontWeight: "700" },
   err: { color: theme.error, fontSize: 13.5, marginTop: 14, fontWeight: "600" },
   submit: { backgroundColor: theme.primary, borderRadius: 12, paddingVertical: 14, alignItems: "center", marginTop: 20 },
   submitText: { color: "#fff", fontWeight: "800", fontSize: 15 },
