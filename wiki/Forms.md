@@ -6,7 +6,7 @@ A Contact-Form-7-style form builder: build a form in-app, use it anywhere (in-ap
 Open a form → **Build** tab. Add fields, set labels, mark required, reorder, and pick a type from the grouped picker (**Basic / Choice / Advanced**).
 
 ### Field types
-- **Basic:** text, paragraph (textarea), email, phone, number, website/link (url), date, time
+- **Basic:** text, paragraph (textarea), email, phone, number, website/link (url), **address** (Mapbox autocomplete — pick an exact address), date, time
 - **Choice:** dropdown (select), single choice (radio), checkboxes, **star rating** (1–5)
 - **Advanced:**
   - **Section heading** — a non-input divider to organize long forms

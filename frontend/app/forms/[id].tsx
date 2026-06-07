@@ -30,6 +30,7 @@ const TYPES: { k: FormFieldType; label: string; icon: any }[] = [
   { k: "checkbox", label: "Checkboxes", icon: "checkbox-outline" },
   { k: "time", label: "Time", icon: "time-outline" },
   { k: "url", label: "Website / link", icon: "link-outline" },
+  { k: "address", label: "Address (Mapbox)", icon: "location-outline" },
   { k: "rating", label: "Star rating", icon: "star-outline" },
   { k: "heading", label: "Section heading", icon: "text" },
   { k: "signature", label: "Signature", icon: "create-outline" },
@@ -39,7 +40,7 @@ const TYPES: { k: FormFieldType; label: string; icon: any }[] = [
 ];
 // Field types grouped for a cleaner, organized picker.
 const TYPE_GROUPS: { title: string; keys: FormFieldType[] }[] = [
-  { title: "Basic", keys: ["text", "textarea", "email", "phone", "number", "url", "date", "time"] },
+  { title: "Basic", keys: ["text", "textarea", "email", "phone", "number", "url", "address", "date", "time"] },
   { title: "Choice", keys: ["select", "radio", "checkbox", "rating"] },
   { title: "Advanced", keys: ["heading", "signature", "photo", "consent", "payment"] },
 ];

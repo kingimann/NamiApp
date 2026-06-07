@@ -11,11 +11,14 @@ import csv
 import html
 import io
 import json
+import os
 import re
 import time
 import uuid
 from datetime import datetime, timezone
 from typing import List, Optional
+
+import httpx
 
 from fastapi import APIRouter, Header, HTTPException, Query, Request
 from fastapi.responses import HTMLResponse, Response
@@ -26,7 +29,7 @@ from core import db, get_current_user
 router = APIRouter()
 
 FIELD_TYPES = {"text", "email", "phone", "number", "textarea", "select", "checkbox", "radio",
-               "date", "time", "url", "rating", "heading", "signature", "photo", "consent", "payment"}
+               "date", "time", "url", "rating", "heading", "address", "signature", "photo", "consent", "payment"}
 MAX_FIELDS = 40
 MAX_VALUE_LEN = 5000
 SIG_MAX_LEN = 400_000     # drawn signature → PNG data URL
@@ -39,6 +42,21 @@ MAX_TITLE = 120
 _RATE: dict = {}
 RATE_MAX = 5
 RATE_WINDOW = 60.0
+
+# A more permissive limiter for address autocomplete (it fires while typing).
+_GEO_RATE: dict = {}
+GEO_MAX = 40
+
+
+def _geo_ok(ip: str) -> bool:
+    now = time.time()
+    hits = [t for t in _GEO_RATE.get(ip, []) if now - t < RATE_WINDOW]
+    if len(hits) >= GEO_MAX:
+        _GEO_RATE[ip] = hits
+        return False
+    hits.append(now)
+    _GEO_RATE[ip] = hits
+    return True
 
 
 def _client_ip(request: Request) -> str:
@@ -309,6 +327,38 @@ async def public_form(form: str = Query(...)):
     return _public_form_view(doc)
 
 
+@router.get("/pub/geocode")
+async def pub_geocode(request: Request, q: str = Query(...)):
+    """Address autocomplete for form 'address' fields — proxies Mapbox forward
+    geocoding with the backend MAPBOX_TOKEN so the public form never sees a token.
+    Returns [] when MAPBOX_TOKEN isn't set (the field still works as plain text)."""
+    if not _geo_ok(_client_ip(request)):
+        return {"results": []}
+    token = os.environ.get("MAPBOX_TOKEN", "")
+    if not token or len((q or "").strip()) < 3:
+        return {"results": []}
+    try:
+        async with httpx.AsyncClient(timeout=8) as c:
+            r = await c.get(
+                "https://api.mapbox.com/search/geocode/v6/forward",
+                params={"q": q, "limit": 6, "access_token": token},
+            )
+        feats = (r.json() or {}).get("features", []) if r.status_code == 200 else []
+    except Exception:
+        feats = []
+    out = []
+    for f in feats:
+        p = f.get("properties") or {}
+        g = f.get("geometry") or {}
+        coords = g.get("coordinates") or [None, None]
+        out.append({
+            "name": p.get("name") or "",
+            "full_address": p.get("full_address") or p.get("place_formatted") or p.get("name") or "",
+            "lng": coords[0], "lat": coords[1],
+        })
+    return {"results": out}
+
+
 def _payment_field(doc: dict) -> Optional[dict]:
     for f in (doc.get("fields") or []):
         if f.get("type") == "payment":
@@ -558,6 +608,9 @@ _UNIT_HTML = """<!doctype html><html><head><meta charset="utf-8">
   .consent{border:1px solid var(--border);border-radius:var(--rad);background:var(--field);max-height:170px;overflow:auto;padding:12px;font-size:13px;line-height:1.5;white-space:pre-wrap;margin-bottom:8px}
   .prog{height:5px;background:var(--border);border-radius:3px;overflow:hidden;margin:2px 0 16px}
   .prog>span{display:block;height:100%;width:0;background:var(--acc);transition:width .25s ease}
+  .addrwrap{position:relative}
+  .addrsug{position:absolute;left:0;right:0;top:100%;background:var(--field);border:1px solid var(--border);border-top:0;border-radius:0 0 var(--rad) var(--rad);z-index:5;max-height:220px;overflow:auto}
+  .addrsug .item{padding:10px 12px;cursor:pointer;font-size:14px;border-top:1px solid var(--border)}
   h3.sec{font-size:16px;font-weight:800;margin:22px 0 2px;border-top:1px solid var(--border);padding-top:16px}
   .payamt{font-size:22px;font-weight:800;color:var(--acc)}
   .rating{display:flex;gap:6px}
@@ -601,6 +654,7 @@ _UNIT_HTML = """<!doctype html><html><head><meta charset="utf-8">
       h+='<label>'+esc(fl.label)+req+'</label>';
       if(t==='textarea'){h+='<textarea data-fid="'+esc(fl.id)+'" placeholder="'+esc(fl.placeholder||"")+'"'+(fl.required?' required':'')+'>'+esc(pv)+'</textarea>';}
       else if(t==='time'||t==='url'){var ut=(t==='url')?'url':'time';h+='<input type="'+ut+'" data-fid="'+esc(fl.id)+'" placeholder="'+esc(fl.placeholder||"")+'" value="'+esc(pv)+'"'+(fl.required?' required':'')+'>';}
+      else if(t==='address'){h+='<div class="addrwrap"><input type="text" data-fid="'+esc(fl.id)+'" data-addr="'+esc(fl.id)+'" autocomplete="off" placeholder="'+esc(fl.placeholder||"Start typing an address")+'" value="'+esc(pv)+'"'+(fl.required?' required':'')+'><div class="addrsug" data-sug="'+esc(fl.id)+'"></div></div>';}
       else if(t==='rating'){h+='<div class="rating" data-rating="'+esc(fl.id)+'">';for(var s=1;s<=5;s++){h+='<span class="star" data-val="'+s+'">\\u2605</span>';}h+='</div>';}
       else if(t==='payment'){if(fl.amount_open){h+='<input type="number" min="0.5" step="0.01" data-fid="'+esc(fl.id)+'" placeholder="Amount in '+esc(fl.currency||"USD")+'"'+(fl.required?' required':'')+'>';}else{h+='<div class="payamt">'+esc(fl.currency||"USD")+' '+esc(Number(fl.amount||0).toFixed(2))+'</div>';}}
       else if(t==='select'){h+='<select data-fid="'+esc(fl.id)+'"'+(fl.required?' required':'')+'><option value="">Choose…</option>';(fl.options||[]).forEach(function(o){h+='<option'+(o===pv?' selected':'')+'>'+esc(o)+'</option>';});h+='</select>';}
@@ -650,6 +704,23 @@ _UNIT_HTML = """<!doctype html><html><head><meta charset="utf-8">
         rd.onload=function(){inp.__data=rd.result;var pv=form.querySelector('img[data-prev="'+inp.getAttribute('data-photo')+'"]');if(pv){pv.src=rd.result;pv.style.display='block';}updateProgress();};
         rd.readAsDataURL(file);
       });
+    });
+    // Wire up address autocomplete (debounced; proxied through /pub/geocode).
+    form.querySelectorAll('input[data-addr]').forEach(function(inp){
+      var box=form.querySelector('[data-sug="'+inp.getAttribute('data-addr')+'"]');var tmr;
+      inp.addEventListener('input',function(){
+        clearTimeout(tmr);var q=inp.value.trim();if(q.length<3){if(box)box.innerHTML='';return;}
+        tmr=setTimeout(function(){
+          fetch(BASE+"/api/pub/geocode?q="+encodeURIComponent(q)).then(function(r){return r.json()}).then(function(j){
+            if(!box)return;box.innerHTML='';(j.results||[]).forEach(function(it){
+              var d=document.createElement('div');d.className='item';d.textContent=it.full_address||it.name;
+              d.addEventListener('mousedown',function(e){e.preventDefault();inp.value=it.full_address||it.name;box.innerHTML='';updateProgress();});
+              box.appendChild(d);
+            });
+          }).catch(function(){});
+        },280);
+      });
+      inp.addEventListener('blur',function(){setTimeout(function(){if(box)box.innerHTML='';},160);});
     });
     // Wire up signature Draw/Type tabs.
     form.querySelectorAll('.sigtab').forEach(function(b){
