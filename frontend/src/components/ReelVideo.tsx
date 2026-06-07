@@ -1,18 +1,31 @@
-import React, { useEffect } from "react";
-import { StyleSheet } from "react-native";
+import React, { useEffect, useState } from "react";
+import { View, StyleSheet } from "react-native";
+import { useEvent } from "expo";
 import { useVideoPlayer, VideoView } from "expo-video";
+import ReelPoster from "@/src/components/ReelPoster";
 
 /** Native reel player (expo-video). Web uses ReelVideo.web.tsx (raw <video>). */
 export default function ReelVideo({
-  uri, active, paused, muted, rate = 1,
+  uri, active, paused, muted, rate = 1, poster, brand = true,
 }: {
   uri: string;
   active: boolean;
   paused: boolean;
   muted: boolean;
   rate?: number;
+  /** Cover image shown until the video starts playing. */
+  poster?: string | null;
+  /** When no poster is set, show the branded "Nami Social" cover (vs plain black). */
+  brand?: boolean;
 }) {
   const player = useVideoPlayer(uri || "about:blank", (p) => { p.loop = true; p.muted = muted; });
+
+  // Show the cover until the first frame actually renders. Once started, keep it
+  // hidden even while paused so pausing freezes on the frame, not the cover.
+  const { isPlaying } = useEvent(player, "playingChange", { isPlaying: player.playing });
+  const [started, setStarted] = useState(false);
+  useEffect(() => { if (isPlaying) setStarted(true); }, [isPlaying]);
+  useEffect(() => { setStarted(false); }, [uri]);
 
   useEffect(() => {
     if (!uri) return;
@@ -25,11 +38,18 @@ export default function ReelVideo({
   useEffect(() => { try { player.playbackRate = rate; } catch {} }, [rate, player, paused, active]);
 
   return (
-    <VideoView
-      player={player}
-      style={StyleSheet.absoluteFill}
-      contentFit="cover"
-      nativeControls={false}
-    />
+    <View style={StyleSheet.absoluteFill}>
+      <VideoView
+        player={player}
+        style={StyleSheet.absoluteFill}
+        contentFit="cover"
+        nativeControls={false}
+      />
+      {!started && (
+        <View pointerEvents="none" style={StyleSheet.absoluteFill}>
+          <ReelPoster uri={poster} brand={brand} />
+        </View>
+      )}
+    </View>
   );
 }

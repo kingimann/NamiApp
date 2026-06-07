@@ -9,10 +9,12 @@ import { Ionicons } from "@expo/vector-icons";
 import { Stack, useFocusEffect, useLocalSearchParams, useRouter } from "expo-router";
 import { safeBack } from "@/src/utils/nav";
 import { api, Post, mediaUri } from "@/src/api/client";
+import { pickThumbnailUri } from "@/src/utils/thumbnail";
 import { theme } from "@/src/theme";
 import { SidebarMenuButton } from "@/src/components/LeftSidebar";
 import CommentsSheet from "@/src/components/CommentsSheet";
 import ReelVideo from "@/src/components/ReelVideo";
+import ReelPoster from "@/src/components/ReelPoster";
 import VerifiedBadge from "@/src/components/VerifiedBadge";
 import UserBadges from "@/src/components/UserBadges";
 import { useAuth } from "@/src/context/AuthContext";
@@ -38,6 +40,8 @@ function Reel({ post, active, muted, onToggleMute, onOpenComments, screenW, scre
   const [caption, setCaption] = useState(content.text || "");
   const [editOpen, setEditOpen] = useState(false);
   const [editText, setEditText] = useState(content.text || "");
+  const [editCover, setEditCover] = useState<string | null>(video?.thumbnail || null);
+  const [coverBusy, setCoverBusy] = useState(false);
   const [savingEdit, setSavingEdit] = useState(false);
   const isOwner = !!myId && content.user_id === myId;
 
@@ -65,10 +69,31 @@ function Reel({ post, active, muted, onToggleMute, onOpenComments, screenW, scre
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [post.id]);
 
+  const pickCover = async () => {
+    setCoverBusy(true);
+    try {
+      const uri = await pickThumbnailUri();
+      if (uri) setEditCover(uri);
+    } catch (e: any) {
+      Alert.alert("Couldn't set cover", String(e?.message || e).replace(/^\d{3}:\s*/, ""));
+    } finally {
+      setCoverBusy(false);
+    }
+  };
+
   const saveEdit = async () => {
     setSavingEdit(true);
     try {
-      const updated = await api.editPost(content.id, { text: editText.trim() });
+      const coverChanged = (editCover || null) !== (video?.thumbnail || null);
+      const body: { text: string; media?: any[] } = { text: editText.trim() };
+      // Only resend media when the cover actually changed (a base64 reel's media
+      // can be large; text-only edits stay lightweight).
+      if (coverChanged) {
+        body.media = (content.media || []).map((m) =>
+          m.type === "video" ? { ...m, thumbnail: editCover || null } : m
+        );
+      }
+      const updated = await api.editPost(content.id, body);
       setCaption(updated.text || "");
       setEditOpen(false);
       onEdited?.(updated);
@@ -184,7 +209,7 @@ function Reel({ post, active, muted, onToggleMute, onOpenComments, screenW, scre
           delayLongPress={220}
           testID={`reel-tap-${post.id}`}
         >
-          <ReelVideo uri={videoUri} active={active} paused={paused} muted={muted} rate={fastFwd ? 2 : rate} />
+          <ReelVideo uri={videoUri} active={active} paused={paused} muted={muted} rate={fastFwd ? 2 : rate} poster={video?.thumbnail} />
           {paused && (
             <View style={styles.centerPlay} pointerEvents="none">
               <Ionicons name="play" size={66} color="rgba(255,255,255,0.92)" />
@@ -292,7 +317,7 @@ function Reel({ post, active, muted, onToggleMute, onOpenComments, screenW, scre
         </View>
         {isOwner ? (
           <>
-            <TouchableOpacity style={styles.iconBtn} onPress={() => { setEditText(caption); setEditOpen(true); }} testID={`reel-edit-${post.id}`}>
+            <TouchableOpacity style={styles.iconBtn} onPress={() => { setEditText(caption); setEditCover(video?.thumbnail || null); setEditOpen(true); }} testID={`reel-edit-${post.id}`}>
               <Ionicons name="create-outline" size={25} color="#fff" />
               <Text style={styles.metric}>Edit</Text>
             </TouchableOpacity>
@@ -334,7 +359,30 @@ function Reel({ post, active, muted, onToggleMute, onOpenComments, screenW, scre
         <KeyboardAvoidingView behavior={Platform.OS === "ios" ? "padding" : undefined} style={styles.editBackdrop}>
           <Pressable style={StyleSheet.absoluteFill} onPress={() => setEditOpen(false)} />
           <View style={styles.editCard}>
-            <Text style={styles.editTitle}>Edit reel description</Text>
+            <Text style={styles.editTitle}>Edit reel</Text>
+            {!!videoUri && (
+              <View style={styles.coverRow}>
+                <View style={styles.coverPreview}>
+                  <ReelPoster uri={editCover} compact />
+                </View>
+                <View style={{ flex: 1 }}>
+                  <Text style={styles.coverLabel}>Cover</Text>
+                  <Text style={styles.coverHint} numberOfLines={1}>
+                    {editCover ? "Custom thumbnail" : "Default “Nami Social” cover"}
+                  </Text>
+                </View>
+                <TouchableOpacity onPress={pickCover} disabled={coverBusy} style={styles.coverBtn} testID="reel-edit-cover">
+                  {coverBusy
+                    ? <ActivityIndicator color="#fff" size="small" />
+                    : <Text style={styles.coverBtnText}>{editCover ? "Change" : "Add"}</Text>}
+                </TouchableOpacity>
+                {!!editCover && (
+                  <TouchableOpacity onPress={() => setEditCover(null)} style={styles.coverClear} testID="reel-edit-cover-clear">
+                    <Ionicons name="close" size={16} color="rgba(255,255,255,0.7)" />
+                  </TouchableOpacity>
+                )}
+              </View>
+            )}
             <TextInput
               style={styles.editInput}
               value={editText}
@@ -343,7 +391,6 @@ function Reel({ post, active, muted, onToggleMute, onOpenComments, screenW, scre
               placeholderTextColor="rgba(255,255,255,0.4)"
               multiline
               maxLength={500}
-              autoFocus
               testID="reel-edit-input"
             />
             <View style={styles.editBtns}>
@@ -395,7 +442,7 @@ function AdReel({ ad, active, muted, screenW, screenH, onSkip }: {
   return (
     <View style={{ width: screenW, height: screenH, backgroundColor: "#000" }}>
       <Pressable style={StyleSheet.absoluteFill} onPress={() => setPaused((p) => !p)}>
-        <ReelVideo uri={ad.video_url} active={active} paused={paused} muted={muted} />
+        <ReelVideo uri={ad.video_url} active={active} paused={paused} muted={muted} poster={ad.thumbnail} brand={false} />
         {paused && (
           <View style={styles.centerPlay} pointerEvents="none">
             <Ionicons name="play" size={66} color="rgba(255,255,255,0.92)" />
@@ -485,9 +532,9 @@ export default function ReelsScreen() {
 
   const onReelEdited = useCallback((u: Post) => {
     setItems((arr) => arr.map((it) => {
-      if (it.id === u.id) return { ...it, text: u.text, edited_at: u.edited_at };
+      if (it.id === u.id) return { ...it, text: u.text, edited_at: u.edited_at, media: u.media };
       if (it.reposted_post && it.reposted_post.id === u.id) {
-        return { ...it, reposted_post: { ...it.reposted_post, text: u.text, edited_at: u.edited_at } };
+        return { ...it, reposted_post: { ...it.reposted_post, text: u.text, edited_at: u.edited_at, media: u.media } };
       }
       return it;
     }));
@@ -708,6 +755,13 @@ const styles = StyleSheet.create({
   editCard: { backgroundColor: "#161616", borderRadius: 20, borderWidth: 1, borderColor: "rgba(255,255,255,0.12)", padding: 18 },
   editTitle: { color: "#fff", fontSize: 17, fontWeight: "800", marginBottom: 12 },
   editInput: { color: "#fff", fontSize: 15, lineHeight: 21, minHeight: 90, maxHeight: 200, backgroundColor: "rgba(255,255,255,0.06)", borderRadius: 12, borderWidth: 1, borderColor: "rgba(255,255,255,0.12)", padding: 12, textAlignVertical: "top", ...(Platform.OS === "web" ? ({ outlineStyle: "none" } as object) : {}) },
+  coverRow: { flexDirection: "row", alignItems: "center", gap: 12, marginBottom: 14 },
+  coverPreview: { width: 50, height: 72, borderRadius: 8, overflow: "hidden", backgroundColor: "#000" },
+  coverLabel: { color: "#fff", fontSize: 14, fontWeight: "800" },
+  coverHint: { color: "rgba(255,255,255,0.55)", fontSize: 12, marginTop: 2 },
+  coverBtn: { backgroundColor: "rgba(255,255,255,0.12)", borderRadius: 10, paddingHorizontal: 14, paddingVertical: 9, minWidth: 64, alignItems: "center" },
+  coverBtnText: { color: "#fff", fontSize: 13.5, fontWeight: "800" },
+  coverClear: { width: 30, height: 30, borderRadius: 15, backgroundColor: "rgba(255,255,255,0.08)", alignItems: "center", justifyContent: "center" },
   editBtns: { flexDirection: "row", justifyContent: "flex-end", gap: 10, marginTop: 16 },
   editCancel: { paddingHorizontal: 16, paddingVertical: 11 },
   editCancelText: { color: "rgba(255,255,255,0.7)", fontSize: 15, fontWeight: "700" },

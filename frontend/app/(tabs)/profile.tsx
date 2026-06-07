@@ -13,6 +13,7 @@ import { api, Post, mediaUri } from "@/src/api/client";
 import { theme } from "@/src/theme";
 import { SidebarMenuButton } from "@/src/components/LeftSidebar";
 import PostCard from "@/src/components/PostCard";
+import ReelPoster from "@/src/components/ReelPoster";
 import BirthdayPicker from "@/src/components/BirthdayPicker";
 import { SOCIAL_PLATFORMS, SOCIAL_BY_KEY, socialUrl, fmtBirthday } from "@/src/lib/socials";
 import AdSlot from "@/src/components/AdSlot";
@@ -400,9 +401,12 @@ export default function ProfileScreen() {
                     testID={`profile-media-${i}`}
                   >
                     {m.type === "video" ? (
-                      <View style={[StyleSheet.absoluteFill, styles.mediaVideo]}>
-                        <Ionicons name="play" size={22} color="#fff" />
-                      </View>
+                      <>
+                        <ReelPoster uri={m.thumbnail} compact />
+                        <View style={[StyleSheet.absoluteFill, styles.mediaVideo]}>
+                          <Ionicons name="play" size={22} color="#fff" />
+                        </View>
+                      </>
                     ) : (
                       <Image source={{ uri: mediaUri(m) }} style={StyleSheet.absoluteFill} resizeMode="cover" />
                     )}
@@ -681,7 +685,7 @@ const styles = StyleSheet.create({
   profileTabText: { fontSize: 13, fontWeight: "700" },
   mediaGrid: { flexDirection: "row", flexWrap: "wrap", gap: 5 },
   mediaTile: { width: "32%", aspectRatio: 1, borderRadius: 8, overflow: "hidden", backgroundColor: theme.surfaceAlt },
-  mediaVideo: { backgroundColor: "#000", alignItems: "center", justifyContent: "center" },
+  mediaVideo: { backgroundColor: "rgba(0,0,0,0.25)", alignItems: "center", justifyContent: "center" },
   postsEmpty: {
     alignItems: "center", paddingVertical: 32, gap: 10,
     backgroundColor: theme.surface, borderRadius: 16,
