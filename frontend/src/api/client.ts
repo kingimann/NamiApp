@@ -658,8 +658,12 @@ export const api = {
     request<{ ok: boolean }>(`/listings/${id}/report`, { method: "POST", body: JSON.stringify({ reason }) }),
   listingComments: (id: string) =>
     request<ListingComment[]>(`/listings/${id}/comments`),
-  addListingComment: (id: string, text: string) =>
-    request<ListingComment>(`/listings/${id}/comments`, { method: "POST", body: JSON.stringify({ text }) }),
+  addListingComment: (id: string, text: string, parent_id?: string) =>
+    request<ListingComment>(`/listings/${id}/comments`, { method: "POST", body: JSON.stringify({ text, parent_id }) }),
+  editListingComment: (id: string, commentId: string, text: string) =>
+    request<ListingComment>(`/listings/${id}/comments/${commentId}`, { method: "PATCH", body: JSON.stringify({ text }) }),
+  likeListingComment: (id: string, commentId: string) =>
+    request<ListingComment>(`/listings/${id}/comments/${commentId}/like`, { method: "POST" }),
   deleteListingComment: (id: string, commentId: string) =>
     request<{ ok: boolean }>(`/listings/${id}/comments/${commentId}`, { method: "DELETE" }),
   getSellerProfile: (userId: string) =>
@@ -781,7 +785,10 @@ export type Listing = {
   created_at: string;
 };
 export type ListingComment = {
-  id: string; listing_id: string; author: PostAuthor; text: string; mine?: boolean; created_at: string;
+  id: string; listing_id: string; author: PostAuthor; text: string;
+  parent_id?: string | null; likes_count?: number; liked_by_me?: boolean;
+  replies_count?: number; edited_at?: string | null;
+  mine?: boolean; created_at: string;
 };
 export type ListingCreate = {
   title: string; price?: number; currency?: string; category?: string;

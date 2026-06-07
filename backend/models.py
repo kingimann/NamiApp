@@ -489,6 +489,11 @@ class ListingComment(BaseModel):
     listing_id: str
     author: "PostAuthor"
     text: str
+    parent_id: Optional[str] = None     # reply target (one level of nesting)
+    likes_count: int = 0
+    liked_by_me: bool = False
+    replies_count: int = 0
+    edited_at: Optional[datetime] = None
     mine: bool = False
     created_at: datetime
 
