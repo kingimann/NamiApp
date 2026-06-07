@@ -1260,6 +1260,7 @@ export default function ChatScreen() {
                   onChangeText={onChangeText}
                   onFocus={() => setAttachOpen(false)}
                   multiline
+                  numberOfLines={Platform.OS === "web" ? 1 : undefined}
                   testID="msg-input"
                 />
                 {text.trim() || editingMsg ? (
@@ -1292,7 +1293,7 @@ export default function ChatScreen() {
         emojis={emojis}
         myUserId={user?.user_id}
         onClose={() => setEmojiOpen(false)}
-        onPick={(c) => setText((t) => `${t}${t && !t.endsWith(" ") ? " " : ""}:${c}: `)}
+        onPick={(ins) => setText((t) => `${t}${ins}`)}
         onChanged={loadEmojis}
       />
       <GifPickerSheet visible={gifOpen} onClose={() => setGifOpen(false)} onPick={sendGif} />
@@ -1581,13 +1582,14 @@ const styles = StyleSheet.create({
     backgroundColor: theme.bg,
   },
   composerInput: {
-    flex: 1, color: theme.textPrimary, fontSize: 15,
+    flex: 1, color: theme.textPrimary, fontSize: 15, lineHeight: 20,
     backgroundColor: theme.surface,
     borderWidth: 1, borderColor: theme.border,
     borderRadius: 22,
-    paddingHorizontal: 16, paddingVertical: 10,
+    paddingHorizontal: 16, paddingVertical: 11,
     maxHeight: 120, minHeight: 44,
-    ...(Platform.OS === "web" ? ({ outlineStyle: "none" } as object) : {}),
+    textAlignVertical: "center",
+    ...(Platform.OS === "web" ? ({ outlineStyle: "none", resize: "none" } as object) : {}),
   },
   sendBtn: {
     width: 44, height: 44, borderRadius: 22,
