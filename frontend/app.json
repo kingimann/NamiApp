@@ -66,6 +66,12 @@
         }
       ],
       "expo-video",
+      [
+        "expo-camera",
+        {
+          "cameraPermission": "Take photos of your vehicle or the problem for roadside requests."
+        }
+      ],
       "expo-notifications",
       "@livekit/react-native-expo-plugin",
       "@config-plugins/react-native-webrtc"

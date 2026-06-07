@@ -1,4 +1,4 @@
-import React, { useCallback, useEffect, useState } from "react";
+import React, { useCallback, useEffect, useRef, useState } from "react";
 import {
   View, Text, StyleSheet, ScrollView, TouchableOpacity, ActivityIndicator,
   TextInput, RefreshControl, Image, Alert, Linking, Platform, Modal, Pressable, KeyboardAvoidingView,
@@ -9,7 +9,8 @@ import { Stack, useFocusEffect, useRouter } from "expo-router";
 import * as Location from "expo-location";
 import { safeBack } from "@/src/utils/nav";
 import { reverseGeocode } from "@/src/api/mapbox";
-import { captureImage, pickDocumentBase64 } from "@/src/utils/thumbnail";
+import { pickDocumentBase64 } from "@/src/utils/thumbnail";
+import CameraCapture from "@/src/components/CameraCapture";
 import { api, RoadsideRequest, RoadsideService, RoadsideParty, RoadsideQuote, RoadsideEligibility, RoadsideVerificationStatus, RoadsideCheckResult } from "@/src/api/client";
 import { theme } from "@/src/theme";
 
@@ -234,6 +235,19 @@ export default function RoadsideScreen() {
     } finally { setSubmittingVerif(false); }
   };
 
+  // Our own camera UI (single shutter — no library/files). takePhoto() opens it
+  // and resolves with the captured URI (or null if cancelled).
+  const [camOpen, setCamOpen] = useState(false);
+  const camResolver = useRef<((uri: string | null) => void) | null>(null);
+  const takePhoto = (): Promise<string | null> =>
+    new Promise((resolve) => { camResolver.current = resolve; setCamOpen(true); });
+  const handleCaptured = (uri: string | null) => {
+    setCamOpen(false);
+    const resolve = camResolver.current;
+    camResolver.current = null;
+    resolve?.(uri);
+  };
+
   // Roadside photos are camera-only (no library/files) and AI-checked to be a
   // real shot of the vehicle or the problem — not a blank/black or random photo.
   const verifyShot = async (uri: string): Promise<boolean> => {
@@ -252,7 +266,7 @@ export default function RoadsideScreen() {
   const addPhotos = async () => {
     setPhotoBusy(true);
     try {
-      const uri = await captureImage();   // camera only — one shot per tap
+      const uri = await takePhoto();   // our camera UI — one shot per tap
       if (uri && (await verifyShot(uri))) setPhotos((p) => [...p, uri].slice(0, 6));
     } catch (e: any) { Alert.alert("Couldn't add photo", String(e?.message || e)); }
     finally { setPhotoBusy(false); }
@@ -320,7 +334,7 @@ export default function RoadsideScreen() {
   };
 
   const doVerify = async (r: RoadsideRequest, clear: () => void) => {
-    const uri = await captureImage();
+    const uri = await takePhoto();
     if (!uri) return;
     if (!(await verifyShot(uri))) return;
     setBusyId(r.id);
@@ -335,7 +349,7 @@ export default function RoadsideScreen() {
   };
 
   const addServicePhotos = async (r: RoadsideRequest, phase: "before" | "after") => {
-    const uri = await captureImage();
+    const uri = await takePhoto();
     if (!uri) return;
     if (!(await verifyShot(uri))) return;
     setBusyId(r.id);
@@ -954,6 +968,8 @@ export default function RoadsideScreen() {
           </View>
         </KeyboardAvoidingView>
       </Modal>
+
+      <CameraCapture visible={camOpen} onClose={() => handleCaptured(null)} onCaptured={handleCaptured} />
     </SafeAreaView>
   );
 }
