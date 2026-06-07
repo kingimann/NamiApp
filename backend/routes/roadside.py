@@ -24,9 +24,10 @@ from typing import List, Optional, Tuple
 from fastapi import APIRouter, Header, HTTPException, Query
 from pydantic import BaseModel
 
-from core import db, get_current_user, account_age_days, _norm_dt
+from core import db, get_current_user, account_age_days, _norm_dt, is_mod
 from routes.notifications import emit_notification
 from routes.money import _wallet_balance, _debit_wallet, _credit_wallet, _record_platform_fee
+from services.encryption import encrypt_text, decrypt_text
 
 router = APIRouter()
 
@@ -155,6 +156,20 @@ class RoadsideVerify(BaseModel):
 class RoadsidePhotos(BaseModel):
     phase: str = "before"                    # before | after
     photos: Optional[List[str]] = None
+
+
+class RoadsideVerifySubmit(BaseModel):
+    insurance_photo: str                     # base64 data URI — held encrypted, deleted on decision
+    ownership_photo: str
+    vehicle_year: Optional[str] = None
+    vehicle_make: Optional[str] = None
+    vehicle_model: Optional[str] = None
+    note: Optional[str] = None
+
+
+class RoadsideDecision(BaseModel):
+    approve: bool
+    reason: Optional[str] = None
 
 
 class RoadsideParty(BaseModel):
@@ -317,9 +332,183 @@ async def helper_eligibility(authorization: Optional[str] = Header(None)):
     return _helper_eligibility(user)
 
 
+# ── Requester verification (insurance + ownership, admin-reviewed) ───────────
+MAX_DOC_CHARS = 7_000_000  # cap each base64 doc (~5MB image)
+
+
+@router.get("/roadside/verification")
+async def my_verification(authorization: Optional[str] = Header(None)):
+    """Whether the current member may REQUEST help: same identity bar as helpers,
+    plus an admin-approved insurance + ownership check."""
+    user = await get_current_user(authorization)
+    elig = _helper_eligibility(user)
+    v = await db.roadside_verifications.find_one(
+        {"user_id": user["user_id"]},
+        {"_id": 0, "status": 1, "reason": 1},
+        sort=[("created_at", -1)],
+    )
+    return {
+        "verified": bool(user.get("roadside_verified")),
+        "status": (v or {}).get("status", "none"),
+        "reason": (v or {}).get("reason"),
+        "eligibility": elig,
+    }
+
+
+@router.post("/roadside/verification")
+async def submit_verification(body: RoadsideVerifySubmit, authorization: Optional[str] = Header(None)):
+    user = await get_current_user(authorization)
+    if user.get("roadside_verified"):
+        return {"status": "approved", "verified": True}
+    elig = _helper_eligibility(user)
+    if not elig["eligible"]:
+        raise HTTPException(status_code=403, detail={
+            "code": "not_eligible",
+            "message": "Complete ID, email and phone verification (account 3+ months old, no bans) before verifying for roadside help.",
+            "missing": elig["missing"],
+        })
+    ins = (body.insurance_photo or "").strip()
+    own = (body.ownership_photo or "").strip()
+    if not ins or not own:
+        raise HTTPException(status_code=400, detail="Upload a photo of both your insurance and proof of ownership.")
+    if len(ins) > MAX_DOC_CHARS or len(own) > MAX_DOC_CHARS:
+        raise HTTPException(status_code=413, detail="Document image too large — use a smaller photo.")
+    pending = await db.roadside_verifications.find_one(
+        {"user_id": user["user_id"], "status": "pending"}, {"_id": 0, "id": 1}
+    )
+    if pending:
+        raise HTTPException(status_code=400, detail={"code": "pending", "message": "Your documents are already under review."})
+
+    now = datetime.now(timezone.utc)
+    veh = _vehicle_str({
+        "vehicle_year": body.vehicle_year, "vehicle_make": body.vehicle_make, "vehicle_model": body.vehicle_model,
+    })
+    base = {
+        "id": str(uuid.uuid4()),
+        "user_id": user["user_id"],
+        "vehicle_year": (body.vehicle_year or "").strip()[:8] or None,
+        "vehicle_make": (body.vehicle_make or "").strip()[:40] or None,
+        "vehicle_model": (body.vehicle_model or "").strip()[:60] or None,
+        "note": (body.note or "").strip()[:500] or None,
+        "created_at": now,
+    }
+
+    # AI check first (Ollama vision). The images are processed in memory and are
+    # NOT stored when the AI returns a clear verdict.
+    from services.ollama import verify_documents
+    result = await verify_documents(ins, own, veh, user.get("name"))
+
+    if result["decision"] == "approve":
+        await db.roadside_verifications.insert_one({
+            **base, "status": "approved", "method": "ai", "reason": result.get("reason"),
+            "decided_at": now, "decided_by": None,
+        })
+        await db.users.update_one(
+            {"user_id": user["user_id"]}, {"$set": {"roadside_verified": True, "roadside_verified_at": now}}
+        )
+        await emit_notification(
+            user_id=user["user_id"], actor_id=None, ntype="roadside",
+            message="You're verified for roadside help — you can now request assistance.",
+        )
+        return {"status": "approved", "verified": True, "reason": result.get("reason")}
+
+    if result["decision"] == "reject":
+        await db.roadside_verifications.insert_one({
+            **base, "status": "rejected", "method": "ai", "reason": result.get("reason"),
+            "decided_at": now, "decided_by": None,
+        })
+        return {"status": "rejected", "verified": False, "reason": result.get("reason")}
+
+    # AI unavailable → fall back to the admin review queue. Documents are
+    # encrypted at rest and wiped the moment an admin decides.
+    await db.roadside_verifications.insert_one({
+        **base, "status": "pending", "method": "manual",
+        "insurance_enc": encrypt_text(ins), "ownership_enc": encrypt_text(own),
+        "reason": None, "decided_at": None, "decided_by": None,
+    })
+    return {"status": "pending", "verified": False}
+
+
+@router.get("/admin/roadside/verifications")
+async def admin_list_verifications(
+    status: str = Query("pending"), authorization: Optional[str] = Header(None),
+):
+    user = await get_current_user(authorization)
+    if not is_mod(user):
+        raise HTTPException(status_code=403, detail="Staff only.")
+    q = {"status": status} if status else {}
+    docs = await db.roadside_verifications.find(q, {"_id": 0}).sort("created_at", -1).limit(50).to_list(50)
+    out = []
+    for d in docs:
+        u = await db.users.find_one({"user_id": d["user_id"]}, {"_id": 0, "name": 1, "picture": 1, "email": 1})
+        out.append({
+            "id": d["id"],
+            "user_id": d["user_id"],
+            "user": {"name": (u or {}).get("name", "Member"), "picture": (u or {}).get("picture"), "email": (u or {}).get("email")},
+            "status": d["status"],
+            "vehicle": _vehicle_str(d),
+            "note": d.get("note"),
+            # Decrypted only for the reviewing admin; never persisted in the clear.
+            "insurance_photo": decrypt_text(d["insurance_enc"]) if d.get("insurance_enc") else None,
+            "ownership_photo": decrypt_text(d["ownership_enc"]) if d.get("ownership_enc") else None,
+            "created_at": d["created_at"],
+        })
+    return out
+
+
+@router.post("/admin/roadside/verifications/{vid}/decision")
+async def admin_decide_verification(vid: str, body: RoadsideDecision, authorization: Optional[str] = Header(None)):
+    user = await get_current_user(authorization)
+    if not is_mod(user):
+        raise HTTPException(status_code=403, detail="Staff only.")
+    d = await db.roadside_verifications.find_one({"id": vid}, {"_id": 0})
+    if not d:
+        raise HTTPException(status_code=404, detail="Verification not found")
+    if d["status"] != "pending":
+        raise HTTPException(status_code=400, detail="This verification was already decided.")
+    now = datetime.now(timezone.utc)
+    approve = bool(body.approve)
+    # Wipe the documents on decision — we don't keep them.
+    await db.roadside_verifications.update_one({"id": vid}, {"$set": {
+        "status": "approved" if approve else "rejected",
+        "reason": (body.reason or "").strip()[:300] or None,
+        "decided_at": now,
+        "decided_by": user["user_id"],
+        "insurance_enc": None,
+        "ownership_enc": None,
+    }})
+    await db.users.update_one(
+        {"user_id": d["user_id"]},
+        {"$set": {"roadside_verified": approve, "roadside_verified_at": now if approve else None}},
+    )
+    await emit_notification(
+        user_id=d["user_id"], actor_id=None, ntype="roadside",
+        message=(
+            "You're verified for roadside help — you can now request assistance."
+            if approve else
+            f"Your roadside verification was declined.{(' ' + body.reason) if body.reason else ' Please resubmit clear documents.'}"
+        ),
+    )
+    return {"ok": True, "status": "approved" if approve else "rejected"}
+
+
 @router.post("/roadside/requests", response_model=RoadsideRequest)
 async def create_request(body: RoadsideCreate, authorization: Optional[str] = Header(None)):
     user = await get_current_user(authorization)
+    # Requesters must clear the same identity bar as helpers …
+    elig = _helper_eligibility(user)
+    if not elig["eligible"]:
+        raise HTTPException(status_code=403, detail={
+            "code": "not_eligible",
+            "message": "Verify your identity (ID, email and phone; account 3+ months old; no bans) before requesting roadside help.",
+            "missing": elig["missing"],
+        })
+    # … and have an admin-approved insurance + ownership verification.
+    if not user.get("roadside_verified"):
+        raise HTTPException(status_code=403, detail={
+            "code": "roadside_not_verified",
+            "message": "Verify your insurance and vehicle ownership before you can request roadside help.",
+        })
     svc = (body.service or "").strip().lower()
     if svc not in SERVICES:
         raise HTTPException(status_code=400, detail="Pick a valid service: tow, lockout, battery or tire.")

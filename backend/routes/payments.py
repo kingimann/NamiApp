@@ -1181,6 +1181,37 @@ async def stripe_webhook(request: Request):
             await db.users.update_one({"user_id": uid}, {"$set": {"id_verified": True}})
         return {"ok": True}
 
+    # A reversed payment (chargeback/dispute) → ban the account. Reversing a
+    # transaction isn't allowed; it's a common bot/fraud pattern.
+    if event.get("type") == "charge.dispute.created":
+        obj = event.get("data", {}).get("object", {}) or {}
+        uid = None
+        try:
+            pi_id = obj.get("payment_intent")
+            if pi_id:
+                pi = stripe.PaymentIntent.retrieve(pi_id)
+                uid = (pi.get("metadata") or {}).get("buyer_id")
+            if not uid and obj.get("charge"):
+                ch = stripe.Charge.retrieve(obj["charge"])
+                uid = (ch.get("metadata") or {}).get("buyer_id")
+        except Exception:
+            uid = None
+        if uid:
+            await db.users.update_one({"user_id": uid}, {"$set": {
+                "banned": True,
+                "ban_reason": "Reversed a transaction (payment dispute / chargeback).",
+                "roadside_verified": False,
+            }})
+            try:
+                from routes.notifications import emit_notification
+                await emit_notification(
+                    user_id=uid, actor_id=None, ntype="support",
+                    message="Your account was banned: reversing a transaction (chargeback) isn't allowed.",
+                )
+            except Exception:
+                pass
+        return {"ok": True}
+
     if event.get("type") == "checkout.session.completed":
         meta = (event.get("data", {}).get("object", {}) or {}).get("metadata", {}) or {}
         kind = meta.get("kind", "tip")

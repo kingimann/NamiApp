@@ -79,6 +79,7 @@ const HIDDEN_BAR_PREFIXES = [
   "/admin-audit",
   "/admin-payments",
   "/admin-support",
+  "/admin-roadside",
   "/support", // support list
   "/support/", // ticket thread (reply bar)
   "/privacy",

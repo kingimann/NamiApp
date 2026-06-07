@@ -77,6 +77,27 @@ export async function pickImages(max = 6): Promise<string[]> {
 }
 
 /**
+ * Pick an image and return it as a base64 data URI (never uploaded to a CDN).
+ * Use for sensitive documents we want full control over (and to delete later).
+ */
+export async function pickDocumentBase64(): Promise<string | null> {
+  if (Platform.OS !== "web") {
+    const perm = await ImagePicker.requestMediaLibraryPermissionsAsync();
+    if (!perm.granted) return null;
+  }
+  const result = await ImagePicker.launchImageLibraryAsync({
+    mediaTypes: ["images"] as any,
+    quality: 0.6,
+    base64: true,
+  });
+  if (result.canceled) return null;
+  const a = result.assets?.[0];
+  if (!a) return null;
+  if (a.base64) return `data:image/jpeg;base64,${a.base64}`;
+  return a.uri || null;
+}
+
+/**
  * Capture a photo with the camera (native) or pick one (web — no camera), and
  * return a usable URI string. `null` on cancel / denied permission.
  */
