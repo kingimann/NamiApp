@@ -42,6 +42,16 @@ services:
         sync: false
       - key: CLAUDE_BOT_ALLOW
         value: iman
+      # Ollama vision/text model — powers the roadside photo + document checks
+      # and marketplace listing moderation. Point this at a reachable Ollama
+      # server (e.g. https://your-ollama-host:11434). Leave blank to disable the
+      # AI checks (photos are then accepted without an automotive check).
+      - key: OLLAMA_HOST
+        sync: false
+      - key: OLLAMA_VISION_MODEL
+        value: llama3.2-vision
+      - key: OLLAMA_TEXT_MODEL
+        value: llama3.2
       # Comma-separated emails that are auto-granted the site admin role (can
       # verify users, set mod/admin roles, and moderate posts). Set yours here.
       - key: ADMIN_EMAILS
