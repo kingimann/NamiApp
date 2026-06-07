@@ -83,6 +83,9 @@ android-sdk/
 .env
 .env.*
 *.env
+# ...but DO track example env files (no secrets, meant to be committed)
+!.env.example
+!**/.env.example
 credentials.json
 *.key
 .credentials

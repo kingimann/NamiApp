@@ -1,5 +1,5 @@
 import React, { forwardRef, useImperativeHandle, useMemo, useRef } from "react";
-import { StyleSheet, View, Platform } from "react-native";
+import { StyleSheet, View, Text, Platform } from "react-native";
 import { WebView } from "react-native-webview";
 import { MAPBOX_TOKEN } from "@/src/api/client";
 
@@ -563,6 +563,19 @@ export const MapboxWebView = forwardRef<MapboxWebViewHandle, Props>(
       fitBounds: (coords, padding) => send({ cmd: "fitBounds", coords, padding }),
     }));
 
+    // No Mapbox token → mapbox-gl can't initialize and the map renders as a
+    // blank/black box. Fail loudly with an actionable message instead.
+    if (!MAPBOX_TOKEN) {
+      return (
+        <View style={[styles.container, styles.fallback]} testID="mapbox-view">
+          <Text style={styles.fallbackTitle}>Map unavailable</Text>
+          <Text style={styles.fallbackText}>
+            Set EXPO_PUBLIC_MAPBOX_TOKEN in your environment and rebuild the app to enable maps.
+          </Text>
+        </View>
+      );
+    }
+
     if (Platform.OS === "web") {
       return (
         <View style={styles.container} testID="mapbox-view">
@@ -619,4 +632,7 @@ const WebMessageBridge: React.FC<{ onEvent?: (e: MapboxEvent) => void }> = ({ on
 const styles = StyleSheet.create({
   container: { flex: 1, backgroundColor: "#0A0A0A" },
   webview: { flex: 1, backgroundColor: "#0A0A0A" },
+  fallback: { alignItems: "center", justifyContent: "center", padding: 24 },
+  fallbackTitle: { color: "#E5E7EB", fontSize: 16, fontWeight: "800", marginBottom: 8 },
+  fallbackText: { color: "#9AA3AE", fontSize: 13, lineHeight: 19, textAlign: "center", maxWidth: 300 },
 });
