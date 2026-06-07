@@ -29,7 +29,8 @@ from core import db, get_current_user
 router = APIRouter()
 
 FIELD_TYPES = {"text", "email", "phone", "number", "textarea", "select", "checkbox", "radio",
-               "date", "time", "url", "rating", "heading", "address", "signature", "photo", "consent", "payment"}
+               "date", "time", "url", "rating", "heading", "address", "password",
+               "signature", "photo", "consent", "payment"}
 MAX_FIELDS = 40
 MAX_VALUE_LEN = 5000
 SIG_MAX_LEN = 400_000     # drawn signature → PNG data URL
@@ -103,6 +104,7 @@ class FormCreate(BaseModel):
     description: Optional[str] = None
     submit_label: Optional[str] = None
     notify_email: Optional[str] = None        # send submissions here instead of the owner's account email
+    ai_validate: Optional[bool] = None        # run an AI completeness/plausibility check on each submission
     fields: List[FormField] = []
 
 
@@ -200,6 +202,7 @@ def _form_view(f: dict) -> dict:
         "title": f.get("title"), "description": f.get("description"),
         "submit_label": f.get("submit_label") or "Submit",
         "notify_email": f.get("notify_email"),
+        "ai_validate": bool(f.get("ai_validate")),
         "fields": f.get("fields") or [],
         "submissions": int(f.get("submissions", 0) or 0),
         "created_at": f.get("created_at"),
@@ -228,6 +231,7 @@ async def create_form(body: FormCreate, authorization: Optional[str] = Header(No
         "description": (body.description or "").strip()[:500] or None,
         "submit_label": (body.submit_label or "").strip()[:40] or "Submit",
         "notify_email": _clean_notify_email(body.notify_email),
+        "ai_validate": bool(body.ai_validate),
         "fields": _clean_fields(body.fields),
         "submissions": 0,
         "created_at": datetime.now(timezone.utc),
@@ -266,6 +270,7 @@ async def update_form(form_id: str, body: FormCreate, authorization: Optional[st
         "description": (body.description or "").strip()[:500] or None,
         "submit_label": (body.submit_label or "").strip()[:40] or "Submit",
         "notify_email": _clean_notify_email(body.notify_email),
+        "ai_validate": bool(body.ai_validate),
         "fields": _clean_fields(body.fields),
     }
     await db.forms.update_one({"id": form_id}, {"$set": updates})
@@ -383,9 +388,25 @@ def _clean_values(fields: list, values: dict) -> dict:
     return clean
 
 
-def _email_short(v) -> str:
+def _email_short(v, ftype: str = "") -> str:
+    if ftype == "password":
+        return "••••••" if str(v).strip() else ""
     s = str(v)
     return "[attachment]" if s.startswith("data:") else s[:500]
+
+
+async def _ai_check(doc: dict, clean: dict) -> None:
+    """When the form has AI validation on, ask Claude to confirm answers look
+    properly filled in; raise 400 listing issues so the filler can fix them."""
+    if not doc.get("ai_validate"):
+        return
+    try:
+        from services.claude_ai import validate_form_submission
+        issues = await validate_form_submission(doc.get("fields") or [], clean)
+    except Exception:
+        issues = []
+    if issues:
+        raise HTTPException(status_code=400, detail="Please review: " + "; ".join(issues))
 
 
 async def _record_submission(doc: dict, clean: dict, ip: str, payment: Optional[dict] = None) -> str:
@@ -426,7 +447,7 @@ async def _record_submission(doc: dict, clean: dict, ip: str, payment: Optional[
         if recipient:
             from services.email import send_email, email_enabled
             if email_enabled():
-                lines = "\n".join(f"- {by_id.get(k, {}).get('label', k)}: {_email_short(v)}" for k, v in clean.items())
+                lines = "\n".join(f"- {by_id.get(k, {}).get('label', k)}: {_email_short(v, by_id.get(k, {}).get('type', ''))}" for k, v in clean.items())
                 if payment:
                     lines = f"- Payment: {payment.get('currency', 'USD')} {payment.get('amount')} (paid)\n" + lines
                 send_email(recipient, f"New submission: {doc.get('title')}",
@@ -449,6 +470,7 @@ async def public_submit(request: Request, body: FormSubmit, form: str = Query(..
     if not _rate_ok(form, ip):
         raise HTTPException(status_code=429, detail="Too many submissions — wait a minute and try again.")
     clean = _clean_values(doc.get("fields") or [], body.values)
+    await _ai_check(doc, clean)
     await _record_submission(doc, clean, ip)
     return {"ok": True}
 
@@ -486,6 +508,7 @@ async def form_checkout(request: Request, body: FormSubmit, form: str = Query(..
     if not _rate_ok(form, ip):
         raise HTTPException(status_code=429, detail="Too many attempts — wait a minute.")
     clean = _clean_values(doc.get("fields") or [], body.values)
+    await _ai_check(doc, clean)
     cur = (pay.get("currency") or "USD").upper()
     if pay.get("amount_open"):
         try:
@@ -654,6 +677,7 @@ _UNIT_HTML = """<!doctype html><html><head><meta charset="utf-8">
       h+='<label>'+esc(fl.label)+req+'</label>';
       if(t==='textarea'){h+='<textarea data-fid="'+esc(fl.id)+'" placeholder="'+esc(fl.placeholder||"")+'"'+(fl.required?' required':'')+'>'+esc(pv)+'</textarea>';}
       else if(t==='time'||t==='url'){var ut=(t==='url')?'url':'time';h+='<input type="'+ut+'" data-fid="'+esc(fl.id)+'" placeholder="'+esc(fl.placeholder||"")+'" value="'+esc(pv)+'"'+(fl.required?' required':'')+'>';}
+      else if(t==='password'){h+='<input type="password" data-fid="'+esc(fl.id)+'" placeholder="'+esc(fl.placeholder||"")+'" autocomplete="new-password"'+(fl.required?' required':'')+'>';}
       else if(t==='address'){h+='<div class="addrwrap"><input type="text" data-fid="'+esc(fl.id)+'" data-addr="'+esc(fl.id)+'" autocomplete="off" placeholder="'+esc(fl.placeholder||"Start typing an address")+'" value="'+esc(pv)+'"'+(fl.required?' required':'')+'><div class="addrsug" data-sug="'+esc(fl.id)+'"></div></div>';}
       else if(t==='rating'){h+='<div class="rating" data-rating="'+esc(fl.id)+'">';for(var s=1;s<=5;s++){h+='<span class="star" data-val="'+s+'">\\u2605</span>';}h+='</div>';}
       else if(t==='payment'){if(fl.amount_open){h+='<input type="number" min="0.5" step="0.01" data-fid="'+esc(fl.id)+'" placeholder="Amount in '+esc(fl.currency||"USD")+'"'+(fl.required?' required':'')+'>';}else{h+='<div class="payamt">'+esc(fl.currency||"USD")+' '+esc(Number(fl.amount||0).toFixed(2))+'</div>';}}

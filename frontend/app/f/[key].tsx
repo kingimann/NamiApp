@@ -8,6 +8,7 @@ import { Ionicons } from "@expo/vector-icons";
 import * as ImagePicker from "expo-image-picker";
 import { Stack, useFocusEffect, useLocalSearchParams } from "expo-router";
 import SignaturePad from "@/src/components/SignaturePad";
+import DatePickerField from "@/src/components/DatePickerField";
 import { forwardGeocode } from "@/src/api/mapbox";
 
 const FALLBACK_BACKEND = "https://nampo-backend.onrender.com";
@@ -142,6 +143,10 @@ export default function PublicFormScreen() {
                     </Text>
                     <Text style={styles.payNote}>Payment is processed securely in your browser.</Text>
                   </View>
+                ) : f.type === "date" ? (
+                  <DatePickerField value={values[k] || ""} onChange={(v) => setVal(k, v)} testID={`pf-${k}`} />
+                ) : f.type === "password" ? (
+                  <TextInput style={styles.input} value={values[k] || ""} onChangeText={(t) => setVal(k, t)} placeholder={f.placeholder || ""} placeholderTextColor={theme.textMuted} secureTextEntry autoCapitalize="none" autoCorrect={false} testID={`pf-${k}`} />
                 ) : f.type === "address" ? (
                   <View>
                     <TextInput style={styles.input} value={values[k] || ""} onChangeText={(t) => searchAddr(k, t)} placeholder={f.placeholder || "Start typing an address"} placeholderTextColor={theme.textMuted} autoCapitalize="none" autoCorrect={false} testID={`pf-${k}`} />

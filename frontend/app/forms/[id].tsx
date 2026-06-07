@@ -31,6 +31,7 @@ const TYPES: { k: FormFieldType; label: string; icon: any }[] = [
   { k: "time", label: "Time", icon: "time-outline" },
   { k: "url", label: "Website / link", icon: "link-outline" },
   { k: "address", label: "Address (Mapbox)", icon: "location-outline" },
+  { k: "password", label: "Password", icon: "lock-closed-outline" },
   { k: "rating", label: "Star rating", icon: "star-outline" },
   { k: "heading", label: "Section heading", icon: "text" },
   { k: "signature", label: "Signature", icon: "create-outline" },
@@ -40,7 +41,7 @@ const TYPES: { k: FormFieldType; label: string; icon: any }[] = [
 ];
 // Field types grouped for a cleaner, organized picker.
 const TYPE_GROUPS: { title: string; keys: FormFieldType[] }[] = [
-  { title: "Basic", keys: ["text", "textarea", "email", "phone", "number", "url", "address", "date", "time"] },
+  { title: "Basic", keys: ["text", "textarea", "email", "phone", "number", "url", "address", "password", "date", "time"] },
   { title: "Choice", keys: ["select", "radio", "checkbox", "rating"] },
   { title: "Advanced", keys: ["heading", "signature", "photo", "consent", "payment"] },
 ];
@@ -66,6 +67,7 @@ export default function FormBuilderScreen() {
   const [description, setDescription] = useState("");
   const [submitLabel, setSubmitLabel] = useState("Submit");
   const [notifyEmail, setNotifyEmail] = useState("");
+  const [aiValidate, setAiValidate] = useState(false);
   const [fields, setFields] = useState<FormField[]>([]);
   const [saving, setSaving] = useState(false);
   const [dirty, setDirty] = useState(false);
@@ -90,7 +92,7 @@ export default function FormBuilderScreen() {
     try {
       const f = await api.getForm(String(id));
       setForm(f); setTitle(f.title); setDescription(f.description || "");
-      setSubmitLabel(f.submit_label || "Submit"); setNotifyEmail(f.notify_email || ""); setFields(f.fields || []);
+      setSubmitLabel(f.submit_label || "Submit"); setNotifyEmail(f.notify_email || ""); setAiValidate(!!f.ai_validate); setFields(f.fields || []);
     } catch {} finally { setLoading(false); }
   }, [id]);
   useFocusEffect(useCallback(() => { load(); }, [load]));
@@ -123,9 +125,9 @@ export default function FormBuilderScreen() {
       const f = await api.updateForm(form.id, {
         title: title.trim(), description: description.trim() || undefined,
         submit_label: submitLabel.trim() || "Submit",
-        notify_email: notifyEmail.trim() || null, fields,
+        notify_email: notifyEmail.trim() || null, ai_validate: aiValidate, fields,
       });
-      setForm(f); setNotifyEmail(f.notify_email || ""); setFields(f.fields || []); setDirty(false);
+      setForm(f); setNotifyEmail(f.notify_email || ""); setAiValidate(!!f.ai_validate); setFields(f.fields || []); setDirty(false);
     } catch {} finally { setSaving(false); }
   };
 
@@ -176,7 +178,9 @@ export default function FormBuilderScreen() {
       const v = s.values[f.id || ""] || "";
       const cell = String(v).startsWith("data:image")
         ? `<img src="${v}" style="max-width:340px;max-height:170px;border:1px solid #ddd;border-radius:6px"/>`
-        : `<div style="white-space:pre-wrap">${escapeHtml(String(v) || "—")}</div>`;
+        : f.type === "password"
+          ? `<div>${v ? "••••••" : "—"}</div>`
+          : `<div style="white-space:pre-wrap">${escapeHtml(String(v) || "—")}</div>`;
       return `<tr><td style="padding:8px 12px;color:#666;font-weight:600;vertical-align:top;border-bottom:1px solid #eee;white-space:nowrap">${escapeHtml(f.label)}</td><td style="padding:8px 12px;border-bottom:1px solid #eee">${cell}</td></tr>`;
     }).join("");
     const html = `<!doctype html><html><head><meta charset="utf-8"><title>${escapeHtml(form?.title || "Form")} — response</title></head>`
@@ -296,6 +300,14 @@ export default function FormBuilderScreen() {
                 autoCorrect={false}
                 testID="form-notify-email"
               />
+
+              <View style={styles.aiRow}>
+                <View style={{ flex: 1, paddingRight: 12 }}>
+                  <Text style={styles.reqText}>AI check submissions</Text>
+                  <Text style={styles.hint}>Claude reviews each response for completeness & plausibility and asks the filler to fix clear problems. Needs an Anthropic key on the server.</Text>
+                </View>
+                <Switch value={aiValidate} onValueChange={(v) => { setAiValidate(v); mark(); }} trackColor={{ true: theme.primary }} testID="form-ai-validate" />
+              </View>
 
               <TouchableOpacity style={[styles.saveBtn, (!dirty || saving || !title.trim()) && { opacity: 0.5 }]} onPress={save} disabled={!dirty || saving || !title.trim()} testID="form-save">
                 {saving ? <ActivityIndicator color="#fff" /> : <Text style={styles.saveText}>{dirty ? "Save changes" : "Saved"}</Text>}
@@ -443,6 +455,8 @@ export default function FormBuilderScreen() {
                         <Text style={styles.subKey}>{f.label}</Text>
                         {(s.values[f.id || ""] || "").startsWith("data:image") ? (
                           <Image source={{ uri: s.values[f.id || ""] }} style={styles.sigImg} resizeMode="contain" />
+                        ) : f.type === "password" ? (
+                          <Text style={styles.subVal}>{s.values[f.id || ""] ? "••••••" : "—"}</Text>
                         ) : (
                           <Text style={styles.subVal}>{s.values[f.id || ""] || "—"}</Text>
                         )}
@@ -511,6 +525,7 @@ const styles = StyleSheet.create({
   optInput: { flex: 1, backgroundColor: theme.surfaceAlt, borderWidth: 1, borderColor: theme.border, borderRadius: 10, paddingHorizontal: 12, paddingVertical: 8, color: theme.textPrimary, fontSize: 14, ...webInput },
   addOpt: { flexDirection: "row", alignItems: "center", gap: 5, paddingVertical: 4 },
   addOptText: { color: theme.primary, fontSize: 13, fontWeight: "700" },
+  aiRow: { flexDirection: "row", alignItems: "center", marginTop: 18, backgroundColor: theme.surface, borderWidth: 1, borderColor: theme.border, borderRadius: 12, padding: 14 },
   payRow: { flexDirection: "row", gap: 8 },
   payHint: { color: theme.textMuted, fontSize: 11.5, lineHeight: 16 },
   reqRow: { flexDirection: "row", alignItems: "center", justifyContent: "space-between", marginTop: 10 },
