@@ -109,6 +109,10 @@ export const api = {
     request<{ ok: boolean; sent: boolean; dev_code?: string; note?: string }>("/auth/phone/send-code", { method: "POST", body: JSON.stringify({ phone }) }),
   verifyPhoneCode: (code: string) =>
     request<User>("/auth/phone/verify", { method: "POST", body: JSON.stringify({ code }) }),
+  sendEmailCode: () =>
+    request<{ ok: boolean; sent: boolean; dev_code?: string; note?: string }>("/auth/email/send-code", { method: "POST" }),
+  verifyEmailCode: (code: string) =>
+    request<User>("/auth/email/verify", { method: "POST", body: JSON.stringify({ code }) }),
   listApiKeys: () => request<{ keys: ApiKey[] }>("/auth/api-keys"),
   createApiKey: (label: string, scopes?: string[]) =>
     request<{ id: string; label: string; scopes: string[]; token: string; created_at: string }>(
@@ -812,6 +816,8 @@ export type User = {
   picture?: string | null;
   phone?: string | null;
   phone_verified?: boolean;
+  email_verified?: boolean;
+  id_verified?: boolean;
   twofa_enabled?: boolean;
   sms_notifications?: boolean;
   bio?: string;
@@ -967,6 +973,9 @@ export type PublicUser = {
   birthday?: string | null;
   socials?: Record<string, string> | null;
   verified?: boolean;
+  phone_verified?: boolean;
+  email_verified?: boolean;
+  id_verified?: boolean;
   role?: string;
   online?: boolean;
   last_seen?: string | null;

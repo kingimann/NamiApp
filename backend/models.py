@@ -15,6 +15,8 @@ class User(BaseModel):
     picture: Optional[str] = None
     phone: Optional[str] = None
     phone_verified: bool = False
+    email_verified: bool = False       # confirmed via emailed code
+    id_verified: bool = False          # government-ID verified (via Stripe identity)
     twofa_enabled: bool = False        # SMS two-factor on login
     sms_notifications: bool = False    # mirror in-app notifications to SMS
     bio: Optional[str] = ""
@@ -62,6 +64,9 @@ class PublicUser(BaseModel):
     birthday: Optional[str] = None
     socials: Optional[dict] = None
     verified: bool = False
+    phone_verified: bool = False
+    email_verified: bool = False
+    id_verified: bool = False
     role: str = "user"
     badges: List[Badge] = []
     online: bool = False             # active within the presence window

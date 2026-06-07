@@ -250,6 +250,15 @@ async def payouts_status(authorization: Optional[str] = Header(None)):
     caps = acct.get("capabilities", {}) or {}
     payouts_enabled = bool(acct.get("payouts_enabled"))
 
+    # Government-ID verification: Stripe verifies the person's identity (KYC) before
+    # enabling payouts. Treat that as the user being ID-verified and persist it so
+    # it can show as a trust badge in the marketplace.
+    indiv = acct.get("individual", {}) or {}
+    veri_status = ((indiv.get("verification") or {}).get("status"))
+    id_verified = bool(payouts_enabled or veri_status == "verified")
+    if id_verified != bool(user.get("id_verified")):
+        await db.users.update_one({"user_id": user["user_id"]}, {"$set": {"id_verified": id_verified}})
+
     # When payouts aren't on and nothing is "due", the blocker is usually upstream:
     # the transfers capability is still being activated, or the PLATFORM Stripe
     # account itself isn't fully set up (which blocks payouts for everyone).
@@ -273,6 +282,7 @@ async def payouts_status(authorization: Optional[str] = Header(None)):
         "enabled": True,
         "connected": True,
         "payouts_enabled": payouts_enabled,
+        "id_verified": id_verified,
         "charges_enabled": bool(acct.get("charges_enabled")),
         "details_submitted": bool(acct.get("details_submitted")),
         "has_external_account": has_external,
