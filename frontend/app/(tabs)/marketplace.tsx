@@ -119,6 +119,7 @@ export default function MarketplaceScreen() {
   const [refreshing, setRefreshing] = useState(false);
   const [cat, setCat] = useState("all");
   const [q, setQ] = useState("");
+  const [debouncedQ, setDebouncedQ] = useState("");
   const [sort, setSort] = useState("recent");
   const [condFilter, setCondFilter] = useState("all");
   const [minPrice, setMinPrice] = useState("");
@@ -179,7 +180,7 @@ export default function MarketplaceScreen() {
       const list = savedView
         ? await api.listSavedListings()
         : await api.listListings({
-            category: cat === "all" ? undefined : cat, q, sort,
+            category: cat === "all" ? undefined : cat, q: debouncedQ, sort,
             condition: condFilter === "all" ? undefined : condFilter,
             min_price: minPrice ? Number(minPrice) : undefined,
             max_price: maxPrice ? Number(maxPrice) : undefined,
@@ -189,11 +190,18 @@ export default function MarketplaceScreen() {
           });
       setListings(list);
     } catch {} finally { setLoading(false); setRefreshing(false); }
-  }, [cat, q, sort, condFilter, minPrice, maxPrice, savedView, coords, radius]);
+  }, [cat, debouncedQ, sort, condFilter, minPrice, maxPrice, savedView, coords, radius]);
 
   const resetFilters = () => {
     setCat("all"); setCondFilter("all"); setSort("recent"); setMinPrice(""); setMaxPrice(""); setRadius(0);
   };
+
+  // Debounce the search box so typing doesn't refetch (and flash the grid) on
+  // every keystroke — the query only applies ~350ms after you stop typing.
+  useEffect(() => {
+    const t = setTimeout(() => setDebouncedQ(q.trim()), 350);
+    return () => clearTimeout(t);
+  }, [q]);
 
   // On first mount, use the location only if permission is already granted —
   // no prompt. Tapping "Set your location" / "Use my location" prompts.
@@ -508,7 +516,7 @@ export default function MarketplaceScreen() {
           <View style={[styles.sheet, { paddingBottom: insets.bottom + 24, maxHeight: "85%" }]}>
             <View style={styles.sheetHandle} />
             <Text style={styles.sheetTitle}>{editingId ? "Edit listing" : "New listing"}</Text>
-            <ScrollView>
+            <ScrollView keyboardShouldPersistTaps="handled">
               <Text style={styles.label}>Photos</Text>
               <ScrollView horizontal showsHorizontalScrollIndicator={false} style={{ marginBottom: 4 }}>
                 <View style={{ flexDirection: "row", gap: 8, paddingRight: 16 }}>
@@ -594,7 +602,7 @@ export default function MarketplaceScreen() {
                   </View>
                 </View>
                 <View style={{ flex: 1 }}>
-                  <Text style={styles.label}>Price</Text>
+                  <Text style={styles.label}>Pricing</Text>
                   <TouchableOpacity
                     style={[styles.negChip, draft.negotiable && styles.negChipOn]}
                     onPress={() => setDraft((d) => ({ ...d, negotiable: !d.negotiable }))}
@@ -719,7 +727,7 @@ export default function MarketplaceScreen() {
                 <Text style={styles.resetText}>Reset</Text>
               </TouchableOpacity>
             </View>
-            <ScrollView showsVerticalScrollIndicator={false}>
+            <ScrollView showsVerticalScrollIndicator={false} keyboardShouldPersistTaps="handled">
               {/* Location lives inside Filters now (was a separate bar/sheet). */}
               <Text style={styles.filterLabel}>Location</Text>
               <TouchableOpacity style={styles.locateRow} onPress={useMyLocation} disabled={locating} testID="market-locate">
