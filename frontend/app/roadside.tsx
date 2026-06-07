@@ -442,18 +442,13 @@ export default function RoadsideScreen() {
     // In-app confirm modal (works the same on web + native) — no browser dialog.
     const ok = await confirm({
       title: "Open a dispute",
-      message: "Flag this job and open a support ticket? Available up to 7 days after the service.",
-      confirmLabel: "Dispute",
+      message: "This opens a support ticket about this job (within 7 days of the service). The job is only marked disputed once you submit the ticket.",
+      confirmLabel: "Continue",
       cancelLabel: "Cancel",
-      destructive: true,
     });
     if (!ok) return;
-    try {
-      await api.disputeRoadside(r.id);
-    } catch (e: any) {
-      Alert.alert("Couldn't open dispute", String(e?.message || e).replace(/^\d{3}:\s*/, ""));
-      return;
-    }
+    // Don't flag the dispute here — it's recorded only when the support ticket is
+    // actually submitted (see the support compose). Backing out leaves no dispute.
     router.push({ pathname: "/support", params: { compose: "1", category: "dispute", subject: `Roadside dispute · ${SERVICE_META[r.service].label}`, related_type: "roadside", related_id: r.id } });
   };
 

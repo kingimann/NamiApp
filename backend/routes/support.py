@@ -98,6 +98,14 @@ async def create_ticket(body: TicketCreate, authorization: Optional[str] = Heade
         "text": message,
         "created_at": now,
     })
+    # A roadside job is only flagged as disputed once a valid ticket actually
+    # exists — so backing out of the composer never leaves a phantom dispute.
+    if (body.related_type or "") == "roadside" and (body.related_id or "").strip():
+        try:
+            from routes.roadside import mark_roadside_disputed
+            await mark_roadside_disputed(body.related_id.strip(), user["user_id"])
+        except Exception:
+            pass
     # Email the staff team (best-effort) so disputes don't sit unseen.
     try:
         import os
