@@ -8,7 +8,8 @@ import { Ionicons } from "@expo/vector-icons";
 import { Stack, useFocusEffect, useLocalSearchParams, useRouter } from "expo-router";
 import { safeBack } from "@/src/utils/nav";
 import * as Clipboard from "expo-clipboard";
-import { api, Listing, ListingComment } from "@/src/api/client";
+import { api, Listing } from "@/src/api/client";
+import ListingComments from "@/src/components/ListingComments";
 import VerificationBadges from "@/src/components/VerificationBadges";
 import VerifiedBadge from "@/src/components/VerifiedBadge";
 import UserBadges from "@/src/components/UserBadges";
@@ -32,9 +33,6 @@ export default function ListingDetailScreen() {
   const [loading, setLoading] = useState(true);
   const [photoIdx, setPhotoIdx] = useState(0);
   const [busy, setBusy] = useState(false);
-  const [comments, setComments] = useState<ListingComment[]>([]);
-  const [commentText, setCommentText] = useState("");
-  const [posting, setPosting] = useState(false);
   const [reportOpen, setReportOpen] = useState(false);
   const [reported, setReported] = useState(false);
 
@@ -42,7 +40,6 @@ export default function ListingDetailScreen() {
     if (!id) return;
     try { setListing(await api.getListing(id)); }
     catch {} finally { setLoading(false); }
-    try { setComments(await api.listingComments(id)); } catch {}
   }, [id]);
   useFocusEffect(useCallback(() => { load(); }, [load]));
 
@@ -51,22 +48,6 @@ export default function ListingDetailScreen() {
     const next = !listing.liked_by_me;
     setListing({ ...listing, liked_by_me: next, likes_count: (listing.likes_count || 0) + (next ? 1 : -1) });
     try { const u = await api.likeListing(listing.id); setListing(u); } catch { load(); }
-  };
-  const addComment = async () => {
-    const t = commentText.trim();
-    if (!t || !listing || posting) return;
-    setPosting(true);
-    try {
-      const c = await api.addListingComment(listing.id, t);
-      setComments((arr) => [...arr, c]);
-      setCommentText("");
-      setListing((l) => l ? { ...l, comments_count: (l.comments_count || 0) + 1 } : l);
-    } catch {} finally { setPosting(false); }
-  };
-  const removeComment = async (c: ListingComment) => {
-    setComments((arr) => arr.filter((x) => x.id !== c.id));
-    setListing((l) => l ? { ...l, comments_count: Math.max(0, (l.comments_count || 1) - 1) } : l);
-    try { await api.deleteListingComment(listing!.id, c.id); } catch {}
   };
   const doReport = async (reason: string) => {
     if (!listing) return;
@@ -271,38 +252,12 @@ export default function ListingDetailScreen() {
 
             {/* Comments / questions */}
             <Text style={styles.sectionTitle}>Comments{(listing.comments_count || 0) > 0 ? ` (${listing.comments_count})` : ""}</Text>
-            <View style={styles.commentBox}>
-              <TextInput
-                style={styles.commentInput}
-                placeholder="Ask a question or leave a comment…"
-                placeholderTextColor={theme.textMuted}
-                value={commentText}
-                onChangeText={setCommentText}
-                multiline
-                testID="listing-comment-input"
-              />
-              <TouchableOpacity onPress={addComment} disabled={!commentText.trim() || posting} style={[styles.commentSend, (!commentText.trim() || posting) && { opacity: 0.4 }]} testID="listing-comment-send">
-                {posting ? <ActivityIndicator color="#fff" size="small" /> : <Ionicons name="arrow-up" size={18} color="#fff" />}
-              </TouchableOpacity>
-            </View>
-            {comments.length === 0 ? (
-              <Text style={styles.noComments}>No comments yet. Be the first to ask.</Text>
-            ) : comments.map((c) => (
-              <View key={c.id} style={styles.commentRow}>
-                <View style={styles.commentAvatar}>
-                  {c.author.picture ? <Image source={{ uri: c.author.picture }} style={{ width: "100%", height: "100%" }} /> : <Text style={styles.commentInit}>{(c.author.name?.[0] || "?").toUpperCase()}</Text>}
-                </View>
-                <View style={{ flex: 1 }}>
-                  <Text style={styles.commentName}>{c.author.name}</Text>
-                  <Text style={styles.commentText}>{c.text}</Text>
-                </View>
-                {(c.mine || mine) && (
-                  <TouchableOpacity onPress={() => removeComment(c)} hitSlop={8} testID={`listing-comment-del-${c.id}`}>
-                    <Ionicons name="close" size={16} color={theme.textMuted} />
-                  </TouchableOpacity>
-                )}
-              </View>
-            ))}
+            <ListingComments
+              listingId={listing.id}
+              ownerId={listing.user_id}
+              viewerId={user?.user_id}
+              onCountChange={(n) => setListing((l) => l ? { ...l, comments_count: n } : l)}
+            />
           </View>
         </ScrollView>
       )}

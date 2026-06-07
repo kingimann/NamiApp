@@ -675,20 +675,36 @@ async def contact_seller(listing_id: str, authorization: Optional[str] = Header(
 # ── Listing engagement: like, comment, report ──────────────────────────────
 class ListingCommentCreate(BaseModel):
     text: str
+    parent_id: Optional[str] = None     # reply to another comment
+
+
+class ListingCommentEdit(BaseModel):
+    text: str
 
 
 async def _hydrate_comment(c: dict, viewer_id: str) -> ListingComment:
-    a = await db.users.find_one({"user_id": c["user_id"]}, {"_id": 0})
+    from core import _resolve_badges
+    a = await db.users.find_one({"user_id": c["user_id"]}, {"_id": 0}) or {}
+    likes_count = await db.listing_comment_likes.count_documents({"comment_id": c["id"]})
+    liked_by_me = bool(await db.listing_comment_likes.find_one(
+        {"comment_id": c["id"], "user_id": viewer_id}, {"_id": 0, "id": 1}))
+    replies_count = await db.listing_comments.count_documents({"parent_id": c["id"]})
     return ListingComment(
         id=c["id"], listing_id=c["listing_id"],
         author=PostAuthor(
             user_id=c["user_id"],
-            name=(a or {}).get("name", "User"),
-            username=(a or {}).get("username"),
-            picture=(a or {}).get("picture"),
-            verified=bool((a or {}).get("verified", False)),
+            name=a.get("name", "User"),
+            username=a.get("username"),
+            picture=a.get("picture"),
+            verified=bool(a.get("verified", False)),
+            badges=await _resolve_badges(a.get("badge_ids")),
         ),
         text=c.get("text", ""),
+        parent_id=c.get("parent_id"),
+        likes_count=likes_count,
+        liked_by_me=liked_by_me,
+        replies_count=replies_count,
+        edited_at=c.get("edited_at"),
         mine=c["user_id"] == viewer_id,
         created_at=c["created_at"],
     )
@@ -752,13 +768,57 @@ async def add_listing_comment(listing_id: str, body: ListingCommentCreate, autho
     text = (body.text or "").strip()[:1000]
     if not text:
         raise HTTPException(status_code=400, detail="Comment can't be empty")
+    parent_id = None
+    if body.parent_id:
+        parent = await db.listing_comments.find_one(
+            {"id": body.parent_id, "listing_id": listing_id}, {"_id": 0, "id": 1, "parent_id": 1})
+        if not parent:
+            raise HTTPException(status_code=404, detail="Comment to reply to not found")
+        # Keep nesting to one level: a reply to a reply attaches to the top comment.
+        parent_id = parent.get("parent_id") or parent["id"]
     c = {
         "id": str(uuid.uuid4()), "listing_id": listing_id,
         "user_id": user["user_id"], "text": text,
+        "parent_id": parent_id,
         "created_at": datetime.now(timezone.utc),
     }
     await db.listing_comments.insert_one(c)
     await db.listings.update_one({"id": listing_id}, {"$inc": {"comments_count": 1}})
+    return await _hydrate_comment(c, user["user_id"])
+
+
+@router.patch("/listings/{listing_id}/comments/{comment_id}", response_model=ListingComment)
+async def edit_listing_comment(listing_id: str, comment_id: str, body: ListingCommentEdit, authorization: Optional[str] = Header(None)):
+    user = await get_current_user(authorization)
+    c = await db.listing_comments.find_one({"id": comment_id, "listing_id": listing_id}, {"_id": 0})
+    if not c:
+        raise HTTPException(status_code=404, detail="Comment not found")
+    if c["user_id"] != user["user_id"]:
+        raise HTTPException(status_code=403, detail="You can only edit your own comment")
+    text = (body.text or "").strip()[:1000]
+    if not text:
+        raise HTTPException(status_code=400, detail="Comment can't be empty")
+    now = datetime.now(timezone.utc)
+    await db.listing_comments.update_one({"id": comment_id}, {"$set": {"text": text, "edited_at": now}})
+    c = await db.listing_comments.find_one({"id": comment_id}, {"_id": 0})
+    return await _hydrate_comment(c, user["user_id"])
+
+
+@router.post("/listings/{listing_id}/comments/{comment_id}/like", response_model=ListingComment)
+async def like_listing_comment(listing_id: str, comment_id: str, authorization: Optional[str] = Header(None)):
+    user = await get_current_user(authorization)
+    c = await db.listing_comments.find_one({"id": comment_id, "listing_id": listing_id}, {"_id": 0})
+    if not c:
+        raise HTTPException(status_code=404, detail="Comment not found")
+    existing = await db.listing_comment_likes.find_one(
+        {"comment_id": comment_id, "user_id": user["user_id"]}, {"_id": 0, "id": 1})
+    if existing:
+        await db.listing_comment_likes.delete_one({"comment_id": comment_id, "user_id": user["user_id"]})
+    else:
+        await db.listing_comment_likes.insert_one({
+            "id": str(uuid.uuid4()), "comment_id": comment_id,
+            "user_id": user["user_id"], "created_at": datetime.now(timezone.utc),
+        })
     return await _hydrate_comment(c, user["user_id"])
 
 
@@ -772,6 +832,11 @@ async def delete_listing_comment(listing_id: str, comment_id: str, authorization
     # The comment's author or the listing's owner can delete it.
     if c["user_id"] != user["user_id"] and (listing or {}).get("user_id") != user["user_id"]:
         raise HTTPException(status_code=403, detail="Not allowed")
-    await db.listing_comments.delete_one({"id": comment_id})
-    await db.listings.update_one({"id": listing_id}, {"$inc": {"comments_count": -1}})
+    # Remove the comment and any replies to it (plus their likes).
+    child_ids = [r["id"] for r in await db.listing_comments.find(
+        {"parent_id": comment_id}, {"_id": 0, "id": 1}).to_list(500)]
+    ids = [comment_id] + child_ids
+    await db.listing_comments.delete_many({"id": {"$in": ids}})
+    await db.listing_comment_likes.delete_many({"comment_id": {"$in": ids}})
+    await db.listings.update_one({"id": listing_id}, {"$inc": {"comments_count": -len(ids)}})
     return {"ok": True}
