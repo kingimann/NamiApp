@@ -1062,7 +1062,7 @@ export default function RoadsideScreen() {
                         <Text style={styles.contactLineText}>{r.requester.phone}</Text>
                       </TouchableOpacity>
                     ) : (
-                      <Text style={styles.phoneNote}>Their phone shows here once you're verified to help.</Text>
+                      <Text style={styles.phoneNote}>Their phone number is shared once you accept this call.</Text>
                     )}
                     <Meta r={r} />
                     <View style={styles.earnBox}>
