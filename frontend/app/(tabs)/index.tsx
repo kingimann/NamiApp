@@ -216,10 +216,13 @@ export default function MapScreen() {
         const req = await Location.requestForegroundPermissionsAsync();
         status = req.status;
         if (status !== "granted") {
-          setPermissionDenied(!req.canAskAgain);
+          // On web the browser remembers a block and won't re-prompt, so always
+          // show the hint; on native only show it once it can't be asked again.
+          setPermissionDenied(Platform.OS === "web" ? true : !req.canAskAgain);
           return;
         }
       }
+      setPermissionDenied(false);
       const pos = await Location.getCurrentPositionAsync({
         accuracy: Location.Accuracy.High,
       });
@@ -1044,11 +1047,20 @@ export default function MapScreen() {
 
       {permissionDenied && (
         <View style={[styles.permBanner, { top: insets.top + 80 }]} testID="perm-banner">
-          <Text style={styles.permText}>
-            Location permission is blocked. Open settings to enable.
-          </Text>
-          <TouchableOpacity onPress={() => Linking.openSettings()}>
-            <Text style={styles.permLink}>Open Settings</Text>
+          <View style={{ flex: 1 }}>
+            <Text style={styles.permText}>
+              {Platform.OS === "web"
+                ? "Location is blocked. Tap the lock/ⓘ icon in your browser's address bar → allow Location, then reload."
+                : "Location permission is blocked. Open settings to enable it."}
+            </Text>
+            {Platform.OS !== "web" && (
+              <TouchableOpacity onPress={() => Linking.openSettings()}>
+                <Text style={styles.permLink}>Open Settings</Text>
+              </TouchableOpacity>
+            )}
+          </View>
+          <TouchableOpacity onPress={() => setPermissionDenied(false)} hitSlop={8} testID="perm-dismiss">
+            <Ionicons name="close" size={18} color="#fff" />
           </TouchableOpacity>
         </View>
       )}
