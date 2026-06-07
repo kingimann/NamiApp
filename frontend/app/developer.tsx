@@ -8,7 +8,7 @@ import { Ionicons } from "@expo/vector-icons";
 import { Stack, useFocusEffect, useRouter } from "expo-router";
 import { safeBack } from "@/src/utils/nav";
 import * as Clipboard from "expo-clipboard";
-import { api, ApiKey, OAuthApp } from "@/src/api/client";
+import { api, ApiKey, DevWebhook, OAuthApp } from "@/src/api/client";
 import { theme } from "@/src/theme";
 
 const BASE = (process.env.EXPO_PUBLIC_BACKEND_URL as string) || "https://nampo-backend.onrender.com";
@@ -30,8 +30,9 @@ const GROUPS: Group[] = [
       { method: "GET", path: "/forms/{id}/submissions", desc: "List responses (paginated).", auth: true },
       { method: "GET", path: "/forms/{id}/submissions.csv", desc: "Download all responses as CSV.", auth: true },
       { method: "GET", path: "/pub/form?form=KEY", desc: "Public: get a form's fields (no auth).", auth: false },
-      { method: "POST", path: "/pub/form-submit?form=KEY", desc: "Public: submit a form (no auth).", auth: false, body: `{"values":{...},"hp":""}` },
-      { method: "GET", path: "/pub/form-embed.js?form=KEY", desc: "Public: <script> loader that embeds the form as an iframe.", auth: false },
+      { method: "POST", path: "/pub/form-submit?form=KEY", desc: "Public: submit a form (no auth). Fires the form.submission webhook.", auth: false, body: `{"values":{...},"hp":""}` },
+      { method: "GET", path: "/pub/form-embed.js?form=KEY", desc: "Public: <script> loader; theme via data-theme/accent/bg/radius/redirect/prefill.", auth: false },
+      { method: "GET", path: "/pub/form-unit?form=KEY", desc: "Public: hosted form page. Params: theme, accent, bg, radius, hide_title, redirect, pf_<id>.", auth: false },
     ],
   },
   {
@@ -198,16 +199,47 @@ const GROUPS: Group[] = [
   },
 ];
 
-type Lang = "curl" | "js" | "python";
+type Lang = "curl" | "js" | "python" | "dart";
 const SAMPLE: Record<Lang, (base: string) => string> = {
   curl: (b) => `curl ${b}/posts/feed \\\n  -H "Authorization: Bearer $NAMI_KEY"`,
   js: (b) => `const res = await fetch("${b}/posts/feed", {\n  headers: { Authorization: \`Bearer \${process.env.NAMI_KEY}\` },\n});\nconst feed = await res.json();`,
   python: (b) => `import requests\nr = requests.get(\n  "${b}/posts/feed",\n  headers={"Authorization": f"Bearer {NAMI_KEY}"},\n)\nfeed = r.json()`,
+  dart: (b) => `import 'package:http/http.dart' as http;\nimport 'dart:convert';\n\nfinal res = await http.get(\n  Uri.parse("${b}/posts/feed"),\n  headers: {"Authorization": "Bearer $NAMI_KEY"},\n);\nfinal feed = jsonDecode(res.body);`,
 };
+const LANG_LABEL: Record<Lang, string> = { curl: "cURL", js: "JavaScript", python: "Python", dart: "Dart / Flutter" };
 
 const METHOD_COLOR: Record<Method, string> = {
   GET: "#22C55E", POST: "#0EA5E9", PATCH: "#EAB308", DELETE: "#F15C6D",
 };
+
+// Drop-in embed examples for the "Embed & SDKs" section. Customizable via
+// data-* attributes (web) or query params (anywhere, incl. a Flutter WebView).
+const EMBED_SNIPPET = `<script async
+  src="${BASE}/api/pub/form-embed.js?form=YOUR_FORM_KEY"
+  data-theme="dark"
+  data-accent="7C3AED"
+  data-height="620"
+  data-redirect="https://yoursite.com/thanks"
+  data-prefill='{"email":"user@site.com"}'>
+</script>`;
+const FLUTTER_WEBVIEW = `// pubspec.yaml → webview_flutter: ^4.0.0
+import 'package:webview_flutter/webview_flutter.dart';
+
+final c = WebViewController()
+  ..loadRequest(Uri.parse(
+    "${BASE}/api/pub/form-unit?form=YOUR_FORM_KEY"
+    "&theme=dark&accent=7C3AED"));
+
+// in build(): WebViewWidget(controller: c)`;
+const EMBED_ATTRS: [string, string][] = [
+  ["theme", "light (default) or dark"],
+  ["accent", "button colour, 3/6-digit hex (no #)"],
+  ["bg", "background colour, hex"],
+  ["radius", "corner radius in px (0–28)"],
+  ["hide_title", "1 to hide the title & description"],
+  ["redirect", "URL to send users to after submit"],
+  ["pf_<field_id>", "pre-fill a field (query param)"],
+];
 
 export default function DeveloperScreen() {
   const router = useRouter();
@@ -537,7 +569,7 @@ export default function DeveloperScreen() {
           </Text>
         ) : (
           <>
-            <Text style={styles.body}>We POST signed events (follows, messages, tips, …) to your URL. Verify the `X-Nami-Signature` header with your signing secret.</Text>
+            <Text style={styles.body}>We POST signed events (follows, messages, tips, form submissions, …) to your URL. Verify the `X-Nami-Signature` header with your signing secret.</Text>
             {freshSecret && (
               <View style={styles.freshCard}>
                 <Text style={styles.freshLabel}>Signing secret — copy it now, shown once:</Text>
@@ -625,15 +657,46 @@ export default function DeveloperScreen() {
         {/* Quickstart */}
         <Text style={styles.groupTitle}>Quickstart</Text>
         <View style={styles.langRow}>
-          {(["curl", "js", "python"] as Lang[]).map((l) => (
+          {(["curl", "js", "python", "dart"] as Lang[]).map((l) => (
             <TouchableOpacity key={l} onPress={() => setLang(l)} style={[styles.langTab, lang === l && styles.langTabOn]} testID={`lang-${l}`}>
-              <Text style={[styles.langText, lang === l && { color: theme.primary }]}>{l === "js" ? "JavaScript" : l === "python" ? "Python" : "cURL"}</Text>
+              <Text style={[styles.langText, lang === l && { color: theme.primary }]}>{LANG_LABEL[l]}</Text>
             </TouchableOpacity>
           ))}
         </View>
         <TouchableOpacity style={styles.codeBlock} onPress={() => copy(SAMPLE[lang](API_BASE), "Example")} activeOpacity={0.7}>
           <Text style={styles.codeBlockText} selectable>{SAMPLE[lang](API_BASE)}</Text>
         </TouchableOpacity>
+
+        {/* Embed & SDKs */}
+        <Text style={styles.groupTitle}>Embed & customize</Text>
+        <Text style={styles.body}>
+          Drop a Nami form into any website or app and theme it to match your brand — no auth, no backend. Paste the snippet and tweak the <Text style={styles.codeInline}>data-*</Text> attributes:
+        </Text>
+        <TouchableOpacity style={styles.codeBlock} onPress={() => copy(EMBED_SNIPPET, "Embed snippet")} activeOpacity={0.7}>
+          <Text style={styles.codeBlockText} selectable>{EMBED_SNIPPET}</Text>
+        </TouchableOpacity>
+        <View style={[styles.convCard, { marginTop: 10 }]}>
+          {EMBED_ATTRS.map(([k, v]) => (
+            <Text key={k} style={styles.convItem}><Text style={styles.convKey}>{k} </Text>{v}</Text>
+          ))}
+        </View>
+        <Text style={[styles.body, { marginTop: 12 }]}>
+          The same knobs work as query params on <Text style={styles.codeInline}>/pub/form-unit</Text>, so you can embed the form in a native app — e.g. a Flutter <Text style={styles.codeInline}>WebView</Text>:
+        </Text>
+        <TouchableOpacity style={styles.codeBlock} onPress={() => copy(FLUTTER_WEBVIEW, "Flutter snippet")} activeOpacity={0.7}>
+          <Text style={styles.codeBlockText} selectable>{FLUTTER_WEBVIEW}</Text>
+        </TouchableOpacity>
+
+        <Text style={[styles.groupTitle, { marginTop: 22 }]}>SDKs & client generation</Text>
+        <Text style={styles.body}>
+          Nami is a plain JSON+HTTPS API, so it works from any language — Dart/Flutter, Swift, Kotlin, Go, Rust and more. For a fully-typed client, generate one from the OpenAPI schema:
+        </Text>
+        <TouchableOpacity style={styles.codeBlock} onPress={() => copy(`# Dart/Flutter client from the OpenAPI schema\ndart pub global activate openapi_generator_cli\nopenapi-generator generate \\\n  -i ${BASE}/openapi.json \\\n  -g dart-dio -o ./nami_client`, "Codegen")} activeOpacity={0.7}>
+          <Text style={styles.codeBlockText} selectable>{`# Dart/Flutter client from the OpenAPI schema\ndart pub global activate openapi_generator_cli\nopenapi-generator generate \\\n  -i ${BASE}/openapi.json \\\n  -g dart-dio -o ./nami_client`}</Text>
+        </TouchableOpacity>
+        <Text style={[styles.body, { marginTop: 8 }]}>
+          Swap <Text style={styles.codeInline}>-g dart-dio</Text> for <Text style={styles.codeInline}>swift5</Text>, <Text style={styles.codeInline}>kotlin</Text>, <Text style={styles.codeInline}>go</Text>, <Text style={styles.codeInline}>typescript-fetch</Text>, etc. CORS is open, so browser and mobile apps can call the API directly.
+        </Text>
 
         {/* Conventions */}
         <Text style={styles.groupTitle}>Conventions</Text>
@@ -673,7 +736,7 @@ export default function DeveloperScreen() {
         })}
 
         <Text style={styles.footer}>
-          Rate limits and signed webhooks are coming. Keep your API keys secret — treat them like passwords.
+          Keep your API keys and signing secrets safe — treat them like passwords. Heavy automated traffic may be rate-limited (429).
         </Text>
       </ScrollView>
     </SafeAreaView>

@@ -1,7 +1,7 @@
 import React, { useCallback, useState } from "react";
 import {
   View, Text, StyleSheet, ScrollView, TouchableOpacity, TextInput,
-  ActivityIndicator, Modal, Platform, Switch, Share,
+  ActivityIndicator, Modal, Platform, Switch, Share, Linking,
 } from "react-native";
 import { SafeAreaView, useSafeAreaInsets } from "react-native-safe-area-context";
 import { Ionicons } from "@expo/vector-icons";
@@ -29,6 +29,8 @@ const TYPES: { k: FormFieldType; label: string; icon: any }[] = [
   { k: "radio", label: "Single choice", icon: "radio-button-on-outline" },
   { k: "checkbox", label: "Checkboxes", icon: "checkbox-outline" },
 ];
+// Accent presets for the embed customizer ("" = default theme green).
+const ACCENTS = ["", "7C3AED", "0EA5E9", "F97316", "EF4444", "EAB308", "EC4899"];
 const typeLabel = (t: string) => TYPES.find((x) => x.k === t)?.label || t;
 const hasOptions = (t: string) => t === "select" || t === "radio" || t === "checkbox";
 const fmtDate = (iso: string) => { try { return new Date(iso).toLocaleString(); } catch { return iso; } };
@@ -57,6 +59,12 @@ export default function FormBuilderScreen() {
   const [subFields, setSubFields] = useState<FormField[]>([]);
   const [subsLoading, setSubsLoading] = useState(false);
   const [exporting, setExporting] = useState(false);
+
+  // Embed customization (Share tab) — reflected live in the snippet/link below.
+  const [embedDark, setEmbedDark] = useState(false);
+  const [embedHideTitle, setEmbedHideTitle] = useState(false);
+  const [embedAccent, setEmbedAccent] = useState("");   // "" = default green
+  const [embedRedirect, setEmbedRedirect] = useState("");
 
   const load = useCallback(async () => {
     if (!id) return;
@@ -128,8 +136,18 @@ export default function FormBuilderScreen() {
     } catch {} finally { setExporting(false); }
   };
 
-  const snippet = form ? `<script async src="${apiOrigin()}/api/pub/form-embed.js?form=${form.form_key}"></script>` : "";
-  const directLink = form ? `${apiOrigin()}/api/pub/form-unit?form=${form.form_key}` : "";
+  const dataAttrs =
+    (embedDark ? ` data-theme="dark"` : "") +
+    (embedAccent ? ` data-accent="${embedAccent}"` : "") +
+    (embedHideTitle ? ` data-hide-title="1"` : "") +
+    (embedRedirect.trim() ? ` data-redirect="${embedRedirect.trim()}"` : "");
+  const linkParams =
+    (embedDark ? "&theme=dark" : "") +
+    (embedAccent ? `&accent=${embedAccent}` : "") +
+    (embedHideTitle ? "&hide_title=1" : "") +
+    (embedRedirect.trim() ? `&redirect=${encodeURIComponent(embedRedirect.trim())}` : "");
+  const snippet = form ? `<script async src="${apiOrigin()}/api/pub/form-embed.js?form=${form.form_key}"${dataAttrs}></script>` : "";
+  const directLink = form ? `${apiOrigin()}/api/pub/form-unit?form=${form.form_key}${linkParams}` : "";
   const copy = async (what: string, text: string) => { await Clipboard.setStringAsync(text); setCopied(what); setTimeout(() => setCopied(""), 1500); };
 
   return (
@@ -231,6 +249,52 @@ export default function FormBuilderScreen() {
                 <Ionicons name="open-outline" size={18} color="#fff" />
                 <Text style={styles.shareBtnText}>Open form in app</Text>
               </TouchableOpacity>
+
+              <Text style={[styles.label, { marginTop: 18 }]}>Customize appearance</Text>
+              <Text style={styles.hint}>These options update the snippet and link below.</Text>
+              <View style={styles.custCard}>
+                <View style={styles.custRow}>
+                  <Text style={styles.custLabel}>Dark mode</Text>
+                  <Switch value={embedDark} onValueChange={setEmbedDark} trackColor={{ true: theme.primary }} testID="embed-dark" />
+                </View>
+                <View style={styles.custRow}>
+                  <Text style={styles.custLabel}>Hide title & description</Text>
+                  <Switch value={embedHideTitle} onValueChange={setEmbedHideTitle} trackColor={{ true: theme.primary }} testID="embed-hide-title" />
+                </View>
+                <Text style={[styles.custLabel, { marginTop: 4, marginBottom: 8 }]}>Accent color</Text>
+                <View style={styles.swatchRow}>
+                  {ACCENTS.map((a) => {
+                    const on = embedAccent === a;
+                    const col = a ? `#${a}` : theme.primary;
+                    return (
+                      <TouchableOpacity
+                        key={a || "default"}
+                        style={[styles.swatch, { backgroundColor: col }, on && styles.swatchOn]}
+                        onPress={() => setEmbedAccent(a)}
+                        testID={`embed-accent-${a || "default"}`}
+                      >
+                        {on && <Ionicons name="checkmark" size={15} color="#fff" />}
+                      </TouchableOpacity>
+                    );
+                  })}
+                </View>
+                <Text style={[styles.custLabel, { marginTop: 12, marginBottom: 6 }]}>Redirect after submit (optional)</Text>
+                <TextInput
+                  style={styles.input}
+                  value={embedRedirect}
+                  onChangeText={setEmbedRedirect}
+                  placeholder="https://yoursite.com/thanks"
+                  placeholderTextColor={theme.textMuted}
+                  autoCapitalize="none"
+                  autoCorrect={false}
+                  keyboardType="url"
+                  testID="embed-redirect"
+                />
+                <TouchableOpacity style={styles.previewBtn} onPress={() => Linking.openURL(directLink)} testID="embed-preview">
+                  <Ionicons name="eye-outline" size={16} color={theme.primary} />
+                  <Text style={styles.copyText}>Preview styled form</Text>
+                </TouchableOpacity>
+              </View>
 
               <Text style={[styles.label, { marginTop: 18 }]}>Embed on a website</Text>
               <Text style={styles.hint}>Paste this snippet where you want the form to appear.</Text>
@@ -340,6 +404,13 @@ const styles = StyleSheet.create({
   saveText: { color: "#fff", fontWeight: "800", fontSize: 15 },
   shareBtn: { flexDirection: "row", alignItems: "center", justifyContent: "center", gap: 8, backgroundColor: theme.primary, borderRadius: 12, paddingVertical: 13 },
   shareBtnText: { color: "#fff", fontWeight: "800", fontSize: 15 },
+  custCard: { backgroundColor: theme.surface, borderWidth: 1, borderColor: theme.border, borderRadius: 14, padding: 14 },
+  custRow: { flexDirection: "row", alignItems: "center", justifyContent: "space-between", paddingVertical: 6 },
+  custLabel: { color: theme.textSecondary, fontSize: 14, fontWeight: "700" },
+  swatchRow: { flexDirection: "row", flexWrap: "wrap", gap: 10 },
+  swatch: { width: 34, height: 34, borderRadius: 17, alignItems: "center", justifyContent: "center", borderWidth: 2, borderColor: "transparent" },
+  swatchOn: { borderColor: theme.textPrimary },
+  previewBtn: { flexDirection: "row", alignItems: "center", justifyContent: "center", gap: 7, backgroundColor: theme.surfaceAlt, borderRadius: 12, paddingVertical: 11, marginTop: 14 },
   codeBox: { backgroundColor: theme.surface, borderWidth: 1, borderColor: theme.border, borderRadius: 12, padding: 12 },
   code: { color: theme.textPrimary, fontSize: 12.5, fontFamily: Platform.OS === "ios" ? "Menlo" : "monospace" },
   copyBtn: { flexDirection: "row", alignItems: "center", justifyContent: "center", gap: 7, backgroundColor: theme.surfaceAlt, borderRadius: 12, paddingVertical: 11, marginTop: 8 },

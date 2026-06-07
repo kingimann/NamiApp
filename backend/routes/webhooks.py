@@ -27,6 +27,7 @@ WEBHOOK_EVENTS = [
     "message", "group_message",
     "tip", "subscribe",
     "post_like", "post_reply", "mention",
+    "form.submission",
 ]
 
 
