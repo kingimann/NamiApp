@@ -360,7 +360,9 @@ async def verify_documents(
     """Returns {"decision": "approve"|"reject"|"unavailable", "reason": str}.
     `unavailable` means the caller should fall back (e.g. manual review)."""
     if not ollama_enabled():
-        return {"decision": "unavailable", "reason": "AI verifier not configured"}
+        # No local Ollama model — use the hosted AI verifier (Anthropic).
+        from services.claude_ai import verify_documents_claude
+        return await verify_documents_claude(insurance_b64, ownership_b64, vehicle, name)
 
     insurance_b64 = await _fetch_image_b64(insurance_b64)   # download hosted URLs to base64
     ownership_b64 = await _fetch_image_b64(ownership_b64)
@@ -450,7 +452,10 @@ async def verify_vehicle_photo(b64: str) -> dict:
     if _image_looks_blank(b64):
         return {"ok": False, "reason": "That looks like a blank or all-dark photo. Take a clear photo of your vehicle or the problem."}
     if not ollama_enabled():
-        return {"ok": True, "reason": ""}
+        # No local Ollama model — use the hosted AI check (Anthropic). It reads
+        # hosted URLs (e.g. Cloudinary) directly and fails open if unconfigured.
+        from services.claude_ai import classify_vehicle_photo
+        return await classify_vehicle_photo(b64)
     b64 = await _fetch_image_b64(b64)   # download hosted URLs (e.g. Cloudinary) to base64
     prompt = (
         "This is a photo from a roadside-assistance request. Does it clearly show a "
@@ -539,6 +544,18 @@ async def moderate_listing(title: str, description: str, photos, dup_existing: b
             parsed = json.loads(content)
             if isinstance(parsed, dict) and parsed.get("spam"):
                 r = str(parsed.get("reason") or "This looks like spam.").strip()[:200]
+                if r and r not in reasons:
+                    reasons.append(r)
+        except Exception:
+            pass
+    else:
+        # No local Ollama model — use the hosted AI (Anthropic) for the spam/scam
+        # judgement. No-op when ANTHROPIC_API_KEY is also unset.
+        try:
+            from services.claude_ai import classify_listing_spam
+            res = await classify_listing_spam(title, description)
+            if res and res.get("spam"):
+                r = (res.get("reason") or "This looks like spam.").strip()[:200]
                 if r and r not in reasons:
                     reasons.append(r)
         except Exception:
