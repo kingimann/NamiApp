@@ -236,6 +236,30 @@ def _guide_json(guide: dict, owner: dict, places: list) -> dict:
     }
 
 
+async def _load_public_community(name: str):
+    doc = await db.communities.find_one({"name": (name or "").lstrip("/").lower()}, {"_id": 0})
+    return doc or None
+
+
+async def _community_member_count(cid: str) -> int:
+    try:
+        return await db.community_members.count_documents({"community_id": cid})
+    except Exception:
+        return 0
+
+
+def _community_json(doc: dict, members: int) -> dict:
+    return {
+        "id": doc["id"], "name": doc.get("name"),
+        "title": doc.get("title") or doc.get("name"),
+        "description": doc.get("description") or "",
+        "color": doc.get("color") or "#3B82F6",
+        "icon": doc.get("icon") or "people",
+        "member_count": members,
+        "url": f"{WEB_APP_URL}/c/{doc.get('name')}",
+    }
+
+
 async def _load_public_user(username: str):
     uname = (username or "").lstrip("@").strip()
     if not uname:
@@ -317,6 +341,16 @@ async def public_guide(request: Request, slug: str):
     return _guide_json(guide, owner, places)
 
 
+@router.get("/pub/community/{name}")
+async def public_community(request: Request, name: str):
+    if not _rate_ok(_client_ip(request)):
+        raise HTTPException(status_code=429, detail="Slow down — too many requests.")
+    doc = await _load_public_community(name)
+    if not doc:
+        raise HTTPException(status_code=404, detail="Community not available")
+    return _community_json(doc, await _community_member_count(doc["id"]))
+
+
 @router.get("/pub/profile/{username}/posts")
 async def public_profile_posts(request: Request, username: str,
                                limit: int = Query(10), cursor: Optional[str] = Query(None)):
@@ -370,6 +404,7 @@ _CARD_CSS = """
   .sub{font-size:12.5px;color:var(--muted);margin-top:3px}
   .gname{font-size:17px;font-weight:800}
   .gplace{font-size:13.5px;margin:5px 0;color:var(--text)}
+  .cav{width:48px;height:48px;border-radius:14px;display:flex;align-items:center;justify-content:center;color:#fff;font-weight:800;font-size:20px;flex:0 0 auto}
   .media{margin-top:10px;border-radius:calc(var(--rad) - 4px);overflow:hidden;border:1px solid var(--border)}
   .media img{display:block;width:100%;max-height:330px;object-fit:cover}
   .meta{display:flex;gap:16px;margin-top:10px;color:var(--muted);font-size:12.5px}
@@ -521,20 +556,48 @@ async def guide_card(request: Request, guide: str = Query(...), theme: str = Que
     return HTMLResponse(content=_card_html(inner, cfg), headers={"X-Frame-Options": "ALLOWALL"})
 
 
+@router.get("/pub/community-card", response_class=HTMLResponse)
+async def community_card(request: Request, community: str = Query(...), theme: str = Query("light"),
+                        accent: Optional[str] = Query(None), radius: Optional[str] = Query(None)):
+    doc = await _load_public_community(community)
+    if not doc:
+        return _unavailable("This community is unavailable.")
+    members = await _community_member_count(doc["id"])
+    cfg = _embed_cfg(theme, accent, radius)
+    e = html.escape
+    title = doc.get("title") or doc.get("name") or "Community"
+    color = _hex(doc.get("color")) or "#3B82F6"
+    initial = e((title[:1] or "C").upper())
+    plural = "" if members == 1 else "s"
+    desc = f'<div class="bio">{e(doc.get("description"))}</div>' if doc.get("description") else ""
+    link = f"{WEB_APP_URL}/c/{e(doc.get('name') or '')}"
+    inner = (
+        f'<a class="card" href="{link}" target="_blank" rel="noopener">'
+        f'<div class="top"><div class="cav" style="background:{color}">{initial}</div>'
+        f'<div><div class="nm">{e(title)}</div>'
+        f'<div class="un">c/{e(doc.get("name") or "")} · {members} member{plural}</div></div></div>'
+        f'{desc}'
+        '<div class="brand"><span class="n">Nami Communities</span><span class="cta">Open community ›</span></div>'
+        "</a>"
+    )
+    return HTMLResponse(content=_card_html(inner, cfg), headers={"X-Frame-Options": "ALLOWALL"})
+
+
 # ── Drop-in <script> loader ───────────────────────────────────────────────────
 _EMBED_JS = """(function(){
   var s=document.currentScript;
   function a(n){return s&&s.getAttribute(n);}
-  var post=a("data-post"), profile=a("data-profile"), listing=a("data-listing"), guide=a("data-guide");
-  if(!post&&!profile&&!listing&&!guide)return;
+  var post=a("data-post"), profile=a("data-profile"), listing=a("data-listing"), guide=a("data-guide"), community=a("data-community");
+  if(!post&&!profile&&!listing&&!guide&&!community)return;
   var path = post?("post-card?post="+encodeURIComponent(post))
     : listing?("listing-card?listing="+encodeURIComponent(listing))
     : guide?("guide-card?guide="+encodeURIComponent(guide))
+    : community?("community-card?community="+encodeURIComponent(community))
     : ("profile-card?profile="+encodeURIComponent(profile));
   ["theme","accent","radius"].forEach(function(k){var v=a("data-"+k);if(v)path+="&"+k+"="+encodeURIComponent(v);});
   var f=document.createElement("iframe");
   f.src="__BASE__/api/pub/"+path;
-  f.width=a("data-width")||"100%";f.height=a("data-height")||(profile?"150":listing?"420":guide?"340":"460");
+  f.width=a("data-width")||"100%";f.height=a("data-height")||(profile?"150":listing?"420":guide?"340":community?"180":"460");
   f.scrolling="no";f.style.border="0";f.style.maxWidth="550px";f.style.width="100%";
   if(s&&s.parentNode)s.parentNode.insertBefore(f,s);
 })();"""
@@ -559,6 +622,11 @@ def _extract_listing_id(url: str) -> Optional[str]:
 
 def _extract_guide_slug(url: str) -> Optional[str]:
     m = re.search(r"/(?:guide|g)/([A-Za-z0-9_\-]{2,})", url or "")
+    return m.group(1) if m else None
+
+
+def _extract_community(url: str) -> Optional[str]:
+    m = re.search(r"/(?:community|c)/([A-Za-z0-9_\-]{2,})", url or "")
     return m.group(1) if m else None
 
 
@@ -612,6 +680,24 @@ async def oembed(request: Request, url: str = Query(...), format: str = Query("j
         height = min(int(maxheight or 340), 420)
         src = f"{base}/api/pub/guide-card?guide={gslug}"
         return _oembed_payload(f"{g.get('name')} — a Nami guide", owner, src, width, height, owner.get("picture"))
+
+    cname = _extract_community(url)
+    if cname:
+        doc = await _load_public_community(cname)
+        if not doc:
+            raise HTTPException(status_code=404, detail="Community not available")
+        height = min(int(maxheight or 180), 240)
+        src = f"{base}/api/pub/community-card?community={cname}"
+        iframe = (f'<iframe src="{html.escape(src)}" width="{width}" height="{height}" '
+                  'frameborder="0" scrolling="no" style="border:0;max-width:550px;width:100%" '
+                  'allowtransparency="true"></iframe>')
+        return {
+            "version": "1.0", "type": "rich", "provider_name": "Nami", "provider_url": WEB_APP_URL,
+            "title": f"c/{doc.get('name')} on Nami",
+            "author_name": doc.get("title") or doc.get("name"),
+            "author_url": f"{WEB_APP_URL}/c/{doc.get('name')}",
+            "html": iframe, "width": width, "height": height, "cache_age": 3600,
+        }
 
     uname = _extract_username(url)
     if uname:
