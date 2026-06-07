@@ -12,6 +12,14 @@ export default function Root({ children }: PropsWithChildren) {
           name="viewport"
           content="width=device-width, initial-scale=1, maximum-scale=1, minimum-scale=1, user-scalable=no, viewport-fit=cover, shrink-to-fit=no"
         />
+        {/* Make the web build installable + open standalone, like a native app. */}
+        <link rel="manifest" href="/manifest.json" />
+        <meta name="theme-color" content="#0B141A" />
+        <meta name="mobile-web-app-capable" content="yes" />
+        <meta name="apple-mobile-web-app-capable" content="yes" />
+        <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
+        <meta name="apple-mobile-web-app-title" content="Nami" />
+        <link rel="apple-touch-icon" href="/icon.png" />
         {/*
           Disable body scrolling on web to make ScrollView components work correctly.
           If you want to enable scrolling, remove `ScrollViewStyleReset` and
@@ -36,6 +44,22 @@ export default function Root({ children }: PropsWithChildren) {
               body > div:first-child { position: fixed !important; top: 0; left: 0; right: 0; bottom: 0; }
               [role="tablist"] [role="tab"] * { overflow: visible !important; }
               [role="heading"], [role="heading"] * { overflow: visible !important; }
+
+              /* ---- Native-app feel in the browser ---- */
+              html { background: #000; -webkit-text-size-adjust: 100%; text-size-adjust: 100%; }
+              body { background: #0B141A; -webkit-font-smoothing: antialiased; -moz-osx-font-smoothing: grayscale; }
+              /* No text selection or long-press callout (feels like an app, not a page).
+                 Inputs and anything React Native marks selectable stay selectable. */
+              * { -webkit-tap-highlight-color: transparent; -webkit-touch-callout: none;
+                  -webkit-user-select: none; -moz-user-select: none; -ms-user-select: none; user-select: none; }
+              input, textarea, [contenteditable="true"], [data-selectable="true"] {
+                  -webkit-user-select: text; -moz-user-select: text; -ms-user-select: text; user-select: text; -webkit-touch-callout: default; }
+              /* Hide scrollbars everywhere — app screens scroll internally. */
+              * { scrollbar-width: none; -ms-overflow-style: none; -webkit-overflow-scrolling: touch; }
+              *::-webkit-scrollbar { display: none; width: 0; height: 0; }
+              /* No image drag ghost / blue focus ring on tappables. */
+              img, a { -webkit-user-drag: none; user-drag: none; }
+              :focus { outline: none; }
             `,
           }}
         />

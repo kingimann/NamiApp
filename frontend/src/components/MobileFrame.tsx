@@ -24,7 +24,9 @@ export default function MobileFrame({ children }: { children: React.ReactNode })
 
 const styles = StyleSheet.create({
   full: { flex: 1 },
-  backdrop: { flex: 1, backgroundColor: "#000", alignItems: "center", justifyContent: "center" },
+  // Dark backdrop with a little breathing room so the column reads as a device.
+  backdrop: { flex: 1, backgroundColor: "#000", alignItems: "center", justifyContent: "center", paddingVertical: 22 },
+  // A floating, rounded phone-app window with a soft shadow.
   frame: {
     flex: 1,
     width: FRAME_MAX,
@@ -33,8 +35,12 @@ const styles = StyleSheet.create({
     backgroundColor: theme.bg,
     overflow: "hidden",
     position: "relative",
-    borderLeftWidth: StyleSheet.hairlineWidth,
-    borderRightWidth: StyleSheet.hairlineWidth,
+    borderRadius: 30,
+    borderWidth: StyleSheet.hairlineWidth,
     borderColor: theme.border,
+    shadowColor: "#000",
+    shadowOpacity: 0.5,
+    shadowRadius: 36,
+    shadowOffset: { width: 0, height: 10 },
   },
 });
