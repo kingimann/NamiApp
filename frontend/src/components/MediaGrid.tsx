@@ -6,28 +6,40 @@ import {
 import { Ionicons } from "@expo/vector-icons";
 import { useVideoPlayer, VideoView } from "expo-video";
 import { PostMedia, mediaUri } from "@/src/api/client";
+import ReelPoster from "@/src/components/ReelPoster";
 import { theme } from "@/src/theme";
 
 const { width: SCREEN_W } = Dimensions.get("window");
 
-function VideoTile({ uri, style, onPress }: { uri: string; style: any; onPress?: () => void }) {
-  const player = useVideoPlayer(uri, (p) => { p.loop = true; p.muted = true; });
+function VideoTile({ uri, poster, style, onPress }: { uri: string; poster?: string | null; style: any; onPress?: () => void }) {
+  // For reel previews (onPress set) we don't mount a player at all — just show
+  // the cover (custom thumbnail or the branded "Nami Social" default) + a play
+  // badge, and hand the tap off to the Reels player.
+  const player = useVideoPlayer(onPress ? null : uri, (p) => { p.loop = true; p.muted = true; });
   const [playing, setPlaying] = useState(false);
-  // When onPress is provided (feed → Reels), show a poster + play button and
-  // hand the tap off instead of playing inline.
+  const [started, setStarted] = useState(false);
   const handle = () => {
     if (onPress) { onPress(); return; }
     if (playing) { player.pause(); setPlaying(false); }
-    else { player.play(); setPlaying(true); }
+    else { player.play(); setPlaying(true); setStarted(true); }
   };
   return (
     <Pressable onPress={handle} style={style}>
-      <VideoView
-        player={player}
-        style={StyleSheet.absoluteFill}
-        nativeControls={false}
-        contentFit="cover"
-      />
+      {onPress ? (
+        <ReelPoster uri={poster} compact />
+      ) : (
+        <VideoView
+          player={player}
+          style={StyleSheet.absoluteFill}
+          nativeControls={false}
+          contentFit="cover"
+        />
+      )}
+      {!onPress && !started && (
+        <View pointerEvents="none" style={StyleSheet.absoluteFill}>
+          <ReelPoster uri={poster} compact />
+        </View>
+      )}
       {(!playing || !!onPress) && (
         <View style={styles.playOverlay}>
           <Ionicons name="play" size={32} color="#fff" />
@@ -56,7 +68,7 @@ export default function MediaGrid({
     if (m.type === "video") {
       return (
         <View key={idx} style={[styles.tile, style]}>
-          <VideoTile uri={uri} style={StyleSheet.absoluteFill} onPress={onVideoPress} />
+          <VideoTile uri={uri} poster={m.thumbnail} style={StyleSheet.absoluteFill} onPress={onVideoPress} />
         </View>
       );
     }

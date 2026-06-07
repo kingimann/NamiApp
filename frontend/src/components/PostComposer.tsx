@@ -8,6 +8,8 @@ import { Ionicons } from "@expo/vector-icons";
 import * as ImagePicker from "expo-image-picker";
 import { api, Post, PostMedia, mediaUri } from "@/src/api/client";
 import { cloudinaryEnabled, uploadToCloudinary } from "@/src/api/cloudinary";
+import { pickThumbnailUri } from "@/src/utils/thumbnail";
+import ReelPoster from "@/src/components/ReelPoster";
 import { theme } from "@/src/theme";
 
 type Props = {
@@ -48,6 +50,7 @@ export default function PostComposer({
   const [media, setMedia] = useState<PostMedia[]>([]);
   const [submitting, setSubmitting] = useState(false);
   const [processing, setProcessing] = useState(false);
+  const [coverBusy, setCoverBusy] = useState(false);
   const [showPoll, setShowPoll] = useState(false);
   const [linkVidOpen, setLinkVidOpen] = useState(false);
   const [linkVidUrl, setLinkVidUrl] = useState("");
@@ -249,6 +252,20 @@ export default function PostComposer({
     }
   };
 
+  const pickCover = async () => {
+    setCoverBusy(true);
+    try {
+      const uri = await pickThumbnailUri();
+      if (uri) setMedia((arr) => arr.map((m) => (m.type === "video" ? { ...m, thumbnail: uri } : m)));
+    } catch (e: any) {
+      Alert.alert("Couldn't set cover", String(e?.message || e));
+    } finally {
+      setCoverBusy(false);
+    }
+  };
+  const removeCover = () =>
+    setMedia((arr) => arr.map((m) => (m.type === "video" ? { ...m, thumbnail: null } : m)));
+
   const submit = async () => {
     const t = text.trim();
     const validPoll = showPoll && pollOptions.filter((o) => o.trim()).length >= 2;
@@ -292,6 +309,8 @@ export default function PostComposer({
   };
 
   const remaining = TEXT_MAX - text.length;
+  const hasVideo = media.some((m) => m.type === "video");
+  const videoThumb = media.find((m) => m.type === "video")?.thumbnail || null;
 
   return (
     <Modal visible={visible} animationType="slide" transparent onRequestClose={onClose}>
@@ -384,6 +403,30 @@ export default function PostComposer({
                     </TouchableOpacity>
                   </View>
                 ))}
+              </View>
+            )}
+
+            {hasVideo && (
+              <View style={styles.coverRow}>
+                <View style={styles.coverPreview}>
+                  <ReelPoster uri={videoThumb} compact />
+                </View>
+                <View style={{ flex: 1 }}>
+                  <Text style={styles.coverTitle}>Reel cover</Text>
+                  <Text style={styles.coverSub} numberOfLines={1}>
+                    {videoThumb ? "Custom thumbnail" : "Default “Nami Social” cover"}
+                  </Text>
+                </View>
+                <TouchableOpacity onPress={pickCover} disabled={coverBusy} style={styles.coverBtn} testID="composer-cover">
+                  {coverBusy
+                    ? <ActivityIndicator color={theme.primary} size="small" />
+                    : <Text style={styles.coverBtnText}>{videoThumb ? "Change" : "Add cover"}</Text>}
+                </TouchableOpacity>
+                {!!videoThumb && (
+                  <TouchableOpacity onPress={removeCover} style={styles.coverClear} testID="composer-cover-clear">
+                    <Ionicons name="close" size={16} color={theme.textMuted} />
+                  </TouchableOpacity>
+                )}
               </View>
             )}
 
@@ -622,6 +665,21 @@ const styles = StyleSheet.create({
     ...(Platform.OS === "web" ? ({ outlineStyle: "none" } as object) : {}),
   },
   mediaRow: { flexDirection: "row", flexWrap: "wrap", gap: 8, marginTop: 8, paddingBottom: 12 },
+  coverRow: {
+    flexDirection: "row", alignItems: "center", gap: 12,
+    backgroundColor: theme.surfaceAlt, borderRadius: 14,
+    borderWidth: 1, borderColor: theme.border,
+    padding: 10, marginBottom: 12,
+  },
+  coverPreview: { width: 44, height: 62, borderRadius: 8, overflow: "hidden", backgroundColor: "#000" },
+  coverTitle: { color: theme.textPrimary, fontSize: 14, fontWeight: "800" },
+  coverSub: { color: theme.textMuted, fontSize: 12, marginTop: 2 },
+  coverBtn: {
+    backgroundColor: theme.surface, borderWidth: 1, borderColor: theme.border,
+    borderRadius: 10, paddingHorizontal: 14, paddingVertical: 9, minWidth: 64, alignItems: "center",
+  },
+  coverBtnText: { color: theme.primary, fontSize: 13.5, fontWeight: "800" },
+  coverClear: { width: 30, height: 30, borderRadius: 15, backgroundColor: theme.surface, alignItems: "center", justifyContent: "center", borderWidth: 1, borderColor: theme.border },
   processingTile: { backgroundColor: theme.surfaceAlt, alignItems: "center", justifyContent: "center", gap: 6 },
   processingText: { color: theme.textSecondary, fontSize: 11, fontWeight: "600" },
   uploadingOverlay: {
