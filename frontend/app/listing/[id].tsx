@@ -10,6 +10,8 @@ import { safeBack } from "@/src/utils/nav";
 import * as Clipboard from "expo-clipboard";
 import { api, Listing, ListingComment } from "@/src/api/client";
 import VerificationBadges from "@/src/components/VerificationBadges";
+import VerifiedBadge from "@/src/components/VerifiedBadge";
+import UserBadges from "@/src/components/UserBadges";
 import { useAuth } from "@/src/context/AuthContext";
 import { useConfirm } from "@/src/context/ConfirmContext";
 import { theme } from "@/src/theme";
@@ -239,7 +241,10 @@ export default function ListingDetailScreen() {
                   <Text style={styles.sellerInit}>{(listing.seller.name?.[0] || "?").toUpperCase()}</Text>
                 )}
               </View>
-              <Text style={styles.sellerName}>{listing.seller.name}</Text>
+              <Text style={styles.sellerName} numberOfLines={1}>{listing.seller.name}</Text>
+              {listing.seller.verified && <VerifiedBadge size={15} />}
+              <UserBadges badges={listing.seller.badges} size={15} />
+              <View style={{ flex: 1 }} />
               <Ionicons name="chevron-forward" size={18} color={theme.textMuted} />
             </TouchableOpacity>
             <View style={styles.sellerVerif}>
@@ -494,7 +499,7 @@ const styles = StyleSheet.create({
     backgroundColor: theme.primary, alignItems: "center", justifyContent: "center",
   },
   sellerInit: { color: "#fff", fontSize: 18, fontWeight: "700" },
-  sellerName: { flex: 1, color: theme.textPrimary, fontSize: 15, fontWeight: "700" },
+  sellerName: { flexShrink: 1, color: theme.textPrimary, fontSize: 15, fontWeight: "700" },
   sellerVerif: { marginTop: 8 },
 
   footer: {

@@ -70,11 +70,14 @@ async def _hydrate_listing(
     viewer_coords: Optional[Tuple[float, float]] = None,
 ) -> Listing:
     author_doc = await db.users.find_one({"user_id": doc["user_id"]}, {"_id": 0}) or {}
+    from core import _resolve_badges
     seller = PostAuthor(
         user_id=doc["user_id"],
         name=author_doc.get("name", "Unknown") or "Unknown",
+        username=author_doc.get("username"),
         picture=author_doc.get("picture"),
         verified=bool(author_doc.get("verified", False)),
+        badges=await _resolve_badges(author_doc.get("badge_ids")),
         id_verified=bool(author_doc.get("id_verified", False)),
         phone_verified=bool(author_doc.get("phone_verified", False)),
         email_verified=bool(author_doc.get("email_verified", False)),
