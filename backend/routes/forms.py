@@ -547,6 +547,10 @@ _UNIT_HTML = """<!doctype html><html><head><meta charset="utf-8">
   .sigwrap{position:relative}
   .sig{width:100%;height:150px;border:1px solid var(--border);border-radius:var(--rad);background:var(--field);touch-action:none;display:block;cursor:crosshair}
   .sigclear{position:absolute;top:8px;right:8px;width:auto;margin:0;background:transparent;color:var(--muted);font-size:12px;font-weight:600;padding:4px 9px;border:1px solid var(--border);border-radius:8px}
+  .sigtabs{display:flex;gap:6px;margin-bottom:8px}
+  .sigtab{width:auto;margin:0;background:var(--field);color:var(--muted);border:1px solid var(--border);font-size:13px;font-weight:700;padding:6px 16px;border-radius:999px;cursor:pointer}
+  .sigtab.on{background:var(--acc);color:#fff;border-color:var(--acc)}
+  .sigtype{font-style:italic;font-size:18px}
   .photo{display:flex;align-items:center;gap:12px}
   .photo input[type=file]{display:none}
   .photobtn{width:auto;margin:0;background:var(--field);color:var(--text);border:1px solid var(--border);font-size:14px;font-weight:600;padding:10px 14px;border-radius:var(--rad);cursor:pointer}
@@ -583,6 +587,7 @@ _UNIT_HTML = """<!doctype html><html><head><meta charset="utf-8">
   fetch(BASE+"/api/pub/form?form="+encodeURIComponent(FORM)).then(function(r){return r.json()}).then(function(f){
     if(!f||!f.fields){root.innerHTML='<div class="msg err">This form is unavailable.</div>';return;}
     var pf=CFG.prefill||{};
+    var sigMode={};
     var payFld=null;(f.fields||[]).forEach(function(fl){if(fl.type==='payment')payFld=fl;});
     var h='';
     if(!CFG.hideTitle){h+='<h2>'+esc(f.title||"Form")+'</h2>';if(f.description) h+='<p class="desc">'+esc(f.description)+'</p>';}
@@ -600,7 +605,7 @@ _UNIT_HTML = """<!doctype html><html><head><meta charset="utf-8">
       else if(t==='payment'){if(fl.amount_open){h+='<input type="number" min="0.5" step="0.01" data-fid="'+esc(fl.id)+'" placeholder="Amount in '+esc(fl.currency||"USD")+'"'+(fl.required?' required':'')+'>';}else{h+='<div class="payamt">'+esc(fl.currency||"USD")+' '+esc(Number(fl.amount||0).toFixed(2))+'</div>';}}
       else if(t==='select'){h+='<select data-fid="'+esc(fl.id)+'"'+(fl.required?' required':'')+'><option value="">Choose…</option>';(fl.options||[]).forEach(function(o){h+='<option'+(o===pv?' selected':'')+'>'+esc(o)+'</option>';});h+='</select>';}
       else if(t==='radio'||t==='checkbox'){(fl.options||[]).forEach(function(o){var ck=(t==='radio'?o===pv:String(pv).split(",").indexOf(o)>=0)?' checked':'';h+='<label class="opt"><input type="'+t+'" name="'+esc(fl.id)+'" value="'+esc(o)+'"'+ck+'>'+esc(o)+'</label>';});}
-      else if(t==='signature'){h+='<div class="sigwrap"><canvas class="sig" data-sig="'+esc(fl.id)+'"></canvas><button type="button" class="sigclear" data-sigclear="'+esc(fl.id)+'">Clear</button></div>';}
+      else if(t==='signature'){h+='<div class="sigtabs"><button type="button" class="sigtab on" data-sigmode="'+esc(fl.id)+'" data-m="draw">Draw</button><button type="button" class="sigtab" data-sigmode="'+esc(fl.id)+'" data-m="type">Type</button></div><div class="sigwrap" data-sigdraw="'+esc(fl.id)+'"><canvas class="sig" data-sig="'+esc(fl.id)+'"></canvas><button type="button" class="sigclear" data-sigclear="'+esc(fl.id)+'">Clear</button></div><input class="sigtype" data-sigtype="'+esc(fl.id)+'" type="text" placeholder="Type your full name" style="display:none">';}
       else if(t==='photo'){h+='<div class="photo"><label class="photobtn" for="ph_'+esc(fl.id)+'">Take or upload photo</label><input id="ph_'+esc(fl.id)+'" type="file" accept="image/*" data-photo="'+esc(fl.id)+'"><img class="photoprev" data-prev="'+esc(fl.id)+'"></div>';}
       else if(t==='consent'){h+='<div class="consent">'+esc(fl.text||"I agree to the terms above.")+'</div><label class="opt"><input type="checkbox" data-consent="'+esc(fl.id)+'"'+(fl.required?' required':'')+'> I agree</label>';}
       else {var it=(t==='email'||t==='number'||t==='date')?t:(t==='phone'?'tel':'text');h+='<input type="'+it+'" data-fid="'+esc(fl.id)+'" placeholder="'+esc(fl.placeholder||"")+'" value="'+esc(pv)+'"'+(fl.required?' required':'')+'>';}
@@ -613,7 +618,7 @@ _UNIT_HTML = """<!doctype html><html><head><meta charset="utf-8">
     function fieldFilled(fl){
       if(fl.type==='checkbox'){return form.querySelectorAll('input[name="'+fl.id+'"]:checked').length>0;}
       if(fl.type==='radio'){return !!form.querySelector('input[name="'+fl.id+'"]:checked');}
-      if(fl.type==='signature'){var sc=form.querySelector('canvas[data-sig="'+fl.id+'"]');return !!(sc&&sc.__dirty&&sc.__dirty());}
+      if(fl.type==='signature'){if((sigMode[fl.id]||'draw')==='type'){var ti=form.querySelector('[data-sigtype="'+fl.id+'"]');return !!(ti&&ti.value.trim());}var sc=form.querySelector('canvas[data-sig="'+fl.id+'"]');return !!(sc&&sc.__dirty&&sc.__dirty());}
       if(fl.type==='photo'){var pi=form.querySelector('input[data-photo="'+fl.id+'"]');return !!(pi&&pi.__data);}
       if(fl.type==='consent'){var cc=form.querySelector('input[data-consent="'+fl.id+'"]');return !!(cc&&cc.checked);}
       if(fl.type==='rating'){var rt=form.querySelector('.rating[data-rating="'+fl.id+'"]');return !!(rt&&rt.__val);}
@@ -646,6 +651,17 @@ _UNIT_HTML = """<!doctype html><html><head><meta charset="utf-8">
         rd.readAsDataURL(file);
       });
     });
+    // Wire up signature Draw/Type tabs.
+    form.querySelectorAll('.sigtab').forEach(function(b){
+      b.addEventListener('click',function(){
+        var id=b.getAttribute('data-sigmode'),m=b.getAttribute('data-m');sigMode[id]=m;
+        form.querySelectorAll('.sigtab[data-sigmode="'+id+'"]').forEach(function(x){x.className='sigtab'+(x.getAttribute('data-m')===m?' on':'');});
+        var dw=form.querySelector('[data-sigdraw="'+id+'"]'),ty=form.querySelector('[data-sigtype="'+id+'"]');
+        if(dw)dw.style.display=(m==='draw')?'block':'none';
+        if(ty)ty.style.display=(m==='type')?'block':'none';
+        updateProgress();
+      });
+    });
     // Wire up rating stars.
     form.querySelectorAll('.rating').forEach(function(rt){
       var stars=rt.querySelectorAll('.star');
@@ -662,7 +678,7 @@ _UNIT_HTML = """<!doctype html><html><head><meta charset="utf-8">
       (f.fields||[]).forEach(function(fl){
         if(fl.type==='checkbox'){var arr=[];form.querySelectorAll('input[name="'+fl.id+'"]:checked').forEach(function(c){arr.push(c.value)});vals[fl.id]=arr;}
         else if(fl.type==='radio'){var c=form.querySelector('input[name="'+fl.id+'"]:checked');vals[fl.id]=c?c.value:"";}
-        else if(fl.type==='signature'){var sc=form.querySelector('canvas[data-sig="'+fl.id+'"]');vals[fl.id]=(sc&&sc.__dirty&&sc.__dirty())?sc.toDataURL('image/png'):"";}
+        else if(fl.type==='signature'){if((sigMode[fl.id]||'draw')==='type'){var ti=form.querySelector('[data-sigtype="'+fl.id+'"]');vals[fl.id]=ti?ti.value:"";}else{var sc=form.querySelector('canvas[data-sig="'+fl.id+'"]');vals[fl.id]=(sc&&sc.__dirty&&sc.__dirty())?sc.toDataURL('image/png'):"";}}
         else if(fl.type==='photo'){var pi=form.querySelector('input[data-photo="'+fl.id+'"]');vals[fl.id]=(pi&&pi.__data)||"";}
         else if(fl.type==='consent'){var cc=form.querySelector('input[data-consent="'+fl.id+'"]');vals[fl.id]=(cc&&cc.checked)?"I agree":"";}
         else if(fl.type==='rating'){var rt=form.querySelector('.rating[data-rating="'+fl.id+'"]');vals[fl.id]=(rt&&rt.__val)||"";}

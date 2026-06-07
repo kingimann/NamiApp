@@ -7,6 +7,7 @@ import { SafeAreaView, useSafeAreaInsets } from "react-native-safe-area-context"
 import { Ionicons } from "@expo/vector-icons";
 import * as ImagePicker from "expo-image-picker";
 import { Stack, useFocusEffect, useLocalSearchParams } from "expo-router";
+import SignaturePad from "@/src/components/SignaturePad";
 
 const FALLBACK_BACKEND = "https://nampo-backend.onrender.com";
 const apiOrigin = () => ((process.env.EXPO_PUBLIC_BACKEND_URL as string) || FALLBACK_BACKEND).replace(/\/$/, "");
@@ -25,6 +26,7 @@ export default function PublicFormScreen() {
   const [submitting, setSubmitting] = useState(false);
   const [done, setDone] = useState(false);
   const [err, setErr] = useState<string | null>(null);
+  const [sigModes, setSigModes] = useState<Record<string, "draw" | "type">>({});
 
   const load = useCallback(async () => {
     if (!key) return;
@@ -182,16 +184,33 @@ export default function PublicFormScreen() {
                   </View>
                 ) : f.type === "signature" ? (
                   <View>
-                    <TextInput
-                      style={[styles.input, styles.sigInput]}
-                      value={values[k] || ""}
-                      onChangeText={(t) => setVal(k, t)}
-                      placeholder="Type your full name to sign"
-                      placeholderTextColor={theme.textMuted}
-                      autoCapitalize="words"
-                      testID={`pf-${k}`}
-                    />
-                    <Text style={styles.sigHint}>Typing your name here counts as your signature.</Text>
+                    <View style={styles.sigTabs}>
+                      {(["draw", "type"] as const).map((m) => {
+                        const on = (sigModes[k] || "type") === m;
+                        return (
+                          <TouchableOpacity key={m} style={[styles.sigTab, on && styles.sigTabOn]} onPress={() => { setSigModes((s) => ({ ...s, [k]: m })); setVal(k, ""); }} testID={`pf-${k}-${m}`}>
+                            <Ionicons name={m === "draw" ? "brush-outline" : "text-outline"} size={14} color={on ? "#fff" : theme.textMuted} />
+                            <Text style={[styles.sigTabText, on && { color: "#fff" }]}>{m === "draw" ? "Draw" : "Type"}</Text>
+                          </TouchableOpacity>
+                        );
+                      })}
+                    </View>
+                    {(sigModes[k] || "type") === "draw" ? (
+                      <SignaturePad onChange={(v) => setVal(k, v)} />
+                    ) : (
+                      <>
+                        <TextInput
+                          style={[styles.input, styles.sigInput]}
+                          value={values[k] || ""}
+                          onChangeText={(t) => setVal(k, t)}
+                          placeholder="Type your full name to sign"
+                          placeholderTextColor={theme.textMuted}
+                          autoCapitalize="words"
+                          testID={`pf-${k}`}
+                        />
+                        <Text style={styles.sigHint}>Typing your name here counts as your signature.</Text>
+                      </>
+                    )}
                   </View>
                 ) : (
                   <TextInput
@@ -245,6 +264,10 @@ const styles = StyleSheet.create({
   chipText: { color: theme.textPrimary, fontSize: 13.5, fontWeight: "700" },
   optRow: { flexDirection: "row", alignItems: "center", gap: 10, paddingVertical: 8 },
   optText: { color: theme.textPrimary, fontSize: 15, flex: 1 },
+  sigTabs: { flexDirection: "row", gap: 8, marginBottom: 8 },
+  sigTab: { flexDirection: "row", alignItems: "center", gap: 5, paddingHorizontal: 14, paddingVertical: 7, borderRadius: 999, borderWidth: 1, borderColor: theme.border, backgroundColor: theme.surface },
+  sigTabOn: { backgroundColor: theme.primary, borderColor: theme.primary },
+  sigTabText: { color: theme.textMuted, fontSize: 13, fontWeight: "700" },
   sigInput: { fontStyle: "italic", fontSize: 18 },
   sigHint: { color: theme.textMuted, fontSize: 12, marginTop: 5 },
   sectionHead: { color: theme.textPrimary, fontSize: 17, fontWeight: "800", marginTop: 24, marginBottom: 2, borderTopWidth: StyleSheet.hairlineWidth, borderTopColor: theme.border, paddingTop: 16 },
