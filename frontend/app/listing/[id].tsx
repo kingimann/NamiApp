@@ -8,7 +8,8 @@ import { Ionicons } from "@expo/vector-icons";
 import { Stack, useFocusEffect, useLocalSearchParams, useRouter } from "expo-router";
 import { safeBack } from "@/src/utils/nav";
 import * as Clipboard from "expo-clipboard";
-import { api, Listing, ListingComment } from "@/src/api/client";
+import { api, Listing, ListingComment, PublicUser } from "@/src/api/client";
+import VerificationBadges from "@/src/components/VerificationBadges";
 import { useAuth } from "@/src/context/AuthContext";
 import { useConfirm } from "@/src/context/ConfirmContext";
 import { theme } from "@/src/theme";
@@ -26,6 +27,7 @@ export default function ListingDetailScreen() {
   const insets = useSafeAreaInsets();
   const { user } = useAuth();
   const [listing, setListing] = useState<Listing | null>(null);
+  const [sellerUser, setSellerUser] = useState<PublicUser | null>(null);
   const [loading, setLoading] = useState(true);
   const [photoIdx, setPhotoIdx] = useState(0);
   const [busy, setBusy] = useState(false);
@@ -37,9 +39,11 @@ export default function ListingDetailScreen() {
 
   const load = useCallback(async () => {
     if (!id) return;
-    try { setListing(await api.getListing(id)); }
+    let l: Listing | null = null;
+    try { l = await api.getListing(id); setListing(l); }
     catch {} finally { setLoading(false); }
     try { setComments(await api.listingComments(id)); } catch {}
+    if (l?.user_id) { try { setSellerUser(await api.getPublicUser(l.user_id)); } catch {} }
   }, [id]);
   useFocusEffect(useCallback(() => { load(); }, [load]));
 
@@ -241,6 +245,11 @@ export default function ListingDetailScreen() {
               <Text style={styles.sellerName}>{listing.seller.name}</Text>
               <Ionicons name="chevron-forward" size={18} color={theme.textMuted} />
             </TouchableOpacity>
+            {!!sellerUser && (
+              <View style={styles.sellerVerif}>
+                <VerificationBadges user={sellerUser} size="sm" />
+              </View>
+            )}
 
             {(!!listing.contact_email || !!listing.contact_phone) && (
               <View style={styles.contactCard}>
@@ -491,6 +500,7 @@ const styles = StyleSheet.create({
   },
   sellerInit: { color: "#fff", fontSize: 18, fontWeight: "700" },
   sellerName: { flex: 1, color: theme.textPrimary, fontSize: 15, fontWeight: "700" },
+  sellerVerif: { marginTop: 8 },
 
   footer: {
     position: "absolute", left: 0, right: 0, bottom: 0,

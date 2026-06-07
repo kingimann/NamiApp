@@ -23,6 +23,31 @@ export default function AccountScreen() {
   const [emailPw, setEmailPw] = useState("");
   const [emailBusy, setEmailBusy] = useState(false);
   const [emailMsg, setEmailMsg] = useState<Status>(null);
+  // Email verification
+  const [emailCode, setEmailCode] = useState("");
+  const [emailSent, setEmailSent] = useState(false);
+  const [emailVerifyBusy, setEmailVerifyBusy] = useState(false);
+  const [emailVerifyMsg, setEmailVerifyMsg] = useState<Status>(null);
+
+  const sendEmailVerifyCode = async () => {
+    setEmailVerifyBusy(true); setEmailVerifyMsg(null);
+    try {
+      const r = await api.sendEmailCode();
+      setEmailSent(true);
+      setEmailVerifyMsg({ kind: "ok", text: r.dev_code ? `Dev code: ${r.dev_code}` : "Code sent — check your email." });
+    } catch (e: any) { setEmailVerifyMsg({ kind: "err", text: String(e?.message || e).replace(/^\d{3}:\s*/, "") }); }
+    finally { setEmailVerifyBusy(false); }
+  };
+  const verifyEmail = async () => {
+    setEmailVerifyBusy(true); setEmailVerifyMsg(null);
+    try {
+      await api.verifyEmailCode(emailCode.trim());
+      setEmailCode(""); setEmailSent(false);
+      setEmailVerifyMsg({ kind: "ok", text: "Email verified ✓" });
+      await refresh();
+    } catch (e: any) { setEmailVerifyMsg({ kind: "err", text: String(e?.message || e).replace(/^\d{3}:\s*/, "") }); }
+    finally { setEmailVerifyBusy(false); }
+  };
 
   // Password
   const [curPw, setCurPw] = useState("");
@@ -157,7 +182,33 @@ export default function AccountScreen() {
         {/* Email */}
         <Text style={styles.groupTitle}>Email</Text>
         <View style={styles.group}>
-          <Text style={styles.current}>Current: <Text style={styles.currentVal}>{user?.email || "—"}</Text></Text>
+          <View style={styles.verifRow}>
+            <Text style={styles.current}>Current: <Text style={styles.currentVal}>{user?.email || "—"}</Text></Text>
+            <View style={styles.verifBadge}>
+              <Ionicons name={user?.email_verified ? "checkmark-circle" : "alert-circle"} size={12} color={user?.email_verified ? "#22C55E" : theme.textMuted} />
+              <Text style={[styles.badgeText, user?.email_verified && { color: "#22C55E" }]}>{user?.email_verified ? "Verified" : "Unverified"}</Text>
+            </View>
+          </View>
+          {!user?.email_verified && (
+            !emailSent ? (
+              <TouchableOpacity style={[styles.btn, emailVerifyBusy && styles.btnDim]} onPress={sendEmailVerifyCode} disabled={emailVerifyBusy} testID="account-send-email-code">
+                {emailVerifyBusy ? <ActivityIndicator color="#fff" /> : <Text style={styles.btnText}>Verify email</Text>}
+              </TouchableOpacity>
+            ) : (
+              <>
+                <TextInput
+                  style={styles.input} placeholder="6-digit code" placeholderTextColor={theme.textMuted}
+                  value={emailCode} onChangeText={(t) => setEmailCode(t.replace(/[^0-9]/g, "").slice(0, 6))}
+                  keyboardType="number-pad" maxLength={6} testID="account-email-code"
+                />
+                <TouchableOpacity style={[styles.btn, emailVerifyBusy && styles.btnDim]} onPress={verifyEmail} disabled={emailVerifyBusy || emailCode.length < 6} testID="account-verify-email">
+                  {emailVerifyBusy ? <ActivityIndicator color="#fff" /> : <Text style={styles.btnText}>Verify code</Text>}
+                </TouchableOpacity>
+              </>
+            )
+          )}
+          {emailVerifyMsg && <Text style={emailVerifyMsg.kind === "ok" ? styles.ok : styles.err}>{emailVerifyMsg.text}</Text>}
+          <View style={{ height: 8 }} />
           <TextInput
             style={styles.input} placeholder="New email" placeholderTextColor={theme.textMuted}
             value={newEmail} onChangeText={setNewEmail}
@@ -325,6 +376,8 @@ const styles = StyleSheet.create({
   phoneTitleRow: { flexDirection: "row", alignItems: "center", justifyContent: "space-between", paddingRight: 6 },
   badge: { flexDirection: "row", alignItems: "center", gap: 4, marginTop: 14 },
   badgeText: { color: theme.textMuted, fontSize: 11, fontWeight: "700", textTransform: "uppercase", letterSpacing: 0.4 },
+  verifRow: { flexDirection: "row", alignItems: "center", justifyContent: "space-between", marginBottom: 10 },
+  verifBadge: { flexDirection: "row", alignItems: "center", gap: 4 },
 
   group: {
     backgroundColor: theme.surface, borderRadius: 18,

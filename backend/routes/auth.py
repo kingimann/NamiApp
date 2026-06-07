@@ -601,6 +601,81 @@ async def phone_verify(body: PhoneVerify, authorization: Optional[str] = Header(
     return User(**_user_doc_to_model(updated))
 
 
+class EmailVerify(BaseModel):
+    code: str
+
+
+@router.post("/auth/email/send-code")
+async def email_send_code(authorization: Optional[str] = Header(None)):
+    """Email a 6-digit code to the account's email address to verify it."""
+    user = await get_current_user(authorization)
+    email = (user.get("email") or "").strip().lower()
+    if not email:
+        raise HTTPException(status_code=400, detail="No email on file")
+    if user.get("email_verified"):
+        raise HTTPException(status_code=400, detail="Your email is already verified")
+    now = datetime.now(timezone.utc)
+    last = user.get("email_code_sent_at")
+    if last:
+        try:
+            if (now - _norm_dt(last)).total_seconds() < PHONE_SEND_COOLDOWN_SEC:
+                raise HTTPException(status_code=429, detail="Please wait a moment before requesting another code")
+        except HTTPException:
+            raise
+        except Exception:
+            pass
+    code = f"{secrets.randbelow(1000000):06d}"
+    await db.users.update_one({"user_id": user["user_id"]}, {"$set": {
+        "email_code_hash": bcrypt.hashpw(code.encode("utf-8"), bcrypt.gensalt(rounds=10)).decode("utf-8"),
+        "email_code_expires": now + timedelta(minutes=PHONE_CODE_TTL_MIN),
+        "email_code_attempts": 0,
+        "email_code_sent_at": now,
+    }})
+    from services.email import send_email, email_enabled
+    sent = send_email(email, "Verify your Nami email",
+                      f"Your Nami email verification code is {code}. It expires in {PHONE_CODE_TTL_MIN} minutes.")
+    out = {"ok": True, "sent": bool(sent)}
+    if not email_enabled():
+        out["dev_code"] = code
+        out["note"] = "Email isn't configured on this server; use dev_code to verify."
+    return out
+
+
+@router.post("/auth/email/verify", response_model=User)
+async def email_verify(body: EmailVerify, authorization: Optional[str] = Header(None)):
+    """Finish email verification with the emailed code."""
+    user = await get_current_user(authorization)
+    h = user.get("email_code_hash")
+    if not h:
+        raise HTTPException(status_code=400, detail="Request a code first")
+    now = datetime.now(timezone.utc)
+    exp = user.get("email_code_expires")
+    try:
+        if exp and _norm_dt(exp) < now:
+            raise HTTPException(status_code=400, detail="That code expired — request a new one")
+    except HTTPException:
+        raise
+    except Exception:
+        pass
+    if int(user.get("email_code_attempts", 0) or 0) >= PHONE_MAX_ATTEMPTS:
+        raise HTTPException(status_code=429, detail="Too many attempts — request a new code")
+    code = (body.code or "").strip()
+    ok = False
+    try:
+        ok = bcrypt.checkpw(code.encode("utf-8"), h.encode("utf-8"))
+    except Exception:
+        ok = False
+    if not ok:
+        await db.users.update_one({"user_id": user["user_id"]}, {"$inc": {"email_code_attempts": 1}})
+        raise HTTPException(status_code=400, detail="Incorrect code")
+    await db.users.update_one({"user_id": user["user_id"]}, {"$set": {
+        "email_verified": True, "email_code_hash": None,
+        "email_code_expires": None, "email_code_attempts": 0,
+    }})
+    updated = await db.users.find_one({"user_id": user["user_id"]}, {"_id": 0})
+    return User(**_user_doc_to_model(updated))
+
+
 # ── SMS auth helpers (codes via Twilio; dev_code fallback when unconfigured) ──
 CODE_TTL_MIN = 10
 CODE_MAX_ATTEMPTS = 5

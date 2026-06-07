@@ -10,6 +10,7 @@ import { safeBack } from "@/src/utils/nav";
 import { api, SellerProfile, MarketplaceReview } from "@/src/api/client";
 import { useAuth } from "@/src/context/AuthContext";
 import { theme } from "@/src/theme";
+import VerificationBadges from "@/src/components/VerificationBadges";
 
 const REVIEW_CATEGORIES = [
   { key: "communication", label: "Communication" },
@@ -127,6 +128,10 @@ export default function SellerProfileScreen() {
               <Text style={styles.ratingText}>
                 {profile.review_count > 0 ? `${profile.rating.toFixed(1)} · ${profile.review_count} review${profile.review_count === 1 ? "" : "s"}` : "No reviews yet"}
               </Text>
+            </View>
+
+            <View style={{ marginTop: 10 }}>
+              <VerificationBadges user={profile.user} />
             </View>
 
             {!!profile.category_ratings && Object.keys(profile.category_ratings).length > 0 && (
