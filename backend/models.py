@@ -622,6 +622,10 @@ class PostAuthor(BaseModel):
     picture: Optional[str] = None
     verified: bool = False
     badges: List[Badge] = []
+    # Marketplace trust signals (populated for listing sellers; default False elsewhere).
+    id_verified: bool = False
+    phone_verified: bool = False
+    email_verified: bool = False
 
 
 class ReactionCount(BaseModel):
