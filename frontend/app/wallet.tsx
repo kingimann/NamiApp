@@ -180,11 +180,22 @@ export default function WalletScreen() {
   };
 
   const saveThreshold = async () => {
+    const next = Math.max(0, Number(threshold) || 0);
+    const current = Number(payoutInfo?.threshold ?? user?.payout_threshold ?? 0) || 0;
+    if (next === current) { Alert.alert("No change", "That's already your minimum payout balance."); return; }
+    const ok = await confirm({
+      title: "Change minimum payout balance?",
+      message: `Set the minimum to $${next.toFixed(2)}? You can only change this once a month — after saving it'll be locked for 30 days.`,
+      confirmLabel: "Change it",
+      cancelLabel: "Keep current",
+    });
+    if (!ok) return;
     setSavingThreshold(true);
     try {
-      await api.updateMe({ payout_threshold: Math.max(0, Number(threshold) || 0) });
+      await api.updateMe({ payout_threshold: next });
       if (typeof refresh === "function") await refresh();
-      Alert.alert("Saved", "Your minimum payout balance was updated.");
+      await load();
+      Alert.alert("Saved", "Your minimum payout balance was updated and is now locked for 30 days.");
     } catch (e: any) {
       Alert.alert("Couldn't change minimum", String(e?.message || e).replace(/^\d{3}:\s*/, "") || "Try again later.");
     } finally { setSavingThreshold(false); }
@@ -217,6 +228,7 @@ export default function WalletScreen() {
   };
 
   const freqLockedUntil = payoutInfo?.frequency_locked_until || null;
+  const thresholdLockedUntil = payoutInfo?.threshold_locked_until || null;
   const changeFrequency = async (f: "weekly" | "biweekly" | "monthly") => {
     if ((user?.payout_frequency || "weekly") === f) return;
     if (freqLockedUntil) {
@@ -603,7 +615,7 @@ export default function WalletScreen() {
             <Text style={styles.payoutsNote}>Paid out automatically on your schedule once you've connected payouts. ${(payoutInfo?.total_paid_out ?? 0).toFixed(2)} paid so far.</Text>
             <View style={styles.thresholdRow}>
               <Text style={styles.thresholdLabel}>Hold until balance reaches</Text>
-              <View style={styles.thresholdInputWrap}>
+              <View style={[styles.thresholdInputWrap, !!thresholdLockedUntil && { opacity: 0.5 }]}>
                 <Text style={styles.dollar}>$</Text>
                 <TextInput
                   style={styles.thresholdInput}
@@ -612,14 +624,24 @@ export default function WalletScreen() {
                   keyboardType="decimal-pad"
                   placeholder="0"
                   placeholderTextColor={theme.textMuted}
+                  editable={!thresholdLockedUntil}
                   testID="payout-threshold"
                 />
               </View>
-              <TouchableOpacity style={styles.thresholdBtn} onPress={saveThreshold} disabled={savingThreshold} testID="save-threshold">
+              <TouchableOpacity
+                style={[styles.thresholdBtn, (savingThreshold || !!thresholdLockedUntil) && { opacity: 0.5 }]}
+                onPress={saveThreshold}
+                disabled={savingThreshold || !!thresholdLockedUntil}
+                testID="save-threshold"
+              >
                 {savingThreshold ? <ActivityIndicator color="#fff" size="small" /> : <Text style={styles.thresholdBtnText}>Save</Text>}
               </TouchableOpacity>
             </View>
-            <Text style={styles.payoutsNote}>The minimum payout balance can only be changed once a month.</Text>
+            <Text style={styles.payoutsNote}>
+              {thresholdLockedUntil
+                ? `Locked — you can change your minimum payout balance again on ${new Date(thresholdLockedUntil).toLocaleDateString()}.`
+                : "The minimum payout balance can only be changed once a month."}
+            </Text>
             {(payoutInfo?.history || []).slice(0, 6).map((p) => (
               <View key={p.id} style={styles.payoutRow}>
                 <Ionicons name={p.status === "paid" ? "checkmark-circle" : p.status === "failed" ? "alert-circle" : "time-outline"} size={15} color={p.status === "failed" ? theme.error : theme.primary} />

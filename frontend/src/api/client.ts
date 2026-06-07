@@ -929,7 +929,7 @@ export type WalletBalance = {
   balance: number; display: number; currencies?: Record<string, CurrencyInfo>;
 };
 export type Payout = { id: string; amount: number; status: string; created_at: string };
-export type PayoutInfo = { balance: number; total_paid_out: number; frequency: string; frequency_locked_until?: string | null; next_payout?: string | null; history: Payout[] };
+export type PayoutInfo = { balance: number; total_paid_out: number; frequency: string; frequency_locked_until?: string | null; threshold_locked_until?: string | null; threshold?: number; next_payout?: string | null; history: Payout[] };
 export type Ad = { post_id: string | null; text: string; image?: string | null; author_name: string; reason?: string | null; author_picture?: string | null };
 export type AdCampaign = { post_id: string; text: string; impressions: number; clicks: number; ctr: number; budget: number; spent: number; cpc: number; promoted_until?: string | null; active: boolean };
 export type LinkAdServe = { id: string; url: string; headline: string; description?: string | null; image?: string | null; owner_id?: string };
