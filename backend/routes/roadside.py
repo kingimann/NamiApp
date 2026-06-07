@@ -1076,6 +1076,30 @@ async def review(rid: str, body: RoadsideReview, authorization: Optional[str] = 
     return await _hydrate(doc, uid)
 
 
+async def mark_roadside_disputed(rid: str, uid: str) -> bool:
+    """Flag a roadside job as disputed on behalf of `uid` (a party to it), within
+    the 7-day window. Used when a support ticket is actually opened for the job,
+    so a dispute is only ever recorded once a valid ticket exists. Best-effort:
+    returns True if the job is now flagged for this user, False otherwise."""
+    doc = await db.roadside_requests.find_one({"id": rid}, {"_id": 0})
+    if not doc or uid not in (doc["requester_id"], doc.get("helper_id")):
+        return False
+    now = datetime.now(timezone.utc)
+    if (now - _norm_dt(doc["created_at"])) > DISPUTE_WINDOW:
+        return False
+    disputed_by = list(doc.get("disputed_by") or [])
+    if uid not in disputed_by:
+        disputed_by.append(uid)
+        await db.roadside_requests.update_one({"id": rid}, {"$set": {"disputed_by": disputed_by, "disputed_at": now}})
+        other = doc.get("helper_id") if uid == doc["requester_id"] else doc["requester_id"]
+        if other:
+            await emit_notification(
+                user_id=other, actor_id=uid, ntype="roadside",
+                message="A dispute was opened on your roadside job. Our team will look into it.",
+            )
+    return True
+
+
 @router.post("/roadside/requests/{rid}/dispute", response_model=RoadsideRequest)
 async def dispute(rid: str, authorization: Optional[str] = Header(None)):
     """Either party flags a dispute, up to 7 days after the service call."""
