@@ -430,7 +430,11 @@ async def verify_vehicle_photo(b64: str) -> dict:
     if _image_looks_blank(b64):
         return {"ok": False, "reason": "That looks like a blank or all-dark photo. Take a clear photo of your vehicle or the problem."}
     if not ollama_enabled():
-        return {"ok": True, "reason": ""}
+        # No local Ollama vision model — fall back to Claude vision (Anthropic)
+        # so non-automotive photos are still flagged on hosted deployments.
+        # classify_vehicle_photo fails open when ANTHROPIC_API_KEY is also unset.
+        from services.claude_vision import classify_vehicle_photo
+        return await classify_vehicle_photo(b64)
     prompt = (
         "This is a photo from a roadside-assistance request. Does it clearly show a "
         "motor vehicle, or a part of one relevant to the problem (e.g. a flat or "
