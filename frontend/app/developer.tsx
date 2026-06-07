@@ -22,12 +22,13 @@ const GROUPS: Group[] = [
   {
     title: "Forms", icon: "document-text",
     endpoints: [
-      { method: "POST", path: "/forms", desc: "Create a form.", auth: true, body: `{"title","description","fields":[{"type","label","required","options"}]}` },
+      { method: "POST", path: "/forms", desc: "Create a form.", auth: true, body: `{"title","description","notify_email","fields":[{"type","label","required","options"}]}` },
       { method: "GET", path: "/forms", desc: "List your forms.", auth: true },
       { method: "GET", path: "/forms/{id}", desc: "Get a form definition.", auth: true },
-      { method: "POST", path: "/forms/{id}", desc: "Update a form (title, fields, …).", auth: true },
+      { method: "POST", path: "/forms/{id}", desc: "Update a form (title, fields, notify_email, …).", auth: true },
       { method: "DELETE", path: "/forms/{id}", desc: "Delete a form and its responses.", auth: true },
       { method: "GET", path: "/forms/{id}/submissions", desc: "List responses (paginated).", auth: true },
+      { method: "GET", path: "/forms/{id}/submissions.csv", desc: "Download all responses as CSV.", auth: true },
       { method: "GET", path: "/pub/form?form=KEY", desc: "Public: get a form's fields (no auth).", auth: false },
       { method: "POST", path: "/pub/form-submit?form=KEY", desc: "Public: submit a form (no auth).", auth: false, body: `{"values":{...},"hp":""}` },
       { method: "GET", path: "/pub/form-embed.js?form=KEY", desc: "Public: <script> loader that embeds the form as an iframe.", auth: false },

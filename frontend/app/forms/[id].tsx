@@ -1,7 +1,7 @@
 import React, { useCallback, useState } from "react";
 import {
   View, Text, StyleSheet, ScrollView, TouchableOpacity, TextInput,
-  ActivityIndicator, Modal, Platform, Switch,
+  ActivityIndicator, Modal, Platform, Switch, Share,
 } from "react-native";
 import { SafeAreaView, useSafeAreaInsets } from "react-native-safe-area-context";
 import { Ionicons } from "@expo/vector-icons";
@@ -46,6 +46,7 @@ export default function FormBuilderScreen() {
   const [title, setTitle] = useState("");
   const [description, setDescription] = useState("");
   const [submitLabel, setSubmitLabel] = useState("Submit");
+  const [notifyEmail, setNotifyEmail] = useState("");
   const [fields, setFields] = useState<FormField[]>([]);
   const [saving, setSaving] = useState(false);
   const [dirty, setDirty] = useState(false);
@@ -55,13 +56,14 @@ export default function FormBuilderScreen() {
   const [subs, setSubs] = useState<FormSubmission[]>([]);
   const [subFields, setSubFields] = useState<FormField[]>([]);
   const [subsLoading, setSubsLoading] = useState(false);
+  const [exporting, setExporting] = useState(false);
 
   const load = useCallback(async () => {
     if (!id) return;
     try {
       const f = await api.getForm(String(id));
       setForm(f); setTitle(f.title); setDescription(f.description || "");
-      setSubmitLabel(f.submit_label || "Submit"); setFields(f.fields || []);
+      setSubmitLabel(f.submit_label || "Submit"); setNotifyEmail(f.notify_email || ""); setFields(f.fields || []);
     } catch {} finally { setLoading(false); }
   }, [id]);
   useFocusEffect(useCallback(() => { load(); }, [load]));
@@ -93,9 +95,10 @@ export default function FormBuilderScreen() {
     try {
       const f = await api.updateForm(form.id, {
         title: title.trim(), description: description.trim() || undefined,
-        submit_label: submitLabel.trim() || "Submit", fields,
+        submit_label: submitLabel.trim() || "Submit",
+        notify_email: notifyEmail.trim() || null, fields,
       });
-      setForm(f); setFields(f.fields || []); setDirty(false);
+      setForm(f); setNotifyEmail(f.notify_email || ""); setFields(f.fields || []); setDirty(false);
     } catch {} finally { setSaving(false); }
   };
 
@@ -103,6 +106,26 @@ export default function FormBuilderScreen() {
     if (!form) return;
     if (!(await confirm({ title: "Delete form?", message: `"${form.title}" and all its responses will be permanently removed.`, confirmLabel: "Delete", destructive: true }))) return;
     try { await api.deleteForm(form.id); safeBack("/forms"); } catch {}
+  };
+
+  const exportCsv = async () => {
+    if (!form || exporting) return;
+    setExporting(true);
+    try {
+      const csv = await api.exportFormCsv(form.id);
+      const fname = `${(form.title || "form").replace(/[^a-z0-9]+/gi, "-").replace(/^-+|-+$/g, "").toLowerCase() || "form"}-responses.csv`;
+      if (Platform.OS === "web") {
+        const blob = new Blob([csv], { type: "text/csv;charset=utf-8;" });
+        const url = URL.createObjectURL(blob);
+        const a = document.createElement("a");
+        a.href = url; a.download = fname;
+        document.body.appendChild(a); a.click();
+        a.remove(); URL.revokeObjectURL(url);
+      } else {
+        try { await Share.share({ message: csv, title: fname }); }
+        catch { await Clipboard.setStringAsync(csv); setCopied("csv"); setTimeout(() => setCopied(""), 1500); }
+      }
+    } catch {} finally { setExporting(false); }
   };
 
   const snippet = form ? `<script async src="${apiOrigin()}/api/pub/form-embed.js?form=${form.form_key}"></script>` : "";
@@ -181,6 +204,20 @@ export default function FormBuilderScreen() {
               <Text style={[styles.label, { marginTop: 18 }]}>Submit button text</Text>
               <TextInput style={styles.input} value={submitLabel} onChangeText={(t) => { setSubmitLabel(t); mark(); }} placeholder="Submit" placeholderTextColor={theme.textMuted} />
 
+              <Text style={[styles.label, { marginTop: 18 }]}>Email responses to (optional)</Text>
+              <Text style={styles.hint}>Leave blank to use your account email.</Text>
+              <TextInput
+                style={styles.input}
+                value={notifyEmail}
+                onChangeText={(t) => { setNotifyEmail(t); mark(); }}
+                placeholder="you@example.com"
+                placeholderTextColor={theme.textMuted}
+                keyboardType="email-address"
+                autoCapitalize="none"
+                autoCorrect={false}
+                testID="form-notify-email"
+              />
+
               <TouchableOpacity style={[styles.saveBtn, (!dirty || saving || !title.trim()) && { opacity: 0.5 }]} onPress={save} disabled={!dirty || saving || !title.trim()} testID="form-save">
                 {saving ? <ActivityIndicator color="#fff" /> : <Text style={styles.saveText}>{dirty ? "Save changes" : "Saved"}</Text>}
               </TouchableOpacity>
@@ -223,7 +260,17 @@ export default function FormBuilderScreen() {
               </View>
             ) : (
               <>
-                <Text style={styles.intro}>{subs.length} response{subs.length === 1 ? "" : "s"}</Text>
+                <View style={styles.respHead}>
+                  <Text style={[styles.intro, { marginBottom: 0 }]}>{subs.length} response{subs.length === 1 ? "" : "s"}</Text>
+                  <TouchableOpacity style={styles.exportBtn} onPress={exportCsv} disabled={exporting} testID="form-export-csv">
+                    {exporting ? <ActivityIndicator size="small" color={theme.primary} /> : (
+                      <>
+                        <Ionicons name={copied === "csv" ? "checkmark" : "download-outline"} size={15} color={theme.primary} />
+                        <Text style={styles.exportText}>{copied === "csv" ? "Copied" : "Export CSV"}</Text>
+                      </>
+                    )}
+                  </TouchableOpacity>
+                </View>
                 {subs.map((s) => (
                   <View key={s.id} style={styles.subCard}>
                     <Text style={styles.subDate}>{fmtDate(s.submitted_at)}</Text>
@@ -297,6 +344,9 @@ const styles = StyleSheet.create({
   code: { color: theme.textPrimary, fontSize: 12.5, fontFamily: Platform.OS === "ios" ? "Menlo" : "monospace" },
   copyBtn: { flexDirection: "row", alignItems: "center", justifyContent: "center", gap: 7, backgroundColor: theme.surfaceAlt, borderRadius: 12, paddingVertical: 11, marginTop: 8 },
   copyText: { color: theme.primary, fontSize: 14, fontWeight: "800" },
+  respHead: { flexDirection: "row", alignItems: "center", justifyContent: "space-between", marginBottom: 12 },
+  exportBtn: { flexDirection: "row", alignItems: "center", gap: 6, backgroundColor: theme.surfaceAlt, borderRadius: 999, paddingHorizontal: 14, paddingVertical: 8, minWidth: 96, justifyContent: "center" },
+  exportText: { color: theme.primary, fontSize: 13, fontWeight: "800" },
   empty: { alignItems: "center", paddingTop: 50, gap: 10 },
   emptySub: { color: theme.textMuted, fontSize: 14, textAlign: "center" },
   subCard: { backgroundColor: theme.surface, borderWidth: 1, borderColor: theme.border, borderRadius: 14, padding: 12, marginBottom: 10 },

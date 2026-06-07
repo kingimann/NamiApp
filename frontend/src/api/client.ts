@@ -326,6 +326,16 @@ export const api = {
     request<{ ok: boolean }>(`/forms/${id}`, { method: "DELETE" }),
   listFormSubmissions: (id: string) =>
     request<{ submissions: FormSubmission[]; total: number; fields: FormField[] }>(`/forms/${id}/submissions`),
+  // Raw CSV of all responses (auth required). Returns the file text so the
+  // caller can trigger a browser download / share sheet.
+  exportFormCsv: async (id: string): Promise<string> => {
+    const token = await getToken();
+    const res = await fetch(`${BASE_URL}/api/forms/${id}/submissions.csv`, {
+      headers: token ? { Authorization: `Bearer ${token}` } : {},
+    });
+    if (!res.ok) throw new Error(`${res.status}: couldn't export responses`);
+    return res.text();
+  },
   // Public (no auth needed) — used by the in-app form renderer.
   publicForm: (key: string) =>
     request<{ id: string; title: string; description?: string | null; submit_label?: string; fields: FormField[] }>(`/pub/form?form=${encodeURIComponent(key)}`),
@@ -1105,10 +1115,10 @@ export type FormField = {
 };
 export type FormDef = {
   id: string; owner_id?: string; form_key: string; title: string;
-  description?: string | null; submit_label?: string; fields: FormField[];
+  description?: string | null; submit_label?: string; notify_email?: string | null; fields: FormField[];
   submissions: number; created_at?: string;
 };
-export type FormCreate = { title: string; description?: string; submit_label?: string; fields: FormField[] };
+export type FormCreate = { title: string; description?: string; submit_label?: string; notify_email?: string | null; fields: FormField[] };
 export type FormSubmission = { id: string; form_id: string; values: Record<string, string>; ip?: string; submitted_at: string };
 export type PlaceCreate = {
   title: string; notes?: string; longitude: number; latitude: number; address?: string; category?: string;

@@ -7,7 +7,10 @@ is notified (in-app + email). Public endpoints under `/pub/form*` take no auth �
 the `form_key` identifies the form. Spam is curbed with a hidden honeypot field
 and a lightweight per-IP rate limit.
 """
+import csv
 import html
+import io
+import re
 import time
 import uuid
 from datetime import datetime, timezone
@@ -72,12 +75,34 @@ class FormCreate(BaseModel):
     title: str
     description: Optional[str] = None
     submit_label: Optional[str] = None
+    notify_email: Optional[str] = None        # send submissions here instead of the owner's account email
     fields: List[FormField] = []
 
 
 class FormSubmit(BaseModel):
     values: dict = {}
     hp: Optional[str] = None                  # honeypot — must be empty
+
+
+def _clean_notify_email(s: Optional[str]) -> Optional[str]:
+    """Validate the optional per-form recipient. Empty means 'use account email'."""
+    s = (s or "").strip()
+    if not s:
+        return None
+    if len(s) > 200 or "@" not in s or "." not in s.split("@")[-1]:
+        raise HTTPException(status_code=400, detail="Enter a valid email address for responses, or leave it blank.")
+    return s.lower()
+
+
+def _fmt_dt(v) -> str:
+    if isinstance(v, datetime):
+        return v.isoformat()
+    return str(v or "")
+
+
+def _safe_filename(s: str) -> str:
+    s = re.sub(r"[^A-Za-z0-9._-]+", "-", (s or "")).strip("-").lower()
+    return s or "form"
 
 
 def _clean_fields(fields: List[FormField]) -> list:
@@ -105,6 +130,7 @@ def _form_view(f: dict) -> dict:
         "id": f["id"], "owner_id": f.get("owner_id"), "form_key": f.get("form_key"),
         "title": f.get("title"), "description": f.get("description"),
         "submit_label": f.get("submit_label") or "Submit",
+        "notify_email": f.get("notify_email"),
         "fields": f.get("fields") or [],
         "submissions": int(f.get("submissions", 0) or 0),
         "created_at": f.get("created_at"),
@@ -132,6 +158,7 @@ async def create_form(body: FormCreate, authorization: Optional[str] = Header(No
         "title": title,
         "description": (body.description or "").strip()[:500] or None,
         "submit_label": (body.submit_label or "").strip()[:40] or "Submit",
+        "notify_email": _clean_notify_email(body.notify_email),
         "fields": _clean_fields(body.fields),
         "submissions": 0,
         "created_at": datetime.now(timezone.utc),
@@ -169,6 +196,7 @@ async def update_form(form_id: str, body: FormCreate, authorization: Optional[st
         "title": title,
         "description": (body.description or "").strip()[:500] or None,
         "submit_label": (body.submit_label or "").strip()[:40] or "Submit",
+        "notify_email": _clean_notify_email(body.notify_email),
         "fields": _clean_fields(body.fields),
     }
     await db.forms.update_one({"id": form_id}, {"$set": updates})
@@ -196,6 +224,29 @@ async def list_submissions(form_id: str, limit: int = Query(50), offset: int = Q
     rows = await db.form_submissions.find({"form_id": form_id}, {"_id": 0}).sort("submitted_at", -1).skip(max(0, int(offset or 0))).limit(lim).to_list(lim)
     total = await db.form_submissions.count_documents({"form_id": form_id})
     return {"submissions": rows, "total": total, "fields": form.get("fields") or []}
+
+
+@router.get("/forms/{form_id}/submissions.csv")
+async def export_submissions_csv(form_id: str, authorization: Optional[str] = Header(None)):
+    """Download every response as a CSV — one column per field, plus a timestamp."""
+    user = await get_current_user(authorization)
+    form = await db.forms.find_one({"id": form_id, "owner_id": user["user_id"]}, {"_id": 0})
+    if not form:
+        raise HTTPException(status_code=404, detail="Form not found")
+    fields = form.get("fields") or []
+    rows = await db.form_submissions.find({"form_id": form_id}, {"_id": 0}).sort("submitted_at", 1).limit(10000).to_list(10000)
+    buf = io.StringIO()
+    writer = csv.writer(buf)
+    writer.writerow(["Submitted at"] + [(f.get("label") or f.get("id") or "") for f in fields])
+    for r in rows:
+        vals = r.get("values") or {}
+        writer.writerow([_fmt_dt(r.get("submitted_at"))] + [str(vals.get(f.get("id"), "")) for f in fields])
+    fname = _safe_filename(form.get("title") or "form") + "-responses.csv"
+    return Response(
+        content=buf.getvalue(),
+        media_type="text/csv; charset=utf-8",
+        headers={"Content-Disposition": f'attachment; filename="{fname}"'},
+    )
 
 
 # ── Public render + submit (no auth — form_key identifies the form) ───────────
@@ -243,12 +294,15 @@ async def public_submit(request: Request, body: FormSubmit, form: str = Query(..
     except Exception:
         pass
     try:
-        owner = await db.users.find_one({"user_id": doc["owner_id"]}, {"_id": 0, "email": 1})
-        if owner and owner.get("email"):
+        recipient = doc.get("notify_email")
+        if not recipient:
+            owner = await db.users.find_one({"user_id": doc["owner_id"]}, {"_id": 0, "email": 1})
+            recipient = owner.get("email") if owner else None
+        if recipient:
             from services.email import send_email, email_enabled
             if email_enabled():
                 lines = "\n".join(f"- {by_id.get(k, {}).get('label', k)}: {v}" for k, v in clean.items())
-                send_email(owner["email"], f"New submission: {doc.get('title')}",
+                send_email(recipient, f"New submission: {doc.get('title')}",
                            f"You received a new form submission:\n\n{lines}")
     except Exception:
         pass
