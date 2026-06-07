@@ -369,6 +369,12 @@ export default function MarketplaceScreen() {
                 {item.saved_by_me && (
                   <View style={styles.savedTag}><Ionicons name="bookmark" size={12} color="#fff" /></View>
                 )}
+                {item.seller?.id_verified && (
+                  <View style={styles.verifiedTag} testID={`listing-verified-${item.id}`}>
+                    <Ionicons name="shield-checkmark" size={11} color="#fff" />
+                    <Text style={styles.verifiedTagText}>ID</Text>
+                  </View>
+                )}
               </View>
               <View style={styles.tileBody}>
                 <View style={styles.tilePriceRow}>
@@ -759,6 +765,8 @@ const styles = StyleSheet.create({
   soldTag: { position: "absolute", top: 8, left: 8, backgroundColor: theme.error, paddingHorizontal: 8, paddingVertical: 3, borderRadius: 6 },
   soldTagText: { color: "#fff", fontSize: 10, fontWeight: "900", letterSpacing: 0.5 },
   savedTag: { position: "absolute", top: 8, right: 8, width: 24, height: 24, borderRadius: 12, backgroundColor: theme.primary, alignItems: "center", justifyContent: "center" },
+  verifiedTag: { position: "absolute", bottom: 8, left: 8, flexDirection: "row", alignItems: "center", gap: 3, backgroundColor: "rgba(34,197,94,0.92)", paddingHorizontal: 7, paddingVertical: 3, borderRadius: 999 },
+  verifiedTagText: { color: "#fff", fontSize: 10, fontWeight: "800", letterSpacing: 0.3 },
 
   searchRow: { flexDirection: "row", alignItems: "center", gap: 10, paddingHorizontal: 16, paddingTop: 8, paddingBottom: 6 },
   filterBtn: {

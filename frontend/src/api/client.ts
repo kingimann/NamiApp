@@ -1231,7 +1231,7 @@ export type Poll = {
 };
 export type PollCreate = { options: string[]; duration_hours: number };
 export type Badge = { id: string; label?: string; icon: string; color?: string };
-export type PostAuthor = { user_id: string; name: string; username?: string | null; picture?: string | null; verified?: boolean; badges?: Badge[] };
+export type PostAuthor = { user_id: string; name: string; username?: string | null; picture?: string | null; verified?: boolean; badges?: Badge[]; id_verified?: boolean; phone_verified?: boolean; email_verified?: boolean };
 export type PostMedia = {
   type: "image" | "video";
   base64?: string;

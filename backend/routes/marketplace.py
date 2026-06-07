@@ -69,11 +69,15 @@ async def _hydrate_listing(
     saved_ids: Optional[set] = None, with_counts: bool = False,
     viewer_coords: Optional[Tuple[float, float]] = None,
 ) -> Listing:
-    author_doc = await db.users.find_one({"user_id": doc["user_id"]}, {"_id": 0})
+    author_doc = await db.users.find_one({"user_id": doc["user_id"]}, {"_id": 0}) or {}
     seller = PostAuthor(
         user_id=doc["user_id"],
-        name=author_doc.get("name", "Unknown") if author_doc else "Unknown",
-        picture=author_doc.get("picture") if author_doc else None,
+        name=author_doc.get("name", "Unknown") or "Unknown",
+        picture=author_doc.get("picture"),
+        verified=bool(author_doc.get("verified", False)),
+        id_verified=bool(author_doc.get("id_verified", False)),
+        phone_verified=bool(author_doc.get("phone_verified", False)),
+        email_verified=bool(author_doc.get("email_verified", False)),
     )
     photos = doc.get("photos") or ([doc["photo_base64"]] if doc.get("photo_base64") else [])
     if saved_ids is not None:
