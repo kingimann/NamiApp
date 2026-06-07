@@ -9,8 +9,8 @@ import { Stack, useFocusEffect, useRouter } from "expo-router";
 import * as Location from "expo-location";
 import { safeBack } from "@/src/utils/nav";
 import { reverseGeocode } from "@/src/api/mapbox";
-import { pickImages, captureImage } from "@/src/utils/thumbnail";
-import { api, RoadsideRequest, RoadsideService, RoadsideParty, RoadsideQuote, RoadsideEligibility } from "@/src/api/client";
+import { pickImages, captureImage, pickDocumentBase64 } from "@/src/utils/thumbnail";
+import { api, RoadsideRequest, RoadsideService, RoadsideParty, RoadsideQuote, RoadsideEligibility, RoadsideVerificationStatus } from "@/src/api/client";
 import { theme } from "@/src/theme";
 
 const SERVICE_META: Record<RoadsideService, { label: string; icon: any; desc: string }> = {
@@ -91,6 +91,11 @@ export default function RoadsideScreen() {
   const [nearby, setNearby] = useState<RoadsideRequest[]>([]);
   const [quote, setQuote] = useState<RoadsideQuote | null>(null);
   const [elig, setElig] = useState<RoadsideEligibility | null>(null);
+  const [verif, setVerif] = useState<RoadsideVerificationStatus | null>(null);
+  const [insuranceDoc, setInsuranceDoc] = useState<string | null>(null);
+  const [ownershipDoc, setOwnershipDoc] = useState<string | null>(null);
+  const [submittingVerif, setSubmittingVerif] = useState(false);
+  const [verifErr, setVerifErr] = useState<string | null>(null);
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
   const [noLocation, setNoLocation] = useState(false);
@@ -155,12 +160,13 @@ export default function RoadsideScreen() {
 
   const load = useCallback(async () => {
     try {
-      const [a, h, q, e] = await Promise.all([
+      const [a, h, q, e, v] = await Promise.all([
         api.roadsideActive(), api.roadsideHelping(),
         api.roadsideQuote().catch(() => null),
         api.roadsideEligibility().catch(() => null),
+        api.roadsideVerification().catch(() => null),
       ]);
-      setActive(a); setHelping(h); if (q) setQuote(q); if (e) setElig(e);
+      setActive(a); setHelping(h); if (q) setQuote(q); if (e) setElig(e); if (v) setVerif(v);
     } catch {}
     const loc = await detect(false);
     if (loc) {
@@ -181,6 +187,32 @@ export default function RoadsideScreen() {
     if (!loc) { Alert.alert("Location needed", "Enable location access so a helper can find you."); return; }
     setCoords(loc.coords); setPlaceName(loc.name); setNoLocation(false);
     loadNearby(loc.coords);
+  };
+
+  const pickDoc = async (which: "ins" | "own") => {
+    try {
+      const uri = await pickDocumentBase64();
+      if (!uri) return;
+      if (which === "ins") setInsuranceDoc(uri); else setOwnershipDoc(uri);
+    } catch (e: any) { Alert.alert("Couldn't add document", String(e?.message || e)); }
+  };
+
+  const submitVerif = async () => {
+    if (!insuranceDoc || !ownershipDoc) { setVerifErr("Add a photo of both documents."); return; }
+    setVerifErr(null); setSubmittingVerif(true);
+    try {
+      const r = await api.submitRoadsideVerification({
+        insurance_photo: insuranceDoc, ownership_photo: ownershipDoc,
+        vehicle_year: vYear || undefined, vehicle_make: vMake || undefined, vehicle_model: vModel.trim() || undefined,
+      });
+      setInsuranceDoc(null); setOwnershipDoc(null);
+      await load();
+      if (r.status === "approved") Alert.alert("Verified ✓", "You're cleared to request roadside help.");
+      else if (r.status === "rejected") Alert.alert("Couldn't verify", r.reason || "The documents didn't match. Use clearer photos that match your vehicle and name.");
+      else Alert.alert("Submitted", "Your documents are under review. You'll be notified once approved.");
+    } catch (e: any) {
+      setVerifErr(String(e?.message || e).replace(/^\d{3}:\s*/, ""));
+    } finally { setSubmittingVerif(false); }
   };
 
   const addPhotos = async () => {
@@ -367,6 +399,66 @@ export default function RoadsideScreen() {
     </View>
   );
 
+  const DocBox = ({ label, uri, onPress }: { label: string; uri: string | null; onPress: () => void }) => (
+    <TouchableOpacity style={styles.docBox} onPress={onPress} testID={`rs-doc-${label}`}>
+      {uri ? (
+        <>
+          <Image source={{ uri }} style={styles.docImg} resizeMode="cover" />
+          <View style={styles.docCheck}><Ionicons name="checkmark-circle" size={20} color={theme.success} /></View>
+        </>
+      ) : (
+        <>
+          <Ionicons name="camera-outline" size={24} color={theme.primary} />
+          <Text style={styles.docLabel}>{label}</Text>
+        </>
+      )}
+    </TouchableOpacity>
+  );
+
+  // ── Requester verification gate (insurance + ownership) ──
+  const VerifyGate = () => {
+    if (!verif) return null;
+    if (!verif.eligibility.eligible) return <EligibilityCard e={verif.eligibility} />;
+    if (verif.status === "pending") {
+      return (
+        <View style={styles.card}>
+          <View style={styles.helpingTag}><Ionicons name="hourglass" size={16} color={theme.warning} /><Text style={[styles.helpingTagText, { color: theme.warning }]}>Documents under review</Text></View>
+          <Text style={[styles.hint, { marginTop: 8 }]}>Your insurance and ownership are being reviewed. You'll be notified — once approved you can request help.</Text>
+        </View>
+      );
+    }
+    return (
+      <View style={styles.card}>
+        <View style={styles.helpingTag}><Ionicons name="shield-checkmark" size={16} color={theme.primary} /><Text style={styles.helpingTagText}>Verify to request help</Text></View>
+        <Text style={[styles.hint, { marginTop: 8 }]}>
+          To cut down on fraud, add your auto insurance and proof of ownership (registration or title). Our AI checks they match your vehicle, then the documents are deleted — we don't keep them.
+        </Text>
+        {verif.status === "rejected" && !!verif.reason && (
+          <Text style={[styles.err, { marginTop: 10 }]}>Last attempt declined: {verif.reason}</Text>
+        )}
+        <Text style={styles.sectionLabel}>Vehicle (helps matching)</Text>
+        <View style={styles.row2}>
+          <View style={{ flex: 1 }}><Dropdown value={vYear} placeholder="Year" options={YEARS} onChange={setVYear} testID="rs-v-year" /></View>
+          <View style={{ flex: 1 }}><Dropdown value={vMake} placeholder="Make" options={MAKES} onChange={setVMake} testID="rs-v-make" /></View>
+        </View>
+        <Text style={styles.sectionLabel}>Documents</Text>
+        <View style={styles.row2}>
+          <View style={{ flex: 1 }}><DocBox label="Insurance" uri={insuranceDoc} onPress={() => pickDoc("ins")} /></View>
+          <View style={{ flex: 1 }}><DocBox label="Ownership" uri={ownershipDoc} onPress={() => pickDoc("own")} /></View>
+        </View>
+        {!!verifErr && <Text style={[styles.err, { marginTop: 10 }]}>{verifErr}</Text>}
+        <TouchableOpacity
+          style={[styles.actBtn, styles.actPrimary, { marginTop: 14 }, (!insuranceDoc || !ownershipDoc || submittingVerif) && { opacity: 0.5 }]}
+          onPress={submitVerif}
+          disabled={!insuranceDoc || !ownershipDoc || submittingVerif}
+          testID="rs-verify-submit"
+        >
+          {submittingVerif ? <ActivityIndicator color="#fff" /> : <Text style={styles.actPrimaryText}>Submit for verification</Text>}
+        </TouchableOpacity>
+      </View>
+    );
+  };
+
   // ── Active card (viewer is the requester) ──
   const ActiveCard = ({ r }: { r: RoadsideRequest }) => {
     const s = STATUS_LABEL(r);
@@ -481,6 +573,8 @@ export default function RoadsideScreen() {
               {helping && <HelpingCard r={helping} />}
               {active ? (
                 <ActiveCard r={active} />
+              ) : (verif && !verif.verified) ? (
+                <VerifyGate />
               ) : (
                 <>
                   <Text style={styles.sectionLabel}>What do you need?</Text>
@@ -684,6 +778,10 @@ const styles = StyleSheet.create({
   helpingTagText: { color: theme.primary, fontSize: 13, fontWeight: "900", flexShrink: 1 },
   reqRow: { flexDirection: "row", alignItems: "center", gap: 10 },
   reqText: { color: theme.textPrimary, fontSize: 14, fontWeight: "600", flex: 1 },
+  docBox: { height: 110, borderRadius: 12, borderWidth: 1, borderColor: theme.border, borderStyle: "dashed", backgroundColor: theme.surfaceAlt, alignItems: "center", justifyContent: "center", gap: 6, overflow: "hidden", position: "relative" },
+  docImg: { ...StyleSheet.absoluteFillObject, width: "100%", height: "100%" },
+  docLabel: { color: theme.textSecondary, fontSize: 13, fontWeight: "700" },
+  docCheck: { position: "absolute", top: 6, right: 6, backgroundColor: theme.bg, borderRadius: 11 },
 
   empty: { alignItems: "center", gap: 12, paddingVertical: 50 },
   emptyText: { color: theme.textMuted, fontSize: 14, textAlign: "center", paddingHorizontal: 30, lineHeight: 20 },

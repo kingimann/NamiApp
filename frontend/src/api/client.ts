@@ -364,6 +364,15 @@ export const api = {
   // ── Roadside assistance ──────────────────────────────────────────────────
   roadsideQuote: () => request<RoadsideQuote>("/roadside/quote"),
   roadsideEligibility: () => request<RoadsideEligibility>("/roadside/eligibility"),
+  roadsideVerification: () => request<RoadsideVerificationStatus>("/roadside/verification"),
+  submitRoadsideVerification: (body: {
+    insurance_photo: string; ownership_photo: string;
+    vehicle_year?: string; vehicle_make?: string; vehicle_model?: string; note?: string;
+  }) => request<{ status: string; verified: boolean; reason?: string | null }>("/roadside/verification", { method: "POST", body: JSON.stringify(body) }),
+  adminRoadsideVerifications: (status = "pending") =>
+    request<RoadsideAdminVerification[]>(`/admin/roadside/verifications?status=${encodeURIComponent(status)}`),
+  decideRoadsideVerification: (id: string, approve: boolean, reason?: string) =>
+    request<{ ok: boolean; status: string }>(`/admin/roadside/verifications/${id}/decision`, { method: "POST", body: JSON.stringify({ approve, reason }) }),
   roadsideActive: () => request<RoadsideRequest | null>("/roadside/active"),
   roadsideHelping: () => request<RoadsideRequest | null>("/roadside/helping"),
   roadsideMine: () => request<RoadsideRequest[]>("/roadside/mine"),
@@ -1257,6 +1266,23 @@ export type RoadsideEligibility = {
   requirements: RoadsideRequirement[];
   missing: string[];
   min_age_days: number;
+};
+export type RoadsideVerificationStatus = {
+  verified: boolean;
+  status: "none" | "pending" | "approved" | "rejected";
+  reason?: string | null;
+  eligibility: RoadsideEligibility;
+};
+export type RoadsideAdminVerification = {
+  id: string;
+  user_id: string;
+  user: { name: string; picture?: string | null; email?: string | null };
+  status: string;
+  vehicle?: string | null;
+  note?: string | null;
+  insurance_photo?: string | null;
+  ownership_photo?: string | null;
+  created_at: string;
 };
 
 export type Notification = {
