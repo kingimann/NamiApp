@@ -200,7 +200,9 @@ export default function MapScreen() {
         rating: reviewRating,
         text: reviewText.trim(),
       });
-      setReviews((rs) => [r, ...rs.filter((x) => x.user_id !== r.user_id)]);
+      // Replace this user's previous review. Match on a present id first, then
+      // user_id — guarding against an empty user_id wiping every other review.
+      setReviews((rs) => [r, ...rs.filter((x) => (x.id && r.id ? x.id !== r.id : !!r.user_id && x.user_id !== r.user_id))]);
       setReviewModalOpen(false);
       setReviewText("");
       setReviewRating(5);
@@ -1107,7 +1109,7 @@ export default function MapScreen() {
                   {!!fsq.phone && (
                     <TouchableOpacity
                       style={styles.fsqRow}
-                      onPress={() => Linking.openURL(`tel:${fsq.phone}`)}
+                      onPress={() => Linking.openURL(`tel:${(fsq.phone || "").replace(/[^\d+]/g, "")}`).catch(() => {})}
                       testID="fsq-phone"
                     >
                       <Ionicons name="call-outline" size={14} color={theme.primary} />
@@ -1117,7 +1119,7 @@ export default function MapScreen() {
                   {!!fsq.website && (
                     <TouchableOpacity
                       style={styles.fsqRow}
-                      onPress={() => Linking.openURL(fsq.website!)}
+                      onPress={() => Linking.openURL(/^https?:\/\//i.test(fsq.website!) ? fsq.website! : `https://${fsq.website}`).catch(() => {})}
                       testID="fsq-website"
                     >
                       <Ionicons name="globe-outline" size={14} color={theme.primary} />
