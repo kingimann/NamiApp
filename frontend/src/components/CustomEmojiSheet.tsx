@@ -7,6 +7,7 @@ import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { Ionicons } from "@expo/vector-icons";
 import * as ImagePicker from "expo-image-picker";
 import { api, CustomEmoji } from "@/src/api/client";
+import { useKeyboardHeight } from "@/src/hooks/useKeyboardHeight";
 import { theme } from "@/src/theme";
 import { EMOJI_CATEGORIES } from "@/src/lib/emojiData";
 
@@ -24,6 +25,7 @@ const CUSTOM_KEY = "custom";
 
 export default function CustomEmojiSheet({ visible, emojis, myUserId, onClose, onPick, onChanged }: Props) {
   const insets = useSafeAreaInsets();
+  const kb = useKeyboardHeight();
   const [busy, setBusy] = useState(false);
   const [pendingImg, setPendingImg] = useState<string | null>(null);
   const [code, setCode] = useState("");
@@ -71,7 +73,7 @@ export default function CustomEmojiSheet({ visible, emojis, myUserId, onClose, o
     <Modal visible={visible} transparent animationType="slide" onRequestClose={onClose}>
       <View style={styles.backdrop}>
         <TouchableOpacity style={StyleSheet.absoluteFill} activeOpacity={1} onPress={onClose} />
-        <View style={[styles.sheet, { paddingBottom: insets.bottom + 12 }]}>
+        <View style={[styles.sheet, { paddingBottom: insets.bottom + 12, marginBottom: kb }]}>
           <View style={styles.handle} />
           <View style={styles.titleRow}>
             <Text style={styles.title}>Emojis</Text>
