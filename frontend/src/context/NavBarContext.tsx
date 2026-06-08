@@ -93,6 +93,10 @@ type Ctx = {
   // bottom UI (e.g. the directions card). Screens set it; 0 = default spot.
   fabLift: number;
   setFabLift: (px: number) => void;
+  // Fully suppress the floating nav-restore ＋ for screens that own their
+  // corner control (e.g. the map's single expandable button).
+  fabHidden: boolean;
+  setFabHidden: (hidden: boolean) => void;
 };
 
 const NavBarContext = createContext<Ctx | null>(null);
@@ -120,6 +124,7 @@ export function NavBarProvider({ children }: { children: React.ReactNode }) {
   const [ready, setReady] = useState(false);
   const [tabBarHidden, setTabBarHidden] = useState(false);
   const [fabLift, setFabLift] = useState(0);
+  const [fabHidden, setFabHidden] = useState(false);
 
   useEffect(() => {
     (async () => {
@@ -171,7 +176,9 @@ export function NavBarProvider({ children }: { children: React.ReactNode }) {
     setTabBarHidden,
     fabLift,
     setFabLift,
-  }), [ids, ready, persist, tabBarHidden, fabLift]);
+    fabHidden,
+    setFabHidden,
+  }), [ids, ready, persist, tabBarHidden, fabLift, fabHidden]);
 
   return <NavBarContext.Provider value={value}>{children}</NavBarContext.Provider>;
 }
@@ -195,6 +202,8 @@ export function useNavBar(): Ctx {
       setTabBarHidden: () => {},
       fabLift: 0,
       setFabLift: () => {},
+      fabHidden: false,
+      setFabHidden: () => {},
     };
   }
   return ctx;

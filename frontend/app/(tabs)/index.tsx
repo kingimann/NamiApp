@@ -71,6 +71,7 @@ export default function MapScreen() {
 
   const [styleKey, setStyleKey] = useState<MapStyleKey>("streets");
   const [styleSheetOpen, setStyleSheetOpen] = useState(false);
+  const [fabOpen, setFabOpen] = useState(false);  // expandable map-controls button
   const [lightMode, setLightMode] = useState<"auto" | "dawn" | "day" | "dusk" | "night">("auto");
   const [mapReady, setMapReady] = useState(false);
 
@@ -115,7 +116,7 @@ export default function MapScreen() {
   // nav bar (global) slides away and the search bar fades out, so the map is
   // unobstructed. Both come back shortly after the gesture ends (or immediately
   // if the user taps the search field).
-  const { setTabBarHidden, tabBarHidden } = useNavBar();
+  const { setTabBarHidden, tabBarHidden, setFabHidden } = useNavBar();
   const [mapActive, setMapActive] = useState(false);
   const searchFocusedRef = useRef(false);
   const idleTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
@@ -142,11 +143,17 @@ export default function MapScreen() {
   }, [mapActive, searchHide]);
   // Never leave the bottom bar stuck hidden when this screen loses focus or
   // unmounts (tab screens can stay mounted, and tabBarHidden is global).
-  useFocusEffect(useCallback(() => () => {
-    if (idleTimer.current) clearTimeout(idleTimer.current);
-    setMapActive(false);
-    setTabBarHidden(false);
-  }, [setTabBarHidden]));
+  // The map owns its own corner control (the expandable button), so suppress
+  // the global nav-restore ＋ while the map is focused and bring it back on blur.
+  useFocusEffect(useCallback(() => {
+    setFabHidden(true);
+    return () => {
+      if (idleTimer.current) clearTimeout(idleTimer.current);
+      setMapActive(false);
+      setTabBarHidden(false);
+      setFabHidden(false);
+    };
+  }, [setTabBarHidden, setFabHidden]));
   useEffect(() => () => {
     if (idleTimer.current) clearTimeout(idleTimer.current);
     setTabBarHidden(false);
@@ -459,23 +466,19 @@ export default function MapScreen() {
         // …and get the chrome out of the way while they explore.
         hideChromeForPan();
       } else if (e.type === "click") {
+        // A plain tap just dismisses open chrome — it no longer drops a pin
+        // (that's a long-press now). Close any open card/results/controls.
         setShowResults(false);
+        setSelected(null);
+        setFabOpen(false);
+      } else if (e.type === "longpress") {
+        // Long-press anywhere → drop a pin at that point and show its card.
+        setShowResults(false);
+        setFabOpen(false);
         setSelected({
           name: "Dropped pin",
           longitude: e.lng,
           latitude: e.lat,
-        });
-      } else if (e.type === "longpress") {
-        // Long-press anywhere → jump straight into directions to that point.
-        setShowResults(false);
-        setSelected(null);
-        router.push({
-          pathname: "/(tabs)/directions",
-          params: {
-            destLng: String(e.lng),
-            destLat: String(e.lat),
-            destName: "Dropped pin",
-          },
         });
       } else if (e.type === "markerClick") {
         if (e.id.startsWith("place_")) {
@@ -798,9 +801,9 @@ export default function MapScreen() {
 
       </Animated.View>
 
-      {/* One combined control pill (bottom-right): report · roadside · map layers ·
-          locate. Lifted above the nav-restore ＋ button when the bottom bar is
-          hidden so the two don't overlap. Compass stays separate (it rotates). */}
+      {/* One expandable control button (bottom-right). Collapsed it's a single
+          round FAB; tapping it reveals report · roadside · layers · locate
+          stacked above. Compass stays separate (it rotates with the map). */}
       <View style={[styles.fabStack, { bottom: insets.bottom + (tabBarHidden ? 86 : 24) }]} pointerEvents="box-none">
         {compassVisible && (
           <TouchableOpacity
@@ -814,51 +817,64 @@ export default function MapScreen() {
             </View>
           </TouchableOpacity>
         )}
-        <View style={styles.fabGroup}>
-          <TouchableOpacity
-            style={[styles.fabSegment, styles.fabSegmentTop]}
-            onPress={() => setReportOpen(true)}
-            testID="hazard-report-fab"
-            activeOpacity={0.85}
-          >
-            <Ionicons name="warning" size={20} color="#F59E0B" />
-          </TouchableOpacity>
-          <View style={styles.fabDivider} />
-          <TouchableOpacity
-            style={styles.fabSegment}
-            onPress={() => router.push("/roadside")}
-            testID="roadside-fab"
-            activeOpacity={0.85}
-          >
-            <Ionicons name="construct" size={20} color="#F59E0B" />
-          </TouchableOpacity>
-          <View style={styles.fabDivider} />
-          <TouchableOpacity
-            style={styles.fabSegment}
-            onPress={() => setStyleSheetOpen(true)}
-            testID="layers-button"
-            activeOpacity={0.85}
-          >
-            <Ionicons name="layers" size={22} color={theme.textPrimary} />
-          </TouchableOpacity>
-          <View style={styles.fabDivider} />
-          <TouchableOpacity
-            style={[styles.fabSegment, styles.fabSegmentBottom]}
-            onPress={requestLocation}
-            testID="location-fab"
-            activeOpacity={0.85}
-          >
-            {locating ? (
-              <ActivityIndicator color={theme.primary} />
-            ) : (
-              <Ionicons
-                name={followMode ? "locate" : "locate-outline"}
-                size={22}
-                color={followMode ? theme.primary : theme.textPrimary}
-              />
-            )}
-          </TouchableOpacity>
-        </View>
+
+        {/* Revealed actions (only while open) */}
+        {fabOpen && (
+          <>
+            <TouchableOpacity
+              style={styles.fab}
+              onPress={() => { setFabOpen(false); setReportOpen(true); }}
+              testID="hazard-report-fab"
+              activeOpacity={0.85}
+            >
+              <Ionicons name="warning" size={20} color="#F59E0B" />
+            </TouchableOpacity>
+            <TouchableOpacity
+              style={styles.fab}
+              onPress={() => { setFabOpen(false); router.push("/roadside"); }}
+              testID="roadside-fab"
+              activeOpacity={0.85}
+            >
+              <Ionicons name="construct" size={20} color="#F59E0B" />
+            </TouchableOpacity>
+            <TouchableOpacity
+              style={styles.fab}
+              onPress={() => { setFabOpen(false); setStyleSheetOpen(true); }}
+              testID="layers-button"
+              activeOpacity={0.85}
+            >
+              <Ionicons name="layers" size={22} color={theme.textPrimary} />
+            </TouchableOpacity>
+            <TouchableOpacity
+              style={[styles.fab, followMode && styles.fabActive]}
+              onPress={() => { setFabOpen(false); requestLocation(); }}
+              testID="location-fab"
+              activeOpacity={0.85}
+            >
+              {locating ? (
+                <ActivityIndicator color={theme.primary} />
+              ) : (
+                <Ionicons
+                  name={followMode ? "locate" : "locate-outline"}
+                  size={22}
+                  color={followMode ? theme.primary : theme.textPrimary}
+                />
+              )}
+            </TouchableOpacity>
+          </>
+        )}
+
+        {/* The single button: toggles the actions open/closed */}
+        <TouchableOpacity
+          style={[styles.fab, fabOpen && styles.fabActive]}
+          onPress={() => setFabOpen((v) => !v)}
+          testID="map-controls-fab"
+          activeOpacity={0.85}
+          accessibilityRole="button"
+          accessibilityLabel={fabOpen ? "Close map controls" : "Open map controls"}
+        >
+          <Ionicons name={fabOpen ? "close" : "ellipsis-horizontal"} size={24} color={theme.textPrimary} />
+        </TouchableOpacity>
       </View>
 
       {/* Style picker bottom sheet */}
