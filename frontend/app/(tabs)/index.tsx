@@ -37,6 +37,7 @@ import {
 } from "@/src/api/mapbox";
 import { api, Place, Recent, Review, FsqProfile, Hazard, HazardType, buildPlaceKey } from "@/src/api/client";
 import { MAP_STYLES, MapStyleKey, theme } from "@/src/theme";
+import { GLASS } from "@/src/lib/glass";
 
 // Driver-report hazard types → marker emoji + label.
 const HAZARD_META: Record<HazardType, { emoji: string; label: string }> = {
@@ -116,6 +117,11 @@ export default function MapScreen() {
   const [results, setResults] = useState<GeocodeFeature[]>([]);
   const [searching, setSearching] = useState(false);
   const [showResults, setShowResults] = useState(false);
+  // The search bar collapses to a small button when not in use (like the nav).
+  const [searchOpen, setSearchOpen] = useState(false);
+  const searchRef = useRef<TextInput>(null);
+  const openSearch = () => { setSearchOpen(true); setShowResults(true); setTimeout(() => searchRef.current?.focus?.(), 60); };
+  const closeSearchIfEmpty = () => { if (!query.trim()) { setSearchOpen(false); setShowResults(false); } };
 
   const [selected, setSelected] = useState<SelectedPlace | null>(null);
   const [reviews, setReviews] = useState<Review[]>([]);
@@ -627,38 +633,50 @@ export default function MapScreen() {
       <View style={[styles.topBar, { paddingTop: insets.top + 8 }]} pointerEvents="box-none">
         <View style={styles.searchRow}>
           <SidebarMenuButton light />
-          <View style={[styles.searchPill, { flex: 1 }]}>
-            <Ionicons name="search" size={18} color={theme.textSecondary} style={{ marginRight: 8 }} />
-            <TextInput
-              testID="search-input"
-              style={styles.searchInput}
-              placeholder="Search places, addresses…"
-              placeholderTextColor={theme.textMuted}
-              value={query}
-              onChangeText={(t) => {
-                setQuery(t);
-                setShowResults(true);
-              }}
-              onFocus={() => setShowResults(true)}
-              returnKeyType="search"
-            />
-            {searching && <ActivityIndicator color={theme.primary} size="small" />}
-            {!searching && !!query && (
-              <TouchableOpacity
-                onPress={() => {
-                  setQuery("");
-                  setResults([]);
+          {searchOpen ? (
+            <View style={[styles.searchPill, { flex: 1 }]}>
+              <Ionicons name="search" size={18} color={theme.textSecondary} style={{ marginRight: 8 }} />
+              <TextInput
+                ref={searchRef}
+                testID="search-input"
+                style={styles.searchInput}
+                placeholder="Search places, addresses…"
+                placeholderTextColor={theme.textMuted}
+                value={query}
+                onChangeText={(t) => {
+                  setQuery(t);
+                  setShowResults(true);
                 }}
-                testID="search-clear"
-              >
-                <Ionicons name="close-circle" size={18} color={theme.textMuted} />
+                onFocus={() => setShowResults(true)}
+                onBlur={closeSearchIfEmpty}
+                returnKeyType="search"
+              />
+              {searching && <ActivityIndicator color={theme.primary} size="small" />}
+              {!searching && (
+                <TouchableOpacity
+                  onPress={() => {
+                    setQuery("");
+                    setResults([]);
+                    setSearchOpen(false);
+                    setShowResults(false);
+                  }}
+                  testID="search-clear"
+                >
+                  <Ionicons name={query ? "close-circle" : "close"} size={18} color={theme.textMuted} />
+                </TouchableOpacity>
+              )}
+            </View>
+          ) : (
+            <View style={{ flex: 1, flexDirection: "row" }}>
+              <TouchableOpacity style={styles.searchFab} onPress={openSearch} testID="map-search-open" activeOpacity={0.85}>
+                <Ionicons name="search" size={20} color={theme.textPrimary} />
               </TouchableOpacity>
-            )}
-          </View>
+            </View>
+          )}
         </View>
 
         {/* Results / Recents dropdown */}
-        {showResults && (results.length > 0 || (!query && recents.length > 0)) && (
+        {searchOpen && showResults && (results.length > 0 || (!query && recents.length > 0)) && (
           <View style={styles.resultsCard} testID="search-results">
             {!query && recents.length > 0 && (
               <View style={styles.recentsHeader}>
@@ -1226,13 +1244,6 @@ const styles = StyleSheet.create({
   searchPill: {
     flexDirection: "row",
     alignItems: "center",
-    backgroundColor: Platform.select({
-      ios: "rgba(28,28,32,0.55)",
-      android: "rgba(28,28,32,0.85)",
-      default: "rgba(28,28,32,0.78)",
-    }),
-    borderWidth: StyleSheet.hairlineWidth,
-    borderColor: "rgba(255,255,255,0.15)",
     borderRadius: 24,
     paddingHorizontal: 16,
     paddingVertical: 11,
@@ -1242,10 +1253,14 @@ const styles = StyleSheet.create({
     shadowRadius: 18,
     shadowOffset: { width: 0, height: 6 },
     elevation: 8,
-    ...(Platform.OS === "web" ? ({
-      backdropFilter: "blur(28px) saturate(170%)",
-      WebkitBackdropFilter: "blur(28px) saturate(170%)",
-    } as any) : {}),
+    ...GLASS,
+  },
+  // Collapsed search button shown when the search bar isn't in use.
+  searchFab: {
+    width: 44, height: 44, borderRadius: 22,
+    alignItems: "center", justifyContent: "center",
+    shadowColor: "#000", shadowOpacity: 0.35, shadowRadius: 18, shadowOffset: { width: 0, height: 6 }, elevation: 8,
+    ...GLASS,
   },
   searchInput: {
     flex: 1,
