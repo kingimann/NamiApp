@@ -267,6 +267,7 @@ class RoadsideParty(BaseModel):
 class RoadsideRequest(BaseModel):
     id: str
     requester_id: str
+    caller_name: Optional[str] = None        # admin-set display name for the call
     requester: Optional[RoadsideParty] = None
     helper_id: Optional[str] = None
     helper: Optional[RoadsideParty] = None
@@ -343,6 +344,7 @@ async def _hydrate(doc: dict, viewer_id: str, viewer_coords: Optional[Tuple[floa
     return RoadsideRequest(
         id=doc["id"],
         requester_id=doc["requester_id"],
+        caller_name=doc.get("caller_name"),
         requester=await _party(doc["requester_id"], reveal_phone=reveal),
         helper_id=doc.get("helper_id"),
         helper=await _party(doc.get("helper_id"), reveal_phone=reveal),
@@ -1297,11 +1299,15 @@ class AdminCallCreate(BaseModel):
     place_name: Optional[str] = None
     note: Optional[str] = None
     is_test: bool = True
+    caller_name: Optional[str] = None
+    vehicle_year: Optional[str] = None
     vehicle_make: Optional[str] = None
     vehicle_model: Optional[str] = None
     vehicle_color: Optional[str] = None
     vehicle_plate: Optional[str] = None
     dest_name: Optional[str] = None
+    photos: Optional[List[str]] = None
+    price: Optional[float] = None       # custom price (admin override); 0/none = free
 
 
 @router.post("/roadside/admin/calls", response_model=RoadsideRequest)
@@ -1315,9 +1321,11 @@ async def admin_create_call(body: AdminCallCreate, authorization: Optional[str] 
     if svc not in SERVICES:
         raise HTTPException(status_code=400, detail=f"service must be one of {sorted(SERVICES)}")
     now = datetime.now(timezone.utc)
+    price = round(max(0.0, float(body.price)), 2) if body.price else 0.0
     doc = {
         "id": str(uuid.uuid4()),
         "requester_id": user["user_id"],
+        "caller_name": (body.caller_name or "").strip()[:80] or None,
         "helper_id": None,
         "service": svc,
         "status": "open",
@@ -1328,19 +1336,20 @@ async def admin_create_call(body: AdminCallCreate, authorization: Optional[str] 
         "longitude": float(body.longitude),
         "latitude": float(body.latitude),
         "place_name": (body.place_name or "").strip()[:200] or None,
+        "vehicle_year": (body.vehicle_year or "").strip()[:8] or None,
         "vehicle_make": (body.vehicle_make or "").strip()[:40] or None,
         "vehicle_model": (body.vehicle_model or "").strip()[:60] or None,
         "vehicle_color": (body.vehicle_color or "").strip()[:30] or None,
         "vehicle_plate": (body.vehicle_plate or "").strip()[:16] or None,
         "dest_name": (body.dest_name or "").strip()[:200] or None,
-        "photos": [],
+        "photos": _clean_photos(body.photos),
         "before_photos": [],
         "after_photos": [],
         "note": (body.note or "").strip()[:500] or None,
         "payment_method": "cash",
-        "price": 0.0,
+        "price": price,
         "tax": 0.0,
-        "total": 0.0,
+        "total": price,
         "held": False,
         "settled": False,
         "refunded": False,

@@ -448,8 +448,9 @@ export const api = {
   // Admin dispatch: create test/real calls + search the day's calls by number.
   adminCreateRoadsideCall: (body: {
     service: string; longitude: number; latitude: number; place_name?: string;
-    note?: string; is_test?: boolean; vehicle_make?: string; vehicle_model?: string;
-    vehicle_color?: string; vehicle_plate?: string; dest_name?: string;
+    note?: string; is_test?: boolean; caller_name?: string; vehicle_year?: string;
+    vehicle_make?: string; vehicle_model?: string; vehicle_color?: string;
+    vehicle_plate?: string; dest_name?: string; photos?: string[]; price?: number;
   }) => request<RoadsideRequest>("/roadside/admin/calls", { method: "POST", body: JSON.stringify(body) }),
   adminListRoadsideCalls: (params?: { date?: string; call_number?: number }) => {
     const qs = new URLSearchParams();
@@ -1389,6 +1390,7 @@ export type RoadsideParty = {
 export type RoadsideRequest = {
   id: string;
   requester_id: string;
+  caller_name?: string | null;
   requester?: RoadsideParty | null;
   helper_id?: string | null;
   helper?: RoadsideParty | null;
