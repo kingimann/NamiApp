@@ -18,6 +18,7 @@ import {
 import { api, EtaShare, TransitNearby, TransitDeparture, TransitPlan } from "@/src/api/client";
 import { MAP_STYLES, theme } from "@/src/theme";
 import { SidebarMenuButton } from "@/src/components/LeftSidebar";
+import { useNavBar } from "@/src/context/NavBarContext";
 
 type Waypoint = {
   id: string;
@@ -174,7 +175,15 @@ const agoLabel = (fetchedAt: number | null, now: number): string => {
 export default function DirectionsScreen() {
   const insets = useSafeAreaInsets();
   const router = useRouter();
+  const { setFabLift } = useNavBar();
   const mapRef = useRef<MapboxWebViewHandle>(null);
+  // Lift the global nav-restore ＋ above this screen's bottom card so it
+  // never sits on top of the route/ETA panel. Reset when leaving the screen.
+  const [cardH, setCardH] = useState(0);
+  useEffect(() => {
+    setFabLift(cardH ? cardH + 12 : 0);
+    return () => setFabLift(0);
+  }, [cardH, setFabLift]);
   const params = useLocalSearchParams<{ destLng?: string; destLat?: string; destName?: string }>();
 
   const [userLocation, setUserLocation] = useState<[number, number] | null>(null);
@@ -1076,6 +1085,7 @@ export default function DirectionsScreen() {
         {/* ───────── Bottom panel ───────── */}
         {/* Pre-nav: route summary + start button. Nav-mode: footer with ETA/dist + end button. */}
         <View
+          onLayout={(e) => setCardH(e.nativeEvent.layout.height)}
           style={[
             styles.bottomCard,
             { paddingBottom: navMode ? 16 : 18 },

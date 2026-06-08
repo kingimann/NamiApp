@@ -80,7 +80,7 @@ export default function LiquidTabBar(_: any) {
   const insets = useSafeAreaInsets();
   const router = useRouter();
   const pathname = usePathname();
-  const { shortcuts, tabBarHidden, setTabBarHidden } = useNavBar();
+  const { shortcuts, tabBarHidden, setTabBarHidden, fabLift, fabHidden } = useNavBar();
   const searchScale = useRef(new Animated.Value(1)).current;
 
   // 0 = shown, 1 = hidden. Drives both the pill (slide down) and the ＋ (fade in).
@@ -187,8 +187,8 @@ export default function LiquidTabBar(_: any) {
           Gate tappability on effectiveHidden (not just the internal scroll-hide)
           so it works when a screen hid the bar via tabBarHidden (e.g. the map). */}
       <Animated.View
-        pointerEvents={effectiveHidden ? "auto" : "none"}
-        style={[styles.fabWrap, { bottom: insets.bottom + 14, opacity: fabOpacity, transform: [{ scale: fabScale }] }]}
+        pointerEvents={effectiveHidden && !fabHidden ? "auto" : "none"}
+        style={[styles.fabWrap, { bottom: insets.bottom + 14 + (fabLift || 0), opacity: fabHidden ? 0 : fabOpacity, transform: [{ scale: fabScale }] }]}
       >
         <Pressable
           onPress={() => { setHidden(false); setTabBarHidden(false); }}

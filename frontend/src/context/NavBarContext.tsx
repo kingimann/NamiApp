@@ -89,6 +89,14 @@ type Ctx = {
   // External request to hide the bottom tab bar (e.g. while panning the map).
   tabBarHidden: boolean;
   setTabBarHidden: (hidden: boolean) => void;
+  // How far to lift the floating nav-restore ＋ so it clears a screen's own
+  // bottom UI (e.g. the directions card). Screens set it; 0 = default spot.
+  fabLift: number;
+  setFabLift: (px: number) => void;
+  // Fully suppress the floating nav-restore ＋ for screens that own their
+  // corner control (e.g. the map's single expandable button).
+  fabHidden: boolean;
+  setFabHidden: (hidden: boolean) => void;
 };
 
 const NavBarContext = createContext<Ctx | null>(null);
@@ -115,6 +123,8 @@ export function NavBarProvider({ children }: { children: React.ReactNode }) {
   const [ids, setIdsState] = useState<string[]>(DEFAULT_NAV_IDS);
   const [ready, setReady] = useState(false);
   const [tabBarHidden, setTabBarHidden] = useState(false);
+  const [fabLift, setFabLift] = useState(0);
+  const [fabHidden, setFabHidden] = useState(false);
 
   useEffect(() => {
     (async () => {
@@ -164,7 +174,11 @@ export function NavBarProvider({ children }: { children: React.ReactNode }) {
     canRemove: ids.length > MIN_TABS,
     tabBarHidden,
     setTabBarHidden,
-  }), [ids, ready, persist, tabBarHidden]);
+    fabLift,
+    setFabLift,
+    fabHidden,
+    setFabHidden,
+  }), [ids, ready, persist, tabBarHidden, fabLift, fabHidden]);
 
   return <NavBarContext.Provider value={value}>{children}</NavBarContext.Provider>;
 }
@@ -186,6 +200,10 @@ export function useNavBar(): Ctx {
       canRemove: false,
       tabBarHidden: false,
       setTabBarHidden: () => {},
+      fabLift: 0,
+      setFabLift: () => {},
+      fabHidden: false,
+      setFabHidden: () => {},
     };
   }
   return ctx;
