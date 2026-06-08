@@ -20,11 +20,13 @@ import {
   Share,
   Modal,
   Image as RNImage,
+  Animated,
 } from "react-native";
 import { SafeAreaView, useSafeAreaInsets } from "react-native-safe-area-context";
 import { Ionicons } from "@expo/vector-icons";
 import * as Location from "expo-location";
-import { useRouter } from "expo-router";
+import { useRouter, useFocusEffect } from "expo-router";
+import { useNavBar } from "@/src/context/NavBarContext";
 import { SidebarMenuButton } from "@/src/components/LeftSidebar";
 import {
   MapboxWebView,
@@ -106,6 +108,47 @@ export default function MapScreen() {
   const [buildingsOn, setBuildingsOn] = useState(false);
   const [followMode, setFollowMode] = useState(false);
   const followModeRef = useRef(false);
+
+  // Auto-hide the chrome while the user is actively moving the map: the bottom
+  // nav bar (global) slides away and the search bar fades out, so the map is
+  // unobstructed. Both come back shortly after the gesture ends (or immediately
+  // if the user taps the search field).
+  const { setTabBarHidden } = useNavBar();
+  const [mapActive, setMapActive] = useState(false);
+  const searchFocusedRef = useRef(false);
+  const idleTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const searchHide = useRef(new Animated.Value(0)).current; // 0 = shown, 1 = hidden
+  const showChrome = useCallback(() => {
+    if (idleTimer.current) { clearTimeout(idleTimer.current); idleTimer.current = null; }
+    setMapActive(false);
+    setTabBarHidden(false);
+  }, [setTabBarHidden]);
+  const hideChromeForPan = useCallback(() => {
+    if (searchFocusedRef.current) return; // don't yank the search bar while typing
+    if (idleTimer.current) { clearTimeout(idleTimer.current); idleTimer.current = null; }
+    setMapActive(true);
+    setTabBarHidden(true);
+  }, [setTabBarHidden]);
+  const scheduleShowChrome = useCallback(() => {
+    if (idleTimer.current) clearTimeout(idleTimer.current);
+    idleTimer.current = setTimeout(() => { setMapActive(false); setTabBarHidden(false); }, 1600);
+  }, [setTabBarHidden]);
+  useEffect(() => {
+    Animated.timing(searchHide, {
+      toValue: mapActive ? 1 : 0, duration: 200, useNativeDriver: true,
+    }).start();
+  }, [mapActive, searchHide]);
+  // Never leave the bottom bar stuck hidden when this screen loses focus or
+  // unmounts (tab screens can stay mounted, and tabBarHidden is global).
+  useFocusEffect(useCallback(() => () => {
+    if (idleTimer.current) clearTimeout(idleTimer.current);
+    setMapActive(false);
+    setTabBarHidden(false);
+  }, [setTabBarHidden]));
+  useEffect(() => () => {
+    if (idleTimer.current) clearTimeout(idleTimer.current);
+    setTabBarHidden(false);
+  }, [setTabBarHidden]);
   useEffect(() => { followModeRef.current = followMode; }, [followMode]);
 
   const [places, setPlaces] = useState<Place[]>([]);
@@ -388,6 +431,8 @@ export default function MapScreen() {
         requestLocation();
         loadHazards();
       } else if (e.type === "moveEnd") {
+        // Interaction settled → bring the chrome back after a short idle.
+        scheduleShowChrome();
         // Remember the map center so "near me / nearby" still works when there's
         // no GPS fix (e.g. on web without location permission) — we search around
         // wherever the map is currently looking.
@@ -401,6 +446,8 @@ export default function MapScreen() {
       } else if (e.type === "userPan") {
         // User panned/zoomed/rotated → leave follow mode (Google-Maps parity)
         setFollowMode(false);
+        // …and get the chrome out of the way while they explore.
+        hideChromeForPan();
       } else if (e.type === "click") {
         setShowResults(false);
         setSelected({
@@ -441,7 +488,7 @@ export default function MapScreen() {
         if (h) setHazardSel(h);
       }
     },
-    [places, requestLocation, styleKey, router],
+    [places, requestLocation, styleKey, router, scheduleShowChrome, hideChromeForPan],
   );
 
   const onPickStyle = (key: MapStyleKey) => {
@@ -624,7 +671,12 @@ export default function MapScreen() {
       />
 
       {/* Top: search + categories */}
-      <View style={[styles.topBar, { paddingTop: insets.top + 8 }]} pointerEvents="box-none">
+      <Animated.View
+        style={[styles.topBar, { paddingTop: insets.top + 8 },
+          { opacity: searchHide.interpolate({ inputRange: [0, 1], outputRange: [1, 0] }),
+            transform: [{ translateY: searchHide.interpolate({ inputRange: [0, 1], outputRange: [0, -16] }) }] }]}
+        pointerEvents={mapActive ? "none" : "box-none"}
+      >
         <View style={styles.searchRow}>
           <SidebarMenuButton light />
           <View style={[styles.searchPill, { flex: 1 }]}>
@@ -639,7 +691,8 @@ export default function MapScreen() {
                 setQuery(t);
                 setShowResults(true);
               }}
-              onFocus={() => setShowResults(true)}
+              onFocus={() => { searchFocusedRef.current = true; showChrome(); setShowResults(true); }}
+              onBlur={() => { searchFocusedRef.current = false; }}
               returnKeyType="search"
             />
             {searching && <ActivityIndicator color={theme.primary} size="small" />}
@@ -728,7 +781,7 @@ export default function MapScreen() {
           </View>
         )}
 
-      </View>
+      </Animated.View>
 
       {/* Apple-Maps-style grouped control stack (bottom-right) */}
       <View style={[styles.fabStack, { bottom: insets.bottom + 24 }]} pointerEvents="box-none">
