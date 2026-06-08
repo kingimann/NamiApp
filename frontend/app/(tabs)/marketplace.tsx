@@ -17,7 +17,6 @@ import { GLASS } from "@/src/lib/glass";
 import { SidebarMenuButton } from "@/src/components/LeftSidebar";
 import RestrictionBanner from "@/src/components/RestrictionBanner";
 import FadeIn from "@/src/components/FadeIn";
-import BouncyPressable from "@/src/components/BouncyPressable";
 
 const CATEGORIES = [
   { key: "all", label: "All" },
@@ -368,20 +367,21 @@ export default function MarketplaceScreen() {
       <View style={styles.header}>
         <SidebarMenuButton />
         <Text style={styles.title}>{savedView ? "Saved" : "Marketplace"}</Text>
-        <View style={{ flexDirection: "row" }}>
+        <View style={{ flexDirection: "row", gap: 8 }}>
           <TouchableOpacity
-            onPress={() => router.push("/my-listings")}
-            style={styles.headerIconBtn}
-            testID="market-my-listings"
+            onPress={() => { if (marketOff) return; openCompose(); }}
+            disabled={marketOff}
+            style={[styles.headerIconBtn, marketOff && { opacity: 0.4 }]}
+            testID="market-create"
           >
-            <Ionicons name="pricetags-outline" size={20} color={theme.textPrimary} />
+            <Ionicons name="add" size={24} color={theme.primary} />
           </TouchableOpacity>
           <TouchableOpacity
-            onPress={() => setSavedView((v) => !v)}
-            style={[styles.headerIconBtn, savedView && styles.headerIconBtnActive]}
-            testID="market-saved-toggle"
+            onPress={() => router.push("/my-marketplace")}
+            style={styles.headerIconBtn}
+            testID="market-profile"
           >
-            <Ionicons name={savedView ? "bookmark" : "bookmark-outline"} size={20} color={savedView ? theme.primary : theme.textPrimary} />
+            <Ionicons name="storefront-outline" size={20} color={theme.textPrimary} />
           </TouchableOpacity>
         </View>
       </View>
@@ -422,29 +422,6 @@ export default function MarketplaceScreen() {
         )}
       </View>
 
-      {!savedView && (
-        <ScrollView
-          horizontal
-          showsHorizontalScrollIndicator={false}
-          style={styles.chipScroll}
-          contentContainerStyle={styles.chipRow}
-        >
-          {CATEGORIES.map((c) => {
-            const active = c.key === cat;
-            return (
-              <TouchableOpacity
-                key={c.key}
-                style={[styles.chip, active && styles.chipActive]}
-                onPress={() => setCat(c.key)}
-                activeOpacity={0.8}
-                testID={`market-chip-${c.key}`}
-              >
-                <Text style={[styles.chipText, { color: active ? "#fff" : theme.textSecondary }]}>{c.label}</Text>
-              </TouchableOpacity>
-            );
-          })}
-        </ScrollView>
-      )}
       </Animated.View>
 
       {loading ? (
@@ -543,15 +520,6 @@ export default function MarketplaceScreen() {
           )}
         />
       )}
-
-      <BouncyPressable
-        style={[styles.fab, { bottom: 16 }, marketOff && styles.fabDisabled]}
-        onPress={() => { if (marketOff) return; openCompose(); }}
-        disabled={marketOff}
-        testID="new-listing-fab"
-      >
-        <Ionicons name="add" size={26} color="#fff" />
-      </BouncyPressable>
 
       <Modal visible={composeOpen} transparent animationType="slide" onRequestClose={() => { setComposeOpen(false); setEditingId(null); }}>
         <KeyboardAvoidingView
