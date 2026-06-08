@@ -36,13 +36,16 @@ export default function WebPullToRefresh() {
       if (active.current && pullRef.current >= THRESHOLD) { window.location.reload(); return; }
       active.current = false; startY.current = null; pullRef.current = 0; setPull(0);
     };
-    window.addEventListener("touchstart", onStart, { passive: true });
-    window.addEventListener("touchmove", onMove, { passive: true });
-    window.addEventListener("touchend", onEnd, { passive: true });
+    // Capture phase so list/touchable children can't swallow the gesture before
+    // we see it (the reason the pull often didn't register).
+    const opts = { passive: true, capture: true } as any;
+    window.addEventListener("touchstart", onStart, opts);
+    window.addEventListener("touchmove", onMove, opts);
+    window.addEventListener("touchend", onEnd, opts);
     return () => {
-      window.removeEventListener("touchstart", onStart);
-      window.removeEventListener("touchmove", onMove);
-      window.removeEventListener("touchend", onEnd);
+      window.removeEventListener("touchstart", onStart, opts);
+      window.removeEventListener("touchmove", onMove, opts);
+      window.removeEventListener("touchend", onEnd, opts);
     };
   }, []);
 

@@ -31,6 +31,14 @@ export default function CustomEmojiSheet({ visible, emojis, myUserId, onClose, o
   const [code, setCode] = useState("");
   const [activeCat, setActiveCat] = useState(EMOJI_CATEGORIES[0].key);
 
+  // On web the composer keeps focus when the picker opens, so the on-screen
+  // keyboard stays up and overlaps the sheet. Blur it whenever the sheet opens.
+  React.useEffect(() => {
+    if (visible && Platform.OS === "web" && typeof document !== "undefined") {
+      (document.activeElement as any)?.blur?.();
+    }
+  }, [visible]);
+
   // Tabs: standard categories first, then a Custom tab.
   const tabs = useMemo(
     () => [...EMOJI_CATEGORIES.map((c) => ({ key: c.key, icon: c.icon, custom: false })),
