@@ -100,30 +100,9 @@ export default function SettingsScreen() {
           <Row icon="code-slash-outline" label="Developer API" color="#0EA5E9" onPress={() => router.push("/developer")} />
           <Row icon="document-text-outline" label="Forms" color="#8B5CF6" onPress={() => router.push("/forms")} />
           <Row icon="megaphone-outline" label="Advertise" color="#F97316" onPress={() => router.push("/advertise")} />
-          <Row icon="cash-outline" label="Monetize your site" color="#16A34A" onPress={() => router.push("/monetize")} last={user?.role !== "admin"} />
-          {user?.role === "admin" && (
-            <Row icon="people-circle-outline" label="Manage users (admin)" color="#F97316" onPress={() => router.push("/admin-users")} />
-          )}
-          {user?.role === "admin" && (
-            <Row icon="card-outline" label="Payments & data (admin)" color="#0EA5E9" onPress={() => router.push("/admin-payments")} />
-          )}
-          {user?.role === "admin" && (
-            <Row icon="bar-chart-outline" label="Ad revenue (admin)" color="#EAB308" onPress={() => router.push("/admin-revenue")} />
-          )}
-          {user?.role === "admin" && (
-            <Row icon="ribbon-outline" label="Custom badges (admin)" color="#A855F7" onPress={() => router.push("/admin-badges")} />
-          )}
-          {user?.role === "admin" && (
-            <Row icon="flask-outline" label="Test bot (admin)" color="#EC4899" onPress={() => router.push("/admin-bot")} />
-          )}
-          {user?.role === "admin" && (
-            <Row icon="pulse-outline" label="Integrations & SDKs (admin)" color="#06B6D4" onPress={() => router.push("/admin-integrations")} />
-          )}
-          {user?.role === "admin" && (
-            <Row icon="cloud-outline" label="Render hosting (admin)" color="#8B5CF6" onPress={() => router.push("/admin-render")} />
-          )}
+          <Row icon="cash-outline" label="Monetize your site" color="#16A34A" onPress={() => router.push("/monetize")} last={user?.role !== "admin" && user?.role !== "mod"} />
           {(user?.role === "admin" || user?.role === "mod") && (
-            <Row icon="construct-outline" label="Roadside verifications (staff)" color="#F59E0B" onPress={() => router.push("/admin-roadside")} last />
+            <Row icon="shield-checkmark-outline" label="Admin settings" color="#F97316" onPress={() => router.push("/admin-settings")} last />
           )}
         </View>
 

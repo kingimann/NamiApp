@@ -54,6 +54,48 @@ const hasOptions = (t: string) => t === "select" || t === "radio" || t === "chec
 const fmtDate = (iso: string) => { try { return new Date(iso).toLocaleString(); } catch { return iso; } };
 const escapeHtml = (s: string) => String(s).replace(/[&<>"]/g, (c) => (({ "&": "&amp;", "<": "&lt;", ">": "&gt;", "\"": "&quot;" } as Record<string, string>)[c]));
 
+// PDF export templates for a single response. `title`/`dateStr`/`items[].label`
+// are pre-escaped; `items[].valueHtml` is already HTML (image or escaped text).
+export type PdfTemplate = "classic" | "modern" | "minimal" | "receipt";
+export const PDF_TEMPLATES: { id: PdfTemplate; name: string; desc: string }[] = [
+  { id: "classic", name: "Classic", desc: "Clean two-column table" },
+  { id: "modern", name: "Modern", desc: "Card with a colored header" },
+  { id: "minimal", name: "Minimal", desc: "Simple, lots of white space" },
+  { id: "receipt", name: "Receipt", desc: "Compact, narrow column" },
+];
+const PDF_ACCENT = "#0EA5A0";
+function buildPdfHtml(
+  tpl: PdfTemplate, title: string, dateStr: string,
+  items: { label: string; valueHtml: string }[],
+): string {
+  const wrap = (inner: string, bodyStyle = "font-family:-apple-system,Segoe UI,Roboto,sans-serif;padding:28px;color:#111") =>
+    `<!doctype html><html><head><meta charset="utf-8"><title>${title} — response</title></head><body style="${bodyStyle}">${inner}<script>window.onload=function(){setTimeout(function(){window.print();},150);}</script></body></html>`;
+
+  if (tpl === "modern") {
+    const blocks = items.map((it) =>
+      `<div style="padding:14px 0;border-bottom:1px solid #f1f5f9"><div style="font-size:11px;text-transform:uppercase;letter-spacing:.5px;color:#94a3b8;font-weight:700">${it.label}</div><div style="font-size:15px;color:#0f172a;margin-top:5px">${it.valueHtml}</div></div>`).join("");
+    return wrap(
+      `<div style="max-width:640px;margin:0 auto;border:1px solid #e5e7eb;border-radius:16px;overflow:hidden">`
+      + `<div style="background:${PDF_ACCENT};color:#fff;padding:24px 26px"><div style="font-size:22px;font-weight:800">${title}</div><div style="opacity:.85;font-size:13px;margin-top:4px">Submitted ${dateStr}</div></div>`
+      + `<div style="padding:6px 26px 22px">${blocks}</div></div>`,
+      "background:#f8fafc;font-family:-apple-system,Segoe UI,Roboto,sans-serif;padding:28px;color:#111");
+  }
+  if (tpl === "minimal") {
+    const blocks = items.map((it) =>
+      `<div style="margin-bottom:18px"><div style="font-size:12px;color:#999;font-weight:600">${it.label}</div><div style="font-size:15px;margin-top:3px">${it.valueHtml}</div></div>`).join("");
+    return wrap(`<div style="max-width:600px;margin:0 auto"><div style="font-size:24px;font-weight:800;border-bottom:2px solid #111;padding-bottom:8px">${title}</div><div style="color:#888;font-size:12px;margin:6px 0 24px">Submitted ${dateStr}</div>${blocks}</div>`);
+  }
+  if (tpl === "receipt") {
+    const blocks = items.map((it) =>
+      `<div style="display:flex;justify-content:space-between;gap:14px;padding:7px 0;border-bottom:1px dotted #ddd"><span style="color:#666">${it.label}</span><span style="text-align:right;font-weight:600">${it.valueHtml}</span></div>`).join("");
+    return wrap(`<div style="max-width:380px;margin:0 auto;font-family:ui-monospace,Menlo,monospace"><div style="text-align:center;border-bottom:1px dashed #999;padding-bottom:10px;margin-bottom:8px"><div style="font-size:18px;font-weight:800">${title}</div><div style="font-size:11px;color:#666;margin-top:3px">${dateStr}</div></div>${blocks}</div>`,
+      "font-family:ui-monospace,Menlo,monospace;padding:28px;color:#111");
+  }
+  const rows = items.map((it) =>
+    `<tr><td style="padding:8px 12px;color:#666;font-weight:600;vertical-align:top;border-bottom:1px solid #eee;white-space:nowrap">${it.label}</td><td style="padding:8px 12px;border-bottom:1px solid #eee">${it.valueHtml}</td></tr>`).join("");
+  return wrap(`<h2 style="margin:0 0 4px">${title}</h2><p style="color:#888;margin:0 0 18px">Submitted ${dateStr}</p><table style="border-collapse:collapse;width:100%;font-size:14px">${rows}</table>`);
+}
+
 export default function FormBuilderScreen() {
   const { id } = useLocalSearchParams<{ id: string }>();
   const router = useRouter();
@@ -172,24 +214,20 @@ export default function FormBuilderScreen() {
     (embedHideTitle ? "&hide_title=1" : "") +
     (embedRedirect.trim() ? `&redirect=${encodeURIComponent(embedRedirect.trim())}` : "") +
     prefillEntries.map(([k, v]) => `&pf_${encodeURIComponent(k)}=${encodeURIComponent(v.trim())}`).join("");
-  const printSubmission = (s: FormSubmission) => {
+  const [pdfSub, setPdfSub] = useState<FormSubmission | null>(null);
+  const printSubmission = (s: FormSubmission, tpl: PdfTemplate = "classic") => {
     if (Platform.OS !== "web" || typeof window === "undefined") return;
     const flds = subFields.length ? subFields : Object.keys(s.values).map((k) => ({ id: k, label: k, type: "text" as FormFieldType }));
-    const rows = flds.map((f) => {
+    const items = flds.map((f) => {
       const v = s.values[f.id || ""] || "";
-      const cell = String(v).startsWith("data:image")
+      const valueHtml = String(v).startsWith("data:image")
         ? `<img src="${v}" style="max-width:340px;max-height:170px;border:1px solid #ddd;border-radius:6px"/>`
         : f.type === "password"
-          ? `<div>${v ? "••••••" : "—"}</div>`
-          : `<div style="white-space:pre-wrap">${escapeHtml(String(v) || "—")}</div>`;
-      return `<tr><td style="padding:8px 12px;color:#666;font-weight:600;vertical-align:top;border-bottom:1px solid #eee;white-space:nowrap">${escapeHtml(f.label)}</td><td style="padding:8px 12px;border-bottom:1px solid #eee">${cell}</td></tr>`;
-    }).join("");
-    const html = `<!doctype html><html><head><meta charset="utf-8"><title>${escapeHtml(form?.title || "Form")} — response</title></head>`
-      + `<body style="font-family:-apple-system,Segoe UI,Roboto,sans-serif;padding:28px;color:#111">`
-      + `<h2 style="margin:0 0 4px">${escapeHtml(form?.title || "Form")}</h2>`
-      + `<p style="color:#888;margin:0 0 18px">Submitted ${escapeHtml(fmtDate(s.submitted_at))}</p>`
-      + `<table style="border-collapse:collapse;width:100%;font-size:14px">${rows}</table>`
-      + `<script>window.onload=function(){window.print();}</script></body></html>`;
+          ? (v ? "••••••" : "—")
+          : `<span style="white-space:pre-wrap">${escapeHtml(String(v) || "—")}</span>`;
+      return { label: escapeHtml(f.label), valueHtml };
+    });
+    const html = buildPdfHtml(tpl, escapeHtml(form?.title || "Form"), escapeHtml(fmtDate(s.submitted_at)), items);
     const w = window.open("", "_blank");
     if (w) { w.document.write(html); w.document.close(); }
   };
@@ -445,7 +483,7 @@ export default function FormBuilderScreen() {
                     <View style={styles.subCardTop}>
                       <Text style={styles.subDate}>{fmtDate(s.submitted_at)}</Text>
                       {Platform.OS === "web" && (
-                        <TouchableOpacity style={styles.pdfBtn} onPress={() => printSubmission(s)} testID={`sub-pdf-${s.id}`}>
+                        <TouchableOpacity style={styles.pdfBtn} onPress={() => setPdfSub(s)} testID={`sub-pdf-${s.id}`}>
                           <Ionicons name="document-text-outline" size={14} color={theme.primary} />
                           <Text style={styles.pdfText}>PDF</Text>
                         </TouchableOpacity>
@@ -492,6 +530,30 @@ export default function FormBuilderScreen() {
                 </View>
               ))}
             </ScrollView>
+          </View>
+        </TouchableOpacity>
+      </Modal>
+
+      {/* PDF template chooser for a response */}
+      <Modal visible={!!pdfSub} transparent animationType="fade" onRequestClose={() => setPdfSub(null)}>
+        <TouchableOpacity style={styles.pdfBackdrop} activeOpacity={1} onPress={() => setPdfSub(null)}>
+          <View style={styles.pdfSheet}>
+            <Text style={styles.pdfSheetTitle}>Choose a PDF style</Text>
+            {PDF_TEMPLATES.map((t) => (
+              <TouchableOpacity
+                key={t.id}
+                style={styles.pdfOption}
+                onPress={() => { const s = pdfSub; setPdfSub(null); if (s) printSubmission(s, t.id); }}
+                testID={`pdf-tpl-${t.id}`}
+              >
+                <Ionicons name="document-text-outline" size={20} color={theme.primary} />
+                <View style={{ flex: 1 }}>
+                  <Text style={styles.pdfOptName}>{t.name}</Text>
+                  <Text style={styles.pdfOptDesc}>{t.desc}</Text>
+                </View>
+                <Ionicons name="chevron-forward" size={16} color={theme.textMuted} />
+              </TouchableOpacity>
+            ))}
           </View>
         </TouchableOpacity>
       </Modal>
@@ -562,6 +624,12 @@ const styles = StyleSheet.create({
   subDate: { color: theme.textMuted, fontSize: 11.5, fontWeight: "700" },
   pdfBtn: { flexDirection: "row", alignItems: "center", gap: 5, backgroundColor: theme.surfaceAlt, borderRadius: 999, paddingHorizontal: 10, paddingVertical: 5 },
   pdfText: { color: theme.primary, fontSize: 12, fontWeight: "800" },
+  pdfBackdrop: { flex: 1, backgroundColor: "rgba(0,0,0,0.55)", justifyContent: "center", padding: 24 },
+  pdfSheet: { backgroundColor: theme.surface, borderRadius: 18, borderWidth: 1, borderColor: theme.border, padding: 16 },
+  pdfSheetTitle: { color: theme.textPrimary, fontSize: 16, fontWeight: "800", marginBottom: 12, textAlign: "center" },
+  pdfOption: { flexDirection: "row", alignItems: "center", gap: 12, paddingVertical: 12, paddingHorizontal: 6, borderTopWidth: StyleSheet.hairlineWidth, borderTopColor: theme.border },
+  pdfOptName: { color: theme.textPrimary, fontSize: 15, fontWeight: "700" },
+  pdfOptDesc: { color: theme.textMuted, fontSize: 12.5, marginTop: 1 },
   subRow: { marginBottom: 6 },
   subKey: { color: theme.textMuted, fontSize: 11.5, fontWeight: "700", textTransform: "uppercase", letterSpacing: 0.3 },
   subVal: { color: theme.textPrimary, fontSize: 14.5, lineHeight: 20, marginTop: 1 },
