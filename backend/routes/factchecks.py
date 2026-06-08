@@ -24,6 +24,8 @@ router = APIRouter()
 # votes (helpful must also outweigh not-helpful). Simple threshold MVP — X uses a
 # bridging algorithm, but this is a sensible, predictable start.
 HELPFUL_THRESHOLD = 3
+# Warn the author once their note is this heavily downvoted (and clearly net-negative).
+NOT_HELPFUL_WARN = 5
 TEXT_MAX = 1000
 
 
@@ -137,6 +139,19 @@ async def rate_factcheck(fc_id: str, body: FactcheckRate, authorization: Optiona
     await db.factchecks.update_one({"id": fc_id}, {"$set": {
         "helpful_count": helpful_count, "not_helpful_count": not_helpful_count, "status": status,
     }})
+    # Warn the note's author once it's getting heavily downvoted (net-negative).
+    if (not_helpful_count >= NOT_HELPFUL_WARN
+            and not_helpful_count >= 2 * (helpful_count + 1)
+            and not fc.get("warned")):
+        await db.factchecks.update_one({"id": fc_id}, {"$set": {"warned": True}})
+        if emit_notification:
+            try:
+                await emit_notification(
+                    user_id=fc["author_id"], actor_id=None, ntype="factcheck_warning",
+                    message="Your Factcheck note is being rated unhelpful by many readers. Notes must be accurate and cite a reliable source, or they may be removed.",
+                )
+            except Exception:
+                pass
     await _refresh_post_factcheck(fc["post_id"])
     fc.update({"helpful_count": helpful_count, "not_helpful_count": not_helpful_count, "status": status})
     return _view(fc, body.helpful)
