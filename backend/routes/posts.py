@@ -398,6 +398,14 @@ async def _hydrate_post(doc: dict, viewer_id: Optional[str]) -> Post:
     )
 
 
+async def _hydrate_many(docs: list, viewer_id: Optional[str]) -> list:
+    """Hydrate a list of post docs concurrently. Each _hydrate_post makes several
+    sequential DB round-trips; running a feed of ~100 posts one-at-a-time was the
+    main feed-load latency. gather() preserves input order, so the ranked/sorted
+    order of `docs` is unchanged."""
+    return list(await asyncio.gather(*(_hydrate_post(d, viewer_id) for d in docs)))
+
+
 def _is_promoted(doc: dict) -> bool:
     until = doc.get("promoted_until")
     if not until:
@@ -675,7 +683,7 @@ async def list_replies(post_id: str, authorization: Optional[str] = Header(None)
     cursor = db.posts.find({"parent_id": post_id}, {"_id": 0}).sort("created_at", 1)
     docs = await cursor.to_list(200)
     docs.sort(key=lambda d: not d.get("pinned", False))  # pinned comments first
-    return [await _hydrate_post(d, user["user_id"]) for d in docs]
+    return await _hydrate_many(docs, user["user_id"])
 
 
 @router.get("/posts/{post_id}/thread", response_model=List[Post])
@@ -700,7 +708,7 @@ async def post_thread(post_id: str, authorization: Optional[str] = Header(None))
             out_docs.append(c)
             frontier.append(c["id"])
     out_docs.sort(key=lambda d: d.get("created_at"))
-    return [await _hydrate_post(d, user["user_id"]) for d in out_docs]
+    return await _hydrate_many(out_docs, user["user_id"])
 
 
 async def _viewer_affinity(viewer_id: str):
@@ -798,7 +806,7 @@ async def explore_feed(authorization: Optional[str] = Header(None)):
     skip = await _not_interested_ids(user["user_id"])
     docs = [d for d in docs if d.get("id") not in skip]
     ranked = await _rank_docs(docs, user["user_id"], 100)
-    return [await _hydrate_post(d, user["user_id"]) for d in ranked]
+    return await _hydrate_many(ranked, user["user_id"])
 
 
 @router.get("/feed/home", response_model=List[Post])
@@ -819,7 +827,7 @@ async def home_feed(authorization: Optional[str] = Header(None)):
     skip = await _not_interested_ids(user["user_id"])
     docs = [d for d in docs if d.get("id") not in skip]
     ranked = await _rank_docs(docs, user["user_id"], 100)
-    return [await _hydrate_post(d, user["user_id"]) for d in ranked]
+    return await _hydrate_many(ranked, user["user_id"])
 
 
 @router.get("/posts/user/{user_id}", response_model=List[Post])
@@ -831,7 +839,7 @@ async def user_posts(user_id: str, authorization: Optional[str] = Header(None)):
     )
     docs = await cursor.to_list(100)
     docs.sort(key=lambda d: not d.get("pinned", False))  # pinned posts first
-    return [await _hydrate_post(d, me["user_id"]) for d in docs]
+    return await _hydrate_many(docs, me["user_id"])
 
 
 class ReactBody(BaseModel):
@@ -1048,7 +1056,7 @@ async def list_bookmarks(authorization: Optional[str] = Header(None)):
     docs = await db.posts.find({"id": {"$in": post_ids}}, {"_id": 0}).to_list(200)
     order = {pid: i for i, pid in enumerate(post_ids)}
     docs.sort(key=lambda d: order.get(d["id"], 0))
-    return [await _hydrate_post(d, user["user_id"]) for d in docs]
+    return await _hydrate_many(docs, user["user_id"])
 
 
 # ---------- Hashtags ----------
@@ -1093,7 +1101,7 @@ async def popular_posts(limit: int = Query(8, ge=1, le=20), authorization: Optio
             if d.get("id") not in skip and not d.get("repost_of")
             and not any(m.get("type") == "video" for m in (d.get("media") or []))]
     docs.sort(key=_engagement_score, reverse=True)
-    return [await _hydrate_post(d, user["user_id"]) for d in docs[:limit]]
+    return await _hydrate_many(docs[:limit], user["user_id"])
 
 
 @router.get("/reels/popular", response_model=List[Post])
@@ -1108,7 +1116,7 @@ async def popular_reels(limit: int = Query(8, ge=1, le=20), authorization: Optio
     skip = await _not_interested_ids(user["user_id"])
     out = [d for d in docs if d.get("id") not in skip and _has_playable_video(d)]
     out.sort(key=_engagement_score, reverse=True)
-    return [await _hydrate_post(d, user["user_id"]) for d in out[:limit]]
+    return await _hydrate_many(out[:limit], user["user_id"])
 
 
 @router.get("/hashtags/{tag}", response_model=List[Post])
@@ -1122,7 +1130,7 @@ async def posts_for_hashtag(tag: str, authorization: Optional[str] = Header(None
         .sort("created_at", -1).limit(100)
     )
     docs = await cursor.to_list(100)
-    return [await _hydrate_post(d, user["user_id"]) for d in docs]
+    return await _hydrate_many(docs, user["user_id"])
 
 
 @router.get("/hashtags/{tag}/count")
@@ -1438,7 +1446,7 @@ async def reels_feed(
     ranked = await _rank_docs(playable, uid, 60)
     if focus:
         ranked.sort(key=lambda d: 0 if d["id"] == focus else 1)
-    return [await _hydrate_post(d, uid) for d in ranked]
+    return await _hydrate_many(ranked, uid)
 
 
 @router.get("/posts/user/{user_id}/all", response_model=List[Post])
@@ -1453,4 +1461,4 @@ async def user_posts_with_reposts(
     )
     docs = await cursor.to_list(100)
     docs.sort(key=lambda d: not d.get("pinned", False))  # pinned posts first
-    return [await _hydrate_post(d, me["user_id"]) for d in docs]
+    return await _hydrate_many(docs, me["user_id"])
