@@ -314,14 +314,11 @@ export default function MapScreen() {
         if (status !== "granted") return;
         const initial = await Location.getCurrentPositionAsync({ accuracy: Location.Accuracy.High });
         const c0: [number, number] = [initial.coords.longitude, initial.coords.latitude];
-        setUserLoc(c0);
-        mapRef.current?.setUserLocation(
-          c0[0], c0[1],
-          initial.coords.accuracy ?? undefined,
-          (initial.coords.heading != null && initial.coords.heading >= 0) ? initial.coords.heading : undefined,
-        );
-        // Open the map where the user is, rather than the neutral world view.
-        mapRef.current?.flyTo(c0[0], c0[1], 14);
+        setUserLoc(c0);   // for search bias; centering is done by requestLocation() on map 'ready'
+        // NOTE: don't push setUserLocation/flyTo here — this can resolve before the
+        // map's 'ready' event, in which case the bridge silently drops the command.
+        // The onMapEvent('ready') handler calls requestLocation(), which centers
+        // the user and starts follow mode once the map is actually loaded.
         startWatcher();
       } catch {}
     })();
@@ -334,6 +331,7 @@ export default function MapScreen() {
 
   // Debounced search
   useEffect(() => {
+    let cancelled = false;   // ignore a stale in-flight response if the query changed
     const t = setTimeout(async () => {
       if (!query.trim()) {
         setResults([]);
@@ -370,12 +368,12 @@ export default function MapScreen() {
           seen.add(key);
           return true;
         });
-        setResults(merged.slice(0, 12));
+        if (!cancelled) setResults(merged.slice(0, 12));
       } finally {
-        setSearching(false);
+        if (!cancelled) setSearching(false);
       }
     }, 350);
-    return () => clearTimeout(t);
+    return () => { cancelled = true; clearTimeout(t); };
   }, [query, radiusKm]);
 
   // ── Driver hazard reports (Waze-style) ──
@@ -420,7 +418,11 @@ export default function MapScreen() {
     loadHazards();
   };
 
-  useEffect(() => { if (mapReady) loadHazards(); }, [mapReady, userLocation, loadHazards]);
+  // Refresh hazards when the area changes, but throttle it (same 8s budget as the
+  // moveEnd path) so a moving user doesn't churn the markers on every fix.
+  useEffect(() => {
+    if (mapReady && Date.now() - lastHazardLoad.current > 8000) loadHazards();
+  }, [mapReady, userLocation, loadHazards]);
 
   const onMapEvent = useCallback(
     (e: MapboxEvent) => {

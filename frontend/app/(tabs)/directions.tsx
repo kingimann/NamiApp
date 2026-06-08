@@ -84,15 +84,28 @@ function distMeters(a: [number, number], b: [number, number]): number {
   return 2 * R * Math.asin(Math.sqrt(h));
 }
 
-// Min distance from point to a polyline (route geometry coords)
+// Min distance (m) from a point to a polyline — perpendicular distance to each
+// SEGMENT, not just its endpoints. Measuring to vertices alone made a driver
+// dead-centre on a long straight read as "off route" (false reroutes).
 function distanceToRoute(p: [number, number], coords: [number, number][]): number {
   if (coords.length === 0) return Infinity;
+  if (coords.length === 1) return distMeters(p, coords[0]);
+  // Project to a local equirectangular metre plane (accurate over short segments).
+  const mPerDegLat = 111320;
+  const mPerDegLng = 111320 * Math.cos((p[1] * Math.PI) / 180);
+  const toXY = (c: [number, number]): [number, number] => [c[0] * mPerDegLng, c[1] * mPerDegLat];
+  const px = toXY(p);
   let best = Infinity;
   for (let i = 0; i < coords.length - 1; i++) {
-    const a = coords[i];
-    const b = coords[i + 1];
-    // Approximate by checking distance to each endpoint
-    best = Math.min(best, distMeters(p, a), distMeters(p, b));
+    const a = toXY(coords[i]);
+    const b = toXY(coords[i + 1]);
+    const dx = b[0] - a[0];
+    const dy = b[1] - a[1];
+    const len2 = dx * dx + dy * dy;
+    let t = len2 > 0 ? ((px[0] - a[0]) * dx + (px[1] - a[1]) * dy) / len2 : 0;
+    t = Math.max(0, Math.min(1, t));
+    const d = Math.hypot(px[0] - (a[0] + t * dx), px[1] - (a[1] + t * dy));
+    if (d < best) best = d;
   }
   return best;
 }
@@ -303,12 +316,17 @@ export default function DirectionsScreen() {
   // Apply incoming destination from /map
   useEffect(() => {
     if (params.destLng && params.destLat) {
+      const lng = Number(params.destLng);
+      const lat = Number(params.destLat);
+      // Guard against malformed params — NaN coords flow into fitBounds/route
+      // requests and can throw inside mapbox-gl or break the camera.
+      if (!isFinite(lng) || !isFinite(lat)) return;
       const feature: GeocodeFeature = {
         id: `incoming_${params.destLng}_${params.destLat}`,
         name: params.destName || "Destination",
         full_address: "",
-        longitude: Number(params.destLng),
-        latitude: Number(params.destLat),
+        longitude: lng,
+        latitude: lat,
       };
       setWaypoints((wps) => {
         const next = [...wps];
@@ -328,6 +346,7 @@ export default function DirectionsScreen() {
     setRouteLegs(r.legs);
     setSteps(r.legs.flatMap((l) => l.steps));
     setStepIdx(0);
+    lastSpokenKey.current = "";   // recompute voice prompts cleanly against the new steps
     mapRef.current?.setRoute(r.geometry);
     mapRef.current?.setAltRoutes(rs.filter((_, i) => i !== idx).map((x) => x.geometry));
   }, []);
@@ -394,18 +413,20 @@ export default function DirectionsScreen() {
     const q = wp?.query || "";
     if (!q.trim() || wp?.isUserLocation) {
       setResults([]);
+      setSearching(false);   // don't leave the spinner stuck when the field is cleared
       return;
     }
+    let cancelled = false;   // ignore a stale in-flight response if the query changed
     setSearching(true);
     const t = setTimeout(async () => {
       try {
         const r = await forwardGeocode(q, userLocationRef.current || undefined);
-        setResults(r);
+        if (!cancelled) setResults(r);
       } finally {
-        setSearching(false);
+        if (!cancelled) setSearching(false);
       }
     }, 350);
-    return () => clearTimeout(t);
+    return () => { cancelled = true; clearTimeout(t); };
   }, [activeWaypointId, waypoints]);
 
   const onMapReady = useCallback(() => {

@@ -225,6 +225,10 @@ function buildHtml(token: string, center: [number, number], zoom: number, style:
       hidePoiLayers();
       // Re-add the GPU place layer (a style switch drops all custom sources).
       if (window.__placesData) { ensurePlacesLayer(); var s = map.getSource('places-src'); if (s) s.setData(window.__placesData); }
+      // Re-push the active route + alternates — the source was wiped by setStyle,
+      // so without this the route line vanishes when the style changes mid-trip.
+      if (window.__route) setRoute(window.__route);
+      if (window.__altRoutes && window.__altRoutes.length) setAltRoutes(window.__altRoutes);
       // Re-apply traffic / 3d if needed
       if (window.__trafficOn) addTraffic();
       if (window.__buildingsOn) add3D();
@@ -318,6 +322,7 @@ function buildHtml(token: string, center: [number, number], zoom: number, style:
   }
 
   function setRoute(geometry) {
+    window.__route = geometry || null;   // remembered so the line survives a style switch
     ensureRouteLayer();
     var data = geometry
       ? { type:'Feature', geometry: geometry, properties:{} }
@@ -327,6 +332,7 @@ function buildHtml(token: string, center: [number, number], zoom: number, style:
   }
 
   function setAltRoutes(geometries) {
+    window.__altRoutes = geometries || [];   // remembered across a style switch
     ensureRouteLayer();
     var feats = (geometries || []).map(function (g, i) {
       return { type:'Feature', geometry: g, properties:{ index: i } };
