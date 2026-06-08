@@ -33,12 +33,15 @@ AD_RATE_COMMENT = 0.05   # per comment on a promoted post
 AD_DEFAULT_CPC = 0.10    # per click when the campaign sets no CPC
 
 
-async def _credit(to_user_id: str, amount: float, kind: str, from_name: str):
-    await db.earnings.insert_one({
+async def _credit(to_user_id: str, amount: float, kind: str, from_name: str, source: Optional[str] = None):
+    doc = {
         "id": str(uuid.uuid4()), "user_id": to_user_id, "amount": round(amount, 2),
         "kind": kind, "from_user_id": "", "from_name": from_name,
         "created_at": datetime.now(timezone.utc),
-    })
+    }
+    if source:
+        doc["source"] = source
+    await db.earnings.insert_one(doc)
 
 
 # ── Earnings integrity (X / Google-style invalid-traffic protection) ─────────
@@ -153,7 +156,14 @@ async def bill_ad_interaction(post: dict, viewer_id: str, kind: str, host_user_i
     if charge <= 0:
         return 0.0
     if not free:
-        await db.users.update_one({"user_id": advertiser}, {"$inc": {"ad_balance": -charge}})
+        # Atomic conditional debit: only spend if the balance still covers it, so
+        # concurrent events can't both pass the bal>0 check above and overspend
+        # the prepaid balance (which over-credits the host with unbacked money).
+        res = await db.users.update_one(
+            {"user_id": advertiser, "ad_balance": {"$gte": charge}},
+            {"$inc": {"ad_balance": -charge}})
+        if getattr(res, "matched_count", 0) != 1:
+            return 0.0
     await db.posts.update_one({"id": post["id"]}, {"$inc": {field: 1, "ad_spent": charge}})
     if host_user_id and host_user_id != viewer_id and host_user_id != advertiser:
         await _maybe_credit_host(host_user_id, viewer_id, round(charge * HOST_REVENUE_SHARE, 2))
@@ -271,9 +281,10 @@ async def ad_event(post_id: str, body: AdEvent, authorization: Optional[str] = H
             if is_real and charge > 0:
                 await _maybe_credit_host(host, viewer, round(charge * HOST_REVENUE_SHARE, 2))
         else:
+            # No funded budget — count the click but do NOT pay the host. A flat
+            # AD_CLICK_PAYOUT here credited withdrawable host revenue with no
+            # advertiser debit behind it (money creation via self-owned alts).
             await db.posts.update_one({"id": post_id}, {"$inc": {"ad_clicks": 1}})
-            if is_real:
-                await _maybe_credit_host(host, viewer, AD_CLICK_PAYOUT)
     else:
         await db.posts.update_one({"id": post_id}, {"$inc": {"ad_impressions": 1}})
     return {"ok": True}
@@ -429,7 +440,11 @@ async def bill_link_ad(ad: dict, actor_id: Optional[str], kind: str, host_user_i
     elif bal is not None and bal > 0:
         charge = round(min(rate, bal), 2)
         if charge > 0:
-            await db.users.update_one({"user_id": advertiser}, {"$inc": {"ad_balance": -charge}})
+            res = await db.users.update_one(
+                {"user_id": advertiser, "ad_balance": {"$gte": charge}},
+                {"$inc": {"ad_balance": -charge}})
+            if getattr(res, "matched_count", 0) != 1:
+                charge = 0.0  # lost the debit race — don't credit the host
     await db.link_ads.update_one({"id": ad["id"]}, {"$inc": {field: 1, "ad_spent": charge}})
     credited = 0.0
     if host_user_id and host_user_id not in (actor_id, advertiser) and charge > 0:
@@ -539,7 +554,11 @@ async def bill_reel_ad(ad: dict, actor_id: Optional[str], kind: str) -> float:
     elif bal is not None and bal > 0:
         charge = round(min(rate, bal), 2)
         if charge > 0:
-            await db.users.update_one({"user_id": advertiser}, {"$inc": {"ad_balance": -charge}})
+            res = await db.users.update_one(
+                {"user_id": advertiser, "ad_balance": {"$gte": charge}},
+                {"$inc": {"ad_balance": -charge}})
+            if getattr(res, "matched_count", 0) != 1:
+                charge = 0.0  # lost the debit race
     await db.reel_ads.update_one({"id": ad["id"]}, {"$inc": {field: 1, "ad_spent": charge}})
     return charge
 
@@ -691,7 +710,9 @@ async def bot_run(body: BotRun, authorization: Optional[str] = Header(None)):
     earner = body.earner_id or me["user_id"]
     earned = round(spend * HOST_REVENUE_SHARE, 2)
     if earned > 0:
-        await _credit(earner, earned, "ad_revenue", "View bot (test)")
+        # Test-bot earnings must NOT be bank-withdrawable — source="admin" keeps
+        # them off the scheduled payout rail (they can exceed the real debit).
+        await _credit(earner, earned, "ad_revenue", "View bot (test)", source="admin")
 
     fresh = await db.posts.find_one(
         {"id": body.post_id},
