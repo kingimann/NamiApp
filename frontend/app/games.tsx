@@ -14,13 +14,28 @@ import { theme } from "@/src/theme";
 
 const webInput = Platform.OS === "web" ? ({ outlineStyle: "none" } as object) : {};
 
-const SDK_SNIPPET = `<!-- Add the Nami Games SDK, then call it from your game -->
+const SDK_SNIPPET = `<!-- Build a whole 3D game with the Nami API (Three.js is bundled) -->
 <script src="https://nampo-backend.onrender.com/api/pub/games/sdk.js"></script>
 <script>
-  NamiGames.ready();                 // tell the app the game loaded
-  const player = await NamiGames.getPlayer();   // { name }
-  NamiGames.submitScore(score);      // post a score to the leaderboard
-  NamiGames.exit();                  // close the game
+  NamiGames.create3D({
+    background: 0x101018,
+    onReady(g) {                       // g = your game API
+      const player = g.box({ color: 0x00e0a4, y: 0.5 });
+      g.ground();
+      let score = 0;
+      g.onTap(async (tap) => {         // tap to jump + score
+        player.position.y = 2; score++;
+        g.submitScore(score);          // → app leaderboard
+      });
+      g.onUpdate((dt) => {             // game loop (dt = seconds)
+        player.rotation.y += dt;
+        if (player.position.y > 0.5) player.position.y -= dt * 4;
+      });
+      const me = await g.getPlayer();  // { name }
+    },
+  });
+  // Low-level platform calls also available: NamiGames.submitScore(n),
+  // getPlayer(), exit(), and the raw THREE via g.THREE.
 </script>`;
 
 export default function GamesScreen() {

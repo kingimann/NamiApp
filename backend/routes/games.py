@@ -155,6 +155,8 @@ async def record_play(game_id: str, authorization: Optional[str] = Header(None))
 
 
 # ── Public: the SDK + the game frame (no auth — loaded inside the player) ──
+THREE_CDN = "https://cdn.jsdelivr.net/npm/three@0.149.0/build/three.min.js"
+
 SDK_JS = """
 (function(){
   var pending = {};
@@ -164,23 +166,103 @@ SDK_JS = """
     try { if (window.ReactNativeWebView) { window.ReactNativeWebView.postMessage(s); return; } } catch(e){}
     try { if (window.parent && window.parent !== window) window.parent.postMessage(s, '*'); } catch(e){}
   }
-  window.NamiGames = {
+  var NG = {
+    // ── Platform bridge ──────────────────────────────────────────────
     ready: function(){ send({ type: 'ready' }); },
     submitScore: function(score){ send({ type: 'score', score: Number(score) || 0 }); },
     exit: function(){ send({ type: 'exit' }); },
     getPlayer: function(){ return new Promise(function(resolve){ pending.player = resolve; send({ type: 'getPlayer' }); }); },
-    onMessage: null
+    onMessage: null,
+    THREE: null
   };
+  window.NamiGames = NG;
+  window.Nami = NG;
+
   function handle(d){
     if (!d || !d.namiHost) return;
     if (d.type === 'player' && pending.player) { pending.player(d.player || {}); pending.player = null; }
-    if (typeof window.NamiGames.onMessage === 'function') window.NamiGames.onMessage(d);
+    if (typeof NG.onMessage === 'function') NG.onMessage(d);
   }
   window.addEventListener('message', function(e){ var d; try { d = typeof e.data === 'string' ? JSON.parse(e.data) : e.data; } catch(_){ return; } handle(d); });
-  // Native WebView delivers host messages through this hook.
   window.__namiHost = function(raw){ try { handle(typeof raw === 'string' ? JSON.parse(raw) : raw); } catch(_){} };
+
+  // ── 3D engine (Three.js bundled under the hood) ────────────────────
+  // Build a whole game with the Nami API — no need to touch Three.js directly.
+  NG.loadThree = function(){
+    return new Promise(function(resolve, reject){
+      if (window.THREE) { NG.THREE = window.THREE; return resolve(window.THREE); }
+      var s = document.createElement('script');
+      s.src = '__THREE_CDN__';
+      s.onload = function(){ NG.THREE = window.THREE; resolve(window.THREE); };
+      s.onerror = function(){ reject(new Error('Failed to load 3D engine')); };
+      document.head.appendChild(s);
+    });
+  };
+
+  NG.create3D = function(config){
+    config = config || {};
+    return NG.loadThree().then(function(THREE){
+      document.documentElement.style.height = '100%';
+      document.body.style.margin = '0';
+      document.body.style.height = '100%';
+      document.body.style.overflow = 'hidden';
+      var W = function(){ return window.innerWidth; }, H = function(){ return window.innerHeight; };
+      var renderer = new THREE.WebGLRenderer({ antialias: true, alpha: !!config.transparent });
+      renderer.setPixelRatio(Math.min(window.devicePixelRatio || 1, 2));
+      renderer.setSize(W(), H());
+      (config.mount || document.body).appendChild(renderer.domElement);
+
+      var scene = new THREE.Scene();
+      if (config.background != null) scene.background = new THREE.Color(config.background);
+      var camera = new THREE.PerspectiveCamera(config.fov || 60, W()/H(), 0.1, 2000);
+      var cp = config.cameraPosition || [0, 3, 8];
+      camera.position.set(cp[0], cp[1], cp[2]);
+      camera.lookAt(0, 0, 0);
+      scene.add(new THREE.AmbientLight(0xffffff, 0.65));
+      var dir = new THREE.DirectionalLight(0xffffff, 0.85); dir.position.set(6, 12, 8); scene.add(dir);
+
+      var tapCbs = [], dragCbs = [], keyCbs = [], updateCbs = [];
+      if (config.onUpdate) updateCbs.push(config.onUpdate);
+
+      var raycaster = new THREE.Raycaster(), ndc = new THREE.Vector2();
+      var api = {
+        THREE: THREE, scene: scene, camera: camera, renderer: renderer,
+        add: function(o){ scene.add(o); return o; },
+        remove: function(o){ scene.remove(o); return o; },
+        box: function(o){ o=o||{}; var m=new THREE.Mesh(new THREE.BoxGeometry(o.w||1,o.h||1,o.d||1), new THREE.MeshStandardMaterial({color:o.color!=null?o.color:0x3b82f6})); m.position.set(o.x||0,o.y||0,o.z||0); scene.add(m); return m; },
+        sphere: function(o){ o=o||{}; var m=new THREE.Mesh(new THREE.SphereGeometry(o.r||0.5,32,24), new THREE.MeshStandardMaterial({color:o.color!=null?o.color:0xf59e0b})); m.position.set(o.x||0,o.y||0,o.z||0); scene.add(m); return m; },
+        ground: function(o){ o=o||{}; var m=new THREE.Mesh(new THREE.PlaneGeometry(o.size||60,o.size||60), new THREE.MeshStandardMaterial({color:o.color!=null?o.color:0x1b222b})); m.rotation.x=-Math.PI/2; m.position.y=o.y||0; scene.add(m); return m; },
+        light: function(o){ o=o||{}; var l=new THREE.PointLight(o.color!=null?o.color:0xffffff,o.intensity||1,o.distance||0); l.position.set(o.x||0,o.y||6,o.z||0); scene.add(l); return l; },
+        text2d: null,
+        onTap: function(cb){ tapCbs.push(cb); },
+        onDrag: function(cb){ dragCbs.push(cb); },
+        onKey: function(cb){ keyCbs.push(cb); },
+        onUpdate: function(cb){ updateCbs.push(cb); },
+        // Which object (from `objects`) is under a tap, using the tap's NDC coords.
+        pick: function(tap, objects){ ndc.set(tap.nx, tap.ny); raycaster.setFromCamera(ndc, camera); var hits = raycaster.intersectObjects(objects, true); return hits[0] ? hits[0].object : null; },
+        // Platform shortcuts so the game only ever calls Nami:
+        submitScore: NG.submitScore, getPlayer: NG.getPlayer, exit: NG.exit
+      };
+
+      function tap(e){ var t=(e.touches&&e.touches[0])||e; var x=t.clientX, y=t.clientY; var info={x:x,y:y,nx:(x/W())*2-1,ny:-(y/H())*2+1}; tapCbs.forEach(function(c){ try{c(info);}catch(_){} }); return info; }
+      var dragging=false, lx=0, ly=0;
+      renderer.domElement.addEventListener('pointerdown', function(e){ dragging=true; var i=tap(e); lx=i.x; ly=i.y; });
+      window.addEventListener('pointermove', function(e){ if(!dragging) return; var t=(e.touches&&e.touches[0])||e; var info={dx:t.clientX-lx, dy:t.clientY-ly, x:t.clientX, y:t.clientY}; dragCbs.forEach(function(c){ try{c(info);}catch(_){} }); lx=t.clientX; ly=t.clientY; });
+      window.addEventListener('pointerup', function(){ dragging=false; });
+      window.addEventListener('keydown', function(e){ keyCbs.forEach(function(c){ try{c(e.key, true, e);}catch(_){} }); });
+      window.addEventListener('keyup', function(e){ keyCbs.forEach(function(c){ try{c(e.key, false, e);}catch(_){} }); });
+      window.addEventListener('resize', function(){ camera.aspect=W()/H(); camera.updateProjectionMatrix(); renderer.setSize(W(), H()); });
+
+      var clock = new THREE.Clock();
+      (function loop(){ requestAnimationFrame(loop); var dt=clock.getDelta(); updateCbs.forEach(function(c){ try{c(dt, api);}catch(_){} }); renderer.render(scene, camera); })();
+
+      NG.ready();
+      if (config.onReady) { try { config.onReady(api); } catch(_){} }
+      return api;
+    });
+  };
 })();
-"""
+""".replace("__THREE_CDN__", THREE_CDN)
 
 
 @router.get("/pub/games/sdk.js")
