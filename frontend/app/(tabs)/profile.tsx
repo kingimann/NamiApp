@@ -1,7 +1,7 @@
 import React, { useCallback, useEffect, useState } from "react";
 import {
   View, Text, StyleSheet, Image, TouchableOpacity, ActivityIndicator,
-  Modal, TextInput, KeyboardAvoidingView, Platform, ScrollView, Alert, RefreshControl, Linking,
+  Modal, TextInput, KeyboardAvoidingView, Platform, ScrollView, Alert, RefreshControl, Linking, Animated,
 } from "react-native";
 import { SafeAreaView, useSafeAreaInsets } from "react-native-safe-area-context";
 import { Ionicons } from "@expo/vector-icons";
@@ -12,6 +12,8 @@ import { useFocusEffect, useRouter } from "expo-router";
 import { useAuth } from "@/src/context/AuthContext";
 import { api, Post, mediaUri } from "@/src/api/client";
 import { theme } from "@/src/theme";
+import { GLASS } from "@/src/lib/glass";
+import { useFloatingHeader } from "@/src/hooks/useFloatingHeader";
 import { SidebarMenuButton } from "@/src/components/LeftSidebar";
 import PostCard from "@/src/components/PostCard";
 import ConfirmModal from "@/src/components/ConfirmModal";
@@ -35,6 +37,7 @@ function compactCount(n: number): string {
 export default function ProfileScreen() {
   const router = useRouter();
   const insets = useSafeAreaInsets();
+  const fh = useFloatingHeader();
   const { user, refresh } = useAuth();
   const [refreshing, setRefreshing] = useState(false);
   const [stats, setStats] = useState({ places: 0, guides: 0, reviews: 0 });
@@ -230,12 +233,10 @@ export default function ProfileScreen() {
 
   return (
     <SafeAreaView edges={["top"]} style={styles.root} testID="profile-screen">
-      <ScrollView
-        contentContainerStyle={{ paddingBottom: insets.bottom + 100 }}
-        showsVerticalScrollIndicator={false}
-        refreshControl={
-          <RefreshControl refreshing={refreshing} onRefresh={onRefresh} tintColor={theme.primary} colors={[theme.primary]} />
-        }
+      <Animated.View
+        onLayout={(e) => fh.setTopBarH(e.nativeEvent.layout.height)}
+        pointerEvents={fh.barPointerEvents}
+        style={[styles.topBar, GLASS, fh.barStyle(insets.top)]}
       >
         <View style={styles.header}>
           <SidebarMenuButton />
@@ -244,7 +245,17 @@ export default function ProfileScreen() {
             <Ionicons name="settings-outline" size={22} color={theme.textPrimary} />
           </TouchableOpacity>
         </View>
+      </Animated.View>
 
+      <ScrollView
+        onScroll={fh.onScroll}
+        scrollEventThrottle={16}
+        contentContainerStyle={{ paddingTop: fh.topBarH + 8, paddingBottom: insets.bottom + 100 }}
+        showsVerticalScrollIndicator={false}
+        refreshControl={
+          <RefreshControl refreshing={refreshing} progressViewOffset={fh.topBarH} onRefresh={onRefresh} tintColor={theme.primary} colors={[theme.primary]} />
+        }
+      >
         <View style={styles.hero}>
           <LinearGradient
             colors={[theme.primaryHover, theme.primary, theme.primaryActive]}
@@ -626,6 +637,12 @@ export default function ProfileScreen() {
 
 const styles = StyleSheet.create({
   root: { flex: 1, backgroundColor: theme.bg, paddingHorizontal: 20 },
+  topBar: {
+    // root already pads 20px horizontally, so 0 here aligns the bar with content.
+    position: "absolute", top: 6, left: 0, right: 0,
+    borderRadius: 24, paddingHorizontal: 12, zIndex: 40,
+    shadowColor: "#000", shadowOpacity: 0.32, shadowRadius: 14, shadowOffset: { width: 0, height: 6 }, elevation: 10,
+  },
   header: { paddingTop: 16, paddingBottom: 8, flexDirection: "row", alignItems: "center", justifyContent: "space-between", gap: 10, paddingHorizontal: 4 },
   title: { flex: 1, color: theme.textPrimary, fontSize: 28, fontWeight: "800", letterSpacing: -0.5, textAlign: "center" },
   headerIconBtn: { width: 40, height: 40, borderRadius: 20, alignItems: "center", justifyContent: "center" },
