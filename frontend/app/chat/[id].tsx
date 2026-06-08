@@ -1,7 +1,7 @@
 import React, { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import {
   View, Text, StyleSheet, FlatList, TextInput, TouchableOpacity,
-  KeyboardAvoidingView, Platform, ActivityIndicator, Image, Modal, Linking, Alert, ScrollView, Animated, Easing,
+  KeyboardAvoidingView, Keyboard, Platform, ActivityIndicator, Image, Modal, Linking, Alert, ScrollView, Animated, Easing,
 } from "react-native";
 import { SafeAreaView, useSafeAreaInsets } from "react-native-safe-area-context";
 import { Ionicons } from "@expo/vector-icons";
@@ -1318,7 +1318,7 @@ export default function ChatScreen() {
                 </TouchableOpacity>
                 <TouchableOpacity
                   style={styles.attachBtn}
-                  onPress={() => { setAttachOpen(false); setEmojiOpen(true); }}
+                  onPress={() => { Keyboard.dismiss(); setAttachOpen(false); setEmojiOpen(true); }}
                   disabled={sending}
                   testID="emoji-btn"
                 >

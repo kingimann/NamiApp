@@ -1,7 +1,7 @@
-import React, { useCallback, useRef, useState } from "react";
+import React, { useCallback, useEffect, useRef, useState } from "react";
 import {
   View, Text, StyleSheet, FlatList, TouchableOpacity,
-  ActivityIndicator, RefreshControl, Modal, Alert, Platform,
+  ActivityIndicator, RefreshControl, Modal, Alert, Platform, Animated,
 } from "react-native";
 import { SafeAreaView, useSafeAreaInsets } from "react-native-safe-area-context";
 import { SidebarMenuButton } from "@/src/components/LeftSidebar";
@@ -91,6 +91,34 @@ export default function FeedScreen() {
   }, [tab]);
 
   useFocusEffect(useCallback(() => { load(); }, [load]));
+
+  // ── Live: poll for new posts and surface an animated "new posts" pill ──
+  const listRef = useRef<FlatList>(null);
+  const [newCount, setNewCount] = useState(0);
+  const postsRef = useRef<Post[]>([]);
+  useEffect(() => { postsRef.current = posts; }, [posts]);
+  const pillAnim = useRef(new Animated.Value(0)).current;
+  useEffect(() => {
+    Animated.spring(pillAnim, { toValue: newCount > 0 ? 1 : 0, useNativeDriver: true, friction: 7, tension: 80 }).start();
+  }, [newCount, pillAnim]);
+  useFocusEffect(useCallback(() => {
+    if (tab !== "home") { setNewCount(0); return; }
+    const poll = setInterval(async () => {
+      try {
+        const data = await api.homeFeed();
+        const have = new Set(postsRef.current.map((p) => p.id));
+        let n = 0;
+        for (const p of data) { if (have.has(p.id)) break; n++; }
+        setNewCount(n);
+      } catch {}
+    }, 25000);
+    return () => clearInterval(poll);
+  }, [tab]));
+  const showNewPosts = () => {
+    listRef.current?.scrollToOffset({ offset: 0, animated: true });
+    setNewCount(0);
+    setRefreshing(true); load();
+  };
 
   // Apply an authoritative engagement snapshot from the server to a post (and
   // to it wherever it appears as a reposted_post) — keeps counts exact.
@@ -272,12 +300,25 @@ export default function FeedScreen() {
         </View>
       </View>
 
+      {newCount > 0 && (
+        <Animated.View
+          style={[styles.newPillWrap, { opacity: pillAnim, transform: [{ translateY: pillAnim.interpolate({ inputRange: [0, 1], outputRange: [-16, 0] }) }] }]}
+          pointerEvents="box-none"
+        >
+          <TouchableOpacity style={styles.newPill} onPress={showNewPosts} activeOpacity={0.9} testID="feed-new-posts">
+            <Ionicons name="arrow-up" size={14} color="#fff" />
+            <Text style={styles.newPillText}>{newCount} new post{newCount === 1 ? "" : "s"}</Text>
+          </TouchableOpacity>
+        </Animated.View>
+      )}
+
       {loading ? (
         <View style={{ paddingTop: 6 }}>
           {[0, 1, 2, 3, 4].map((i) => <PostSkeleton key={i} />)}
         </View>
       ) : (
         <FlatList
+          ref={listRef}
           data={interleaveAds(posts)}
           keyExtractor={(i) => (isAd(i) ? `ad-${i.__ad}` : i.id)}
           onViewableItemsChanged={onViewable}
@@ -481,6 +522,9 @@ const styles = StyleSheet.create({
   bellBadgeText: { color: "#fff", fontSize: 9.5, fontWeight: "800" },
 
   segmentWrap: { paddingHorizontal: 14, paddingBottom: 10 },
+  newPillWrap: { position: "absolute", top: 104, left: 0, right: 0, alignItems: "center", zIndex: 50 },
+  newPill: { flexDirection: "row", alignItems: "center", gap: 6, backgroundColor: theme.primary, borderRadius: 999, paddingHorizontal: 14, paddingVertical: 8, shadowColor: "#000", shadowOpacity: 0.3, shadowRadius: 8, shadowOffset: { width: 0, height: 3 }, elevation: 4 },
+  newPillText: { color: "#fff", fontSize: 13, fontWeight: "800" },
   segment: {
     flexDirection: "row",
     backgroundColor: theme.surface,
