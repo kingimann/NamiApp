@@ -471,6 +471,7 @@ export default function DirectionsScreen() {
   };
   const addStop = () => {
     setWaypoints((ws) => {
+      if (ws.length >= 12) return ws;   // Mapbox Directions caps at 25 coords; keep it sane
       const next = [...ws];
       next.splice(ws.length - 1, 0, { id: newId(), query: "", feature: null });
       return next;
@@ -566,6 +567,13 @@ export default function DirectionsScreen() {
 
   // Destination of the current plan (last waypoint with a real location).
   const destFeature = waypoints[waypoints.length - 1]?.feature || null;
+
+  // The departure-detail plan is fetched against the destination at open time —
+  // if the destination changes, the open sheet is now a wrong itinerary, so close it.
+  useEffect(() => {
+    setSelectedDep(null);
+    setPlan(null);
+  }, [destFeature?.longitude, destFeature?.latitude]);
 
   const loadTransit = useCallback(async (allNearby: boolean) => {
     const loc = userLocationRef.current || userLocation;
@@ -731,6 +739,8 @@ export default function DirectionsScreen() {
         if (typeof s === "number" && u && s > 0) foundSpeed = { speed: s, unit: u };
       }
       setMaxSpeed(foundSpeed);
+    } else {
+      setMaxSpeed(null);   // no annotations on this route — don't keep a stale limit
     }
 
     // Off-route detection (throttle to 1 reroute per 8s).
@@ -895,7 +905,7 @@ export default function DirectionsScreen() {
                 </TouchableOpacity>
               </View>
               <View style={styles.cardActions}>
-                <TouchableOpacity style={styles.addStopBtn} onPress={addStop} testID="add-stop">
+                <TouchableOpacity style={[styles.addStopBtn, waypoints.length >= 12 && { opacity: 0.4 }]} onPress={addStop} disabled={waypoints.length >= 12} testID="add-stop">
                   <Ionicons name="add" size={16} color={theme.primary} />
                   <Text style={styles.addStopText}>Add stop</Text>
                 </TouchableOpacity>
@@ -1256,7 +1266,11 @@ export default function DirectionsScreen() {
                   <TouchableOpacity
                     key={i}
                     style={[styles.stepRow, navMode && i === stepIdx && styles.stepRowActive]}
-                    onPress={() => setStepIdx(i)}
+                    // While navigating, the active step is driven by GPS — let the
+                    // user preview steps before starting, but don't let a tap
+                    // desync the banner/camera mid-trip.
+                    onPress={() => { if (!navMode) setStepIdx(i); }}
+                    disabled={navMode}
                     testID={`step-${i}`}
                   >
                     <View style={styles.stepIcon}>
@@ -1410,7 +1424,7 @@ export default function DirectionsScreen() {
                 ) : (
                   <FlatList
                     data={transitData.departures}
-                    keyExtractor={(_i, idx) => String(idx)}
+                    keyExtractor={(it, idx) => `${it.route_id || ""}-${it.headsign || ""}-${it.stop_name || ""}-${it.time_label || idx}`}
                     style={{ maxHeight: 420 }}
                     ItemSeparatorComponent={() => <View style={styles.transitSep} />}
                     renderItem={({ item }) => {

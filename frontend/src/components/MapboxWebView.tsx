@@ -372,7 +372,9 @@ function buildHtml(token: string, center: [number, number], zoom: number, style:
   // Lightweight linear glide used for continuous "follow" tracking. Much cheaper
   // and smoother than flyTo when fired on every GPS fix.
   function panTo(lng, lat) {
-    map.easeTo({ center:[lng,lat], duration: 700, easing: function (t) { return t; } });
+    // essential:true so follow-mode tracking still glides when the OS/browser
+    // has "prefers reduced motion" set (otherwise the camera silently stops).
+    map.easeTo({ center:[lng,lat], duration: 700, essential: true, easing: function (t) { return t; } });
   }
   // Combined navigation "follow camera": center + zoom + bearing (course-up) +
   // pitch (3D forward view) in a single smooth ease, so you can see the streets
@@ -433,9 +435,9 @@ function buildHtml(token: string, center: [number, number], zoom: number, style:
             'circle-stroke-width': 1,
             'circle-stroke-opacity': 0.35,
           },
-        }, 'user-anchor-noop');
+        });
       } catch (e) {
-        // The "before" layer doesn't exist; retry without it
+        // Defensive fallback if the primary add fails for any reason.
         try { map.addLayer({
           id: LYR, type: 'circle', source: SRC,
           paint: {
