@@ -1,7 +1,7 @@
 import React, { useCallback, useState } from "react";
 import {
   View, Text, StyleSheet, ScrollView, TouchableOpacity, ActivityIndicator,
-  TextInput, Alert, Platform, Image,
+  TextInput, Alert, Platform, Image, Modal, Pressable,
 } from "react-native";
 import { SafeAreaView, useSafeAreaInsets } from "react-native-safe-area-context";
 import { Ionicons } from "@expo/vector-icons";
@@ -9,6 +9,7 @@ import { Stack, useFocusEffect, useRouter } from "expo-router";
 import { safeBack } from "@/src/utils/nav";
 import { api, RoadsideRequest } from "@/src/api/client";
 import { useAuth } from "@/src/context/AuthContext";
+import { pickImages } from "@/src/utils/thumbnail";
 import { theme } from "@/src/theme";
 
 const SERVICES = [
@@ -42,10 +43,31 @@ export default function AdminRoadsideCallsScreen() {
 
   // Create form
   const [svc, setSvc] = useState("tow");
+  const [callerName, setCallerName] = useState("");
   const [note, setNote] = useState("");
   const [place, setPlace] = useState("");
   const [lat, setLat] = useState("");
   const [lng, setLng] = useState("");
+  const [vYear, setVYear] = useState("");
+  const [vMake, setVMake] = useState("");
+  const [vModel, setVModel] = useState("");
+  const [vColor, setVColor] = useState("");
+  const [vPlate, setVPlate] = useState("");
+  const [price, setPrice] = useState("");
+  const [photos, setPhotos] = useState<string[]>([]);
+  const [picking, setPicking] = useState(false);
+  const [lightbox, setLightbox] = useState<string | null>(null);
+
+  const addPhotos = async () => {
+    if (photos.length >= 6) return;
+    setPicking(true);
+    try {
+      const added = await pickImages(6 - photos.length);
+      if (added.length) setPhotos((p) => [...p, ...added].slice(0, 6));
+    } catch (e: any) {
+      Alert.alert("Couldn't add photos", String(e?.message || e));
+    } finally { setPicking(false); }
+  };
 
   const runSearch = async (d: string, n: string) => {
     setLoading(true);
@@ -92,6 +114,7 @@ export default function AdminRoadsideCallsScreen() {
   const create = async (isTest: boolean) => {
     setCreating(true);
     try {
+      const priceNum = price.trim() ? Number(price.replace(/[^0-9.]/g, "")) : undefined;
       const c = await api.adminCreateRoadsideCall({
         service: svc,
         longitude: lng.trim() ? Number(lng) : DEFAULT_LNG,
@@ -99,8 +122,18 @@ export default function AdminRoadsideCallsScreen() {
         place_name: place.trim() || undefined,
         note: note.trim() || undefined,
         is_test: isTest,
+        caller_name: callerName.trim() || undefined,
+        vehicle_year: vYear.trim() || undefined,
+        vehicle_make: vMake.trim() || undefined,
+        vehicle_model: vModel.trim() || undefined,
+        vehicle_color: vColor.trim() || undefined,
+        vehicle_plate: vPlate.trim() || undefined,
+        photos: photos.length ? photos : undefined,
+        price: Number.isFinite(priceNum) ? priceNum : undefined,
       });
-      setNote(""); setPlace("");
+      setNote(""); setPlace(""); setCallerName("");
+      setVYear(""); setVMake(""); setVModel(""); setVColor(""); setVPlate("");
+      setPrice(""); setPhotos([]);
       Alert.alert(isTest ? "Test call created" : "Call created", `Assigned call #${c.call_number ?? "?"}.`);
       // Make sure we're viewing today so the new call shows.
       setDate(todayStr()); setSearch("");
@@ -148,8 +181,42 @@ export default function AdminRoadsideCallsScreen() {
               </TouchableOpacity>
             ))}
           </View>
+          <TextInput style={styles.input} value={callerName} onChangeText={setCallerName} placeholder="Caller name (optional)" placeholderTextColor={theme.textMuted} />
           <TextInput style={styles.input} value={place} onChangeText={setPlace} placeholder="Place / address (optional)" placeholderTextColor={theme.textMuted} />
-          <TextInput style={styles.input} value={note} onChangeText={setNote} placeholder="Note (optional)" placeholderTextColor={theme.textMuted} />
+
+          <Text style={styles.fieldLabel}>Vehicle</Text>
+          <View style={styles.row2}>
+            <TextInput style={[styles.input, { width: 84 }]} value={vYear} onChangeText={setVYear} placeholder="Year" placeholderTextColor={theme.textMuted} keyboardType="number-pad" />
+            <TextInput style={[styles.input, styles.flexInput]} value={vMake} onChangeText={setVMake} placeholder="Make" placeholderTextColor={theme.textMuted} />
+            <TextInput style={[styles.input, styles.flexInput]} value={vModel} onChangeText={setVModel} placeholder="Model" placeholderTextColor={theme.textMuted} />
+          </View>
+          <View style={styles.row2}>
+            <TextInput style={[styles.input, styles.flexInput]} value={vColor} onChangeText={setVColor} placeholder="Color" placeholderTextColor={theme.textMuted} />
+            <TextInput style={[styles.input, styles.flexInput]} value={vPlate} onChangeText={setVPlate} placeholder="Plate" placeholderTextColor={theme.textMuted} autoCapitalize="characters" />
+          </View>
+
+          <TextInput style={[styles.input, { minHeight: 64, textAlignVertical: "top" }]} value={note} onChangeText={setNote} placeholder="Comments / notes (optional)" placeholderTextColor={theme.textMuted} multiline />
+
+          <View style={styles.row2}>
+            <TextInput style={[styles.input, styles.flexInput]} value={price} onChangeText={(t) => setPrice(t.replace(/[^0-9.]/g, ""))} placeholder="$ Price (optional)" placeholderTextColor={theme.textMuted} keyboardType="decimal-pad" />
+            <TouchableOpacity style={[styles.btn, styles.btnGhost]} onPress={addPhotos} disabled={picking || photos.length >= 6} testID="add-photos">
+              <Ionicons name="image-outline" size={16} color={theme.primary} />
+              <Text style={styles.btnGhostText}>{picking ? "…" : `Photos${photos.length ? ` (${photos.length})` : ""}`}</Text>
+            </TouchableOpacity>
+          </View>
+          {photos.length > 0 && (
+            <View style={styles.photoRow}>
+              {photos.map((p, i) => (
+                <View key={i} style={styles.photoThumb}>
+                  <Image source={{ uri: p }} style={StyleSheet.absoluteFill} />
+                  <TouchableOpacity style={styles.photoX} onPress={() => setPhotos((arr) => arr.filter((_, j) => j !== i))}>
+                    <Ionicons name="close" size={12} color="#fff" />
+                  </TouchableOpacity>
+                </View>
+              ))}
+            </View>
+          )}
+
           <View style={styles.row2}>
             <TextInput style={[styles.input, styles.flexInput]} value={lat} onChangeText={setLat} placeholder="Lat (optional)" placeholderTextColor={theme.textMuted} keyboardType="numbers-and-punctuation" />
             <TextInput style={[styles.input, styles.flexInput]} value={lng} onChangeText={setLng} placeholder="Lng (optional)" placeholderTextColor={theme.textMuted} keyboardType="numbers-and-punctuation" />
@@ -216,10 +283,10 @@ export default function AdminRoadsideCallsScreen() {
               </View>
               <View style={styles.partyRow}>
                 <View style={styles.avatar}>
-                  {c.requester?.picture ? <Image source={{ uri: c.requester.picture }} style={styles.avatarImg} /> : <Text style={styles.avatarInit}>{(c.requester?.name?.[0] || "?").toUpperCase()}</Text>}
+                  {c.requester?.picture ? <Image source={{ uri: c.requester.picture }} style={styles.avatarImg} /> : <Text style={styles.avatarInit}>{((c.caller_name || c.requester?.name)?.[0] || "?").toUpperCase()}</Text>}
                 </View>
                 <View style={{ flex: 1 }}>
-                  <Text style={styles.detailName}>{c.requester?.name || c.requester_id}</Text>
+                  <Text style={styles.detailName}>{c.caller_name || c.requester?.name || c.requester_id}</Text>
                   {!!c.requester?.phone && <Text style={styles.detailMuted}>📞 {c.requester.phone}</Text>}
                 </View>
               </View>
@@ -228,6 +295,15 @@ export default function AdminRoadsideCallsScreen() {
               <Text style={styles.detailMuted}>{c.latitude.toFixed(5)}, {c.longitude.toFixed(5)}</Text>
               {!!c.dest_name && <Text style={styles.detail}>➡️ {c.dest_name}</Text>}
               {!!c.note && <Text style={styles.detail}>📝 {c.note}</Text>}
+              {(c.photos || []).length > 0 && (
+                <View style={styles.photoRow}>
+                  {(c.photos || []).map((p, i) => (
+                    <TouchableOpacity key={i} onPress={() => setLightbox(p)}>
+                      <Image source={{ uri: p }} style={styles.callPhoto} />
+                    </TouchableOpacity>
+                  ))}
+                </View>
+              )}
               {!!c.helper && <Text style={styles.detail}>🦺 Helper: {c.helper.name}{c.helper.phone ? ` · ${c.helper.phone}` : ""}</Text>}
               <Text style={styles.detailMuted}>Created {fmt(c.created_at)}{c.accepted_at ? ` · Accepted ${fmt(c.accepted_at)}` : ""}{c.completed_at ? ` · Done ${fmt(c.completed_at)}` : ""}</Text>
               {(c.total || 0) > 0 && <Text style={styles.detailMuted}>{c.payment_method} · ${"" + c.total.toFixed(2)}{c.settled ? " · settled" : c.held ? " · held" : ""}</Text>}
@@ -235,6 +311,12 @@ export default function AdminRoadsideCallsScreen() {
           ))
         )}
       </ScrollView>
+
+      <Modal visible={!!lightbox} transparent animationType="fade" onRequestClose={() => setLightbox(null)}>
+        <Pressable style={styles.lightbox} onPress={() => setLightbox(null)}>
+          {!!lightbox && <Image source={{ uri: lightbox }} style={styles.lightboxImg} resizeMode="contain" />}
+        </Pressable>
+      </Modal>
     </SafeAreaView>
   );
 }
@@ -255,6 +337,13 @@ const styles = StyleSheet.create({
   input: { backgroundColor: theme.surfaceAlt, borderWidth: 1, borderColor: theme.border, borderRadius: 12, paddingHorizontal: 14, paddingVertical: 11, color: theme.textPrimary, fontSize: 14, ...(Platform.OS === "web" ? ({ outlineStyle: "none" } as object) : {}) },
   // minWidth:0 lets a flexed input shrink on web (otherwise it overflows the row).
   flexInput: { flex: 1, minWidth: 0 },
+  fieldLabel: { color: theme.textMuted, fontSize: 11.5, fontWeight: "800", textTransform: "uppercase", letterSpacing: 0.4, marginTop: 2 },
+  photoRow: { flexDirection: "row", flexWrap: "wrap", gap: 8, marginTop: 2 },
+  photoThumb: { width: 64, height: 64, borderRadius: 10, overflow: "hidden", backgroundColor: theme.surfaceAlt },
+  photoX: { position: "absolute", top: 2, right: 2, width: 20, height: 20, borderRadius: 10, backgroundColor: "rgba(0,0,0,0.6)", alignItems: "center", justifyContent: "center" },
+  callPhoto: { width: 76, height: 76, borderRadius: 10, backgroundColor: theme.surfaceAlt },
+  lightbox: { flex: 1, backgroundColor: "rgba(0,0,0,0.92)", alignItems: "center", justifyContent: "center" },
+  lightboxImg: { width: "94%", height: "80%" },
   row2: { flexDirection: "row", gap: 10 },
   btn: { flex: 1, minWidth: 0, flexDirection: "row", alignItems: "center", justifyContent: "center", gap: 6, borderRadius: 12, paddingVertical: 12, paddingHorizontal: 8 },
   btnSolid: { backgroundColor: theme.primary },
