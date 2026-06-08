@@ -13,6 +13,36 @@ import { theme } from "@/src/theme";
 import PostCard from "@/src/components/PostCard";
 import PostComposer from "@/src/components/PostComposer";
 
+/**
+ * From the flat descendant tree of a post, walk the author's own linear
+ * self-reply chain (a thread): root → author's reply → author's reply → …
+ * Returns the chain posts in order (excluding the root).
+ */
+function buildThreadChain(root: Post, descendants: Post[]): Post[] {
+  const author = root.user_id;
+  const byParent = new Map<string, Post[]>();
+  for (const d of descendants) {
+    const key = (d as any).parent_id || "";
+    const arr = byParent.get(key) || [];
+    arr.push(d);
+    byParent.set(key, arr);
+  }
+  const chain: Post[] = [];
+  const used = new Set<string>();
+  let curId = root.id;
+  while (chain.length < 25) {
+    const kids = (byParent.get(curId) || [])
+      .filter((d) => d.user_id === author && !used.has(d.id))
+      .sort((a, b) => +new Date(a.created_at) - +new Date(b.created_at));
+    if (!kids.length) break;
+    const next = kids[0];
+    chain.push(next);
+    used.add(next.id);
+    curId = next.id;
+  }
+  return chain;
+}
+
 export default function PostDetailScreen() {
   const { id } = useLocalSearchParams<{ id: string }>();
   const router = useRouter();
@@ -20,6 +50,7 @@ export default function PostDetailScreen() {
   const { user } = useAuth();
   const [parent, setParent] = useState<Post | null>(null);
   const [replies, setReplies] = useState<Post[]>([]);
+  const [chain, setChain] = useState<Post[]>([]);   // author's self-reply thread
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
 
@@ -30,8 +61,18 @@ export default function PostDetailScreen() {
   const load = useCallback(async () => {
     if (!id) return;
     try {
-      const [p, r] = await Promise.all([api.getPost(id), api.listReplies(id)]);
-      setParent(p); setReplies(r);
+      const [p, r, tree] = await Promise.all([
+        api.getPost(id),
+        api.listReplies(id),
+        api.postThread(id).catch(() => [] as Post[]),
+      ]);
+      // If the author continued their own post as a thread, pull that chain out
+      // and show it connected under the root; keep everyone else's replies below.
+      const ch = buildThreadChain(p, tree);
+      const chainIds = new Set(ch.map((c) => c.id));
+      setParent(p);
+      setChain(ch);
+      setReplies(r.filter((x) => !chainIds.has(x.id)));
       // Record a unique view (silent failure ok).
       api.recordPostView(id).catch(() => {});
     } catch {} finally {
@@ -44,6 +85,7 @@ export default function PostDetailScreen() {
   const updateInList = (target: Post, modify: (q: Post) => Post) => {
     if (parent && parent.id === target.id) setParent((p) => p ? modify(p) : p);
     setReplies((arr) => arr.map((r) => r.id === target.id ? modify(r) : r));
+    setChain((arr) => arr.map((r) => r.id === target.id ? modify(r) : r));
   };
 
   // Replace a post's engagement fields with the server's authoritative values.
@@ -96,7 +138,10 @@ export default function PostDetailScreen() {
   const onPosted = (newPost: Post) => {
     if (editing) {
       if (parent && parent.id === newPost.id) setParent(newPost);
-      else setReplies((arr) => arr.map((r) => r.id === newPost.id ? newPost : r));
+      else {
+        setReplies((arr) => arr.map((r) => r.id === newPost.id ? newPost : r));
+        setChain((arr) => arr.map((r) => r.id === newPost.id ? newPost : r));
+      }
     } else {
       // New reply
       setReplies((arr) => [...arr, newPost]);
@@ -124,6 +169,12 @@ export default function PostDetailScreen() {
           keyExtractor={(i) => i.id}
           ListHeaderComponent={
             <View style={{ gap: 10, marginBottom: 8 }}>
+              {chain.length > 0 && (
+                <View style={styles.threadBanner}>
+                  <Ionicons name="git-branch-outline" size={14} color={theme.primary} />
+                  <Text style={styles.threadBannerText}>Thread · {chain.length + 1} posts</Text>
+                </View>
+              )}
               <PostCard
                 post={parent}
                 viewerId={user?.user_id}
@@ -139,6 +190,25 @@ export default function PostDetailScreen() {
                   }
                 }}
               />
+              {/* The author's own thread, shown connected under the root. */}
+              {chain.map((part) => (
+                <View key={part.id}>
+                  <View style={styles.threadConnector} />
+                  <PostCard
+                    post={part}
+                    viewerId={user?.user_id}
+                    disableOpen
+                    onLike={onLike}
+                    onDislike={onDislike}
+                    onRepost={onRepost}
+                    onReply={() => onReply()}
+                    onBookmark={onBookmark}
+                    onMore={(p) => {
+                      if (p.user_id === user?.user_id) { setEditing(p); setComposeOpen(true); }
+                    }}
+                  />
+                </View>
+              ))}
               <Text style={styles.repliesLabel}>
                 {replies.length === 0 ? "No replies yet — be the first!" : `${replies.length} repl${replies.length === 1 ? "y" : "ies"}`}
               </Text>
@@ -206,6 +276,19 @@ const styles = StyleSheet.create({
     color: theme.textMuted, fontSize: 12, fontWeight: "700",
     paddingHorizontal: 4, paddingVertical: 6,
     textTransform: "uppercase", letterSpacing: 0.5,
+  },
+  threadBanner: {
+    flexDirection: "row", alignItems: "center", gap: 6,
+    alignSelf: "flex-start",
+    paddingHorizontal: 10, paddingVertical: 5, borderRadius: 999,
+    backgroundColor: theme.primary + "18", borderWidth: 1, borderColor: theme.primary + "44",
+  },
+  threadBannerText: { color: theme.primary, fontSize: 12, fontWeight: "800", letterSpacing: 0.2 },
+  // Short vertical connector that ties each thread post to the previous one.
+  threadConnector: {
+    width: 2, height: 14, borderRadius: 1,
+    backgroundColor: theme.border,
+    marginLeft: 28, marginTop: -8, marginBottom: 2,
   },
   fab: {
     position: "absolute", right: 18,
