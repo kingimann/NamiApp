@@ -1,13 +1,15 @@
 import React, { useCallback, useEffect, useState } from "react";
 import {
   View, Text, StyleSheet, FlatList, TouchableOpacity, RefreshControl,
-  ActivityIndicator, TextInput, Modal, KeyboardAvoidingView, Platform,
+  ActivityIndicator, TextInput, Modal, KeyboardAvoidingView, Platform, Animated,
 } from "react-native";
 import { SafeAreaView, useSafeAreaInsets } from "react-native-safe-area-context";
 import { Ionicons } from "@expo/vector-icons";
 import { useFocusEffect, useRouter } from "expo-router";
 import { api, Guide, Place } from "@/src/api/client";
 import { theme } from "@/src/theme";
+import { GLASS } from "@/src/lib/glass";
+import { useFloatingHeader } from "@/src/hooks/useFloatingHeader";
 import { SidebarMenuButton } from "@/src/components/LeftSidebar";
 
 type Tab = "places" | "guides";
@@ -17,6 +19,7 @@ const GUIDE_COLORS = ["#3B82F6", "#22C55E", "#EAB308", "#A855F7", "#EF4444", "#0
 export default function FavoritesScreen() {
   const router = useRouter();
   const insets = useSafeAreaInsets();
+  const fh = useFloatingHeader(150);
   const [tab, setTab] = useState<Tab>("places");
   const [places, setPlaces] = useState<Place[]>([]);
   const [guides, setGuides] = useState<Guide[]>([]);
@@ -70,58 +73,64 @@ export default function FavoritesScreen() {
 
   return (
     <SafeAreaView edges={["top"]} style={styles.root} testID="favorites-screen">
-      <View style={styles.header}>
-        <View style={{ flexDirection: "row", alignItems: "center", justifyContent: "space-between" }}>
-          <SidebarMenuButton />
-          <View style={{ width: 40 }} />
+      <Animated.View
+        onLayout={(e) => fh.setTopBarH(e.nativeEvent.layout.height)}
+        pointerEvents={fh.barPointerEvents}
+        style={[styles.topBar, GLASS, fh.barStyle(insets.top)]}
+      >
+        <View style={styles.header}>
+          <View style={{ flexDirection: "row", alignItems: "center", justifyContent: "space-between" }}>
+            <SidebarMenuButton />
+            <View style={{ width: 40 }} />
+          </View>
+          <Text style={styles.title}>Library</Text>
+          <Text style={styles.subtitle}>
+            {tab === "places"
+              ? `${places.length} ${places.length === 1 ? "place" : "places"}`
+              : `${guides.length} ${guides.length === 1 ? "guide" : "guides"}`}
+          </Text>
         </View>
-        <Text style={styles.title}>Library</Text>
-        <Text style={styles.subtitle}>
-          {tab === "places"
-            ? `${places.length} ${places.length === 1 ? "place" : "places"}`
-            : `${guides.length} ${guides.length === 1 ? "guide" : "guides"}`}
-        </Text>
-      </View>
 
-      <View style={styles.tabsRow}>
-        {([["places", "Places"], ["guides", "Guides"]] as [Tab, string][]).map(([k, label]) => {
-          const a = k === tab;
-          return (
-            <TouchableOpacity
-              key={k}
-              onPress={() => setTab(k)}
-              style={[styles.tabBtn, a && styles.tabBtnActive]}
-              testID={`tab-${k}`}
-            >
-              <Text style={[styles.tabText, { color: a ? "#fff" : theme.textSecondary }]}>
-                {label}
-              </Text>
-            </TouchableOpacity>
-          );
-        })}
-      </View>
-
-      {tab === "places" && (
-        <View style={styles.chipRow}>
-          {(
-            [["all", "All"], ["favorite", "Favorites"], ["marker", "Pins"]] as [typeof filter, string][]
-          ).map(([k, label]) => {
-            const a = k === filter;
+        <View style={styles.tabsRow}>
+          {([["places", "Places"], ["guides", "Guides"]] as [Tab, string][]).map(([k, label]) => {
+            const a = k === tab;
             return (
               <TouchableOpacity
                 key={k}
-                onPress={() => setFilter(k)}
-                style={[styles.chip, a && styles.chipActive]}
-                testID={`filter-${k}`}
+                onPress={() => setTab(k)}
+                style={[styles.tabBtn, a && styles.tabBtnActive]}
+                testID={`tab-${k}`}
               >
-                <Text style={[styles.chipText, { color: a ? "#fff" : theme.textSecondary }]}>
+                <Text style={[styles.tabText, { color: a ? "#fff" : theme.textSecondary }]}>
                   {label}
                 </Text>
               </TouchableOpacity>
             );
           })}
         </View>
-      )}
+
+        {tab === "places" && (
+          <View style={styles.chipRow}>
+            {(
+              [["all", "All"], ["favorite", "Favorites"], ["marker", "Pins"]] as [typeof filter, string][]
+            ).map(([k, label]) => {
+              const a = k === filter;
+              return (
+                <TouchableOpacity
+                  key={k}
+                  onPress={() => setFilter(k)}
+                  style={[styles.chip, a && styles.chipActive]}
+                  testID={`filter-${k}`}
+                >
+                  <Text style={[styles.chipText, { color: a ? "#fff" : theme.textSecondary }]}>
+                    {label}
+                  </Text>
+                </TouchableOpacity>
+              );
+            })}
+          </View>
+        )}
+      </Animated.View>
 
       {loading ? (
         <View style={styles.center}><ActivityIndicator color={theme.primary} /></View>
@@ -129,10 +138,13 @@ export default function FavoritesScreen() {
         <FlatList
           data={filteredPlaces}
           keyExtractor={(i) => i.id}
-          contentContainerStyle={{ padding: 16, paddingBottom: insets.bottom + 80, gap: 12 }}
+          onScroll={fh.onScroll}
+          scrollEventThrottle={16}
+          contentContainerStyle={{ paddingHorizontal: 16, paddingTop: fh.topBarH + 12, paddingBottom: insets.bottom + 80, gap: 12 }}
           refreshControl={
             <RefreshControl
               refreshing={refreshing}
+              progressViewOffset={fh.topBarH}
               onRefresh={() => { setRefreshing(true); load(); }}
               tintColor={theme.primary}
             />
@@ -175,10 +187,13 @@ export default function FavoritesScreen() {
         <FlatList
           data={guides}
           keyExtractor={(i) => i.id}
-          contentContainerStyle={{ padding: 16, paddingBottom: insets.bottom + 100, gap: 12 }}
+          onScroll={fh.onScroll}
+          scrollEventThrottle={16}
+          contentContainerStyle={{ paddingHorizontal: 16, paddingTop: fh.topBarH + 12, paddingBottom: insets.bottom + 100, gap: 12 }}
           refreshControl={
             <RefreshControl
               refreshing={refreshing}
+              progressViewOffset={fh.topBarH}
               onRefresh={() => { setRefreshing(true); load(); }}
               tintColor={theme.primary}
             />
@@ -281,6 +296,11 @@ export default function FavoritesScreen() {
 
 const styles = StyleSheet.create({
   root: { flex: 1, backgroundColor: theme.bg },
+  topBar: {
+    position: "absolute", top: 6, left: 8, right: 8,
+    borderRadius: 24, paddingBottom: 8, zIndex: 40,
+    shadowColor: "#000", shadowOpacity: 0.32, shadowRadius: 14, shadowOffset: { width: 0, height: 6 }, elevation: 10,
+  },
   header: { paddingHorizontal: 20, paddingTop: 16, paddingBottom: 8 },
   title: { color: theme.textPrimary, fontSize: 28, fontWeight: "800", letterSpacing: -0.5 },
   subtitle: { color: theme.textSecondary, fontSize: 13, marginTop: 4 },

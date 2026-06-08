@@ -1,7 +1,7 @@
 import React, { useCallback, useEffect, useState } from "react";
 import {
   View, Text, StyleSheet, FlatList, TouchableOpacity, TextInput,
-  ActivityIndicator, RefreshControl, Modal, KeyboardAvoidingView, Platform,
+  ActivityIndicator, RefreshControl, Modal, KeyboardAvoidingView, Platform, Animated,
 } from "react-native";
 import { SafeAreaView, useSafeAreaInsets } from "react-native-safe-area-context";
 import { Ionicons } from "@expo/vector-icons";
@@ -9,6 +9,8 @@ import { useFocusEffect, useRouter } from "expo-router";
 import { api, Group } from "@/src/api/client";
 import { useAuth } from "@/src/context/AuthContext";
 import { theme } from "@/src/theme";
+import { GLASS } from "@/src/lib/glass";
+import { useFloatingHeader } from "@/src/hooks/useFloatingHeader";
 import { SidebarMenuButton } from "@/src/components/LeftSidebar";
 
 const COLORS = ["#3B82F6", "#22C55E", "#EAB308", "#A855F7", "#EF4444", "#06B6D4"];
@@ -17,6 +19,7 @@ export default function GroupsScreen() {
   const { user } = useAuth();
   const insets = useSafeAreaInsets();
   const router = useRouter();
+  const fh = useFloatingHeader();
   const [groups, setGroups] = useState<Group[]>([]);
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
@@ -62,20 +65,28 @@ export default function GroupsScreen() {
 
   return (
     <SafeAreaView edges={["top"]} style={styles.root} testID="groups-screen">
-      <View style={styles.header}>
-        <SidebarMenuButton />
-        <Text style={styles.title}>Groups</Text>
-        <View style={{ width: 40 }} />
-      </View>
+      <Animated.View
+        onLayout={(e) => fh.setTopBarH(e.nativeEvent.layout.height)}
+        pointerEvents={fh.barPointerEvents}
+        style={[styles.topBar, GLASS, fh.barStyle(insets.top)]}
+      >
+        <View style={styles.header}>
+          <SidebarMenuButton />
+          <Text style={styles.title}>Groups</Text>
+          <View style={{ width: 40 }} />
+        </View>
+      </Animated.View>
       {loading ? (
         <View style={styles.center}><ActivityIndicator color={theme.primary} /></View>
       ) : (
         <FlatList
           data={groups}
           keyExtractor={(i) => i.id}
-          contentContainerStyle={{ padding: 16, paddingBottom: insets.bottom + 100, gap: 10 }}
+          onScroll={fh.onScroll}
+          scrollEventThrottle={16}
+          contentContainerStyle={{ paddingHorizontal: 16, paddingTop: fh.topBarH + 12, paddingBottom: insets.bottom + 100, gap: 10 }}
           refreshControl={
-            <RefreshControl refreshing={refreshing} onRefresh={() => { setRefreshing(true); load(); }} tintColor={theme.primary} />
+            <RefreshControl refreshing={refreshing} progressViewOffset={fh.topBarH} onRefresh={() => { setRefreshing(true); load(); }} tintColor={theme.primary} />
           }
           ListEmptyComponent={
             <View style={styles.empty}>
@@ -206,6 +217,11 @@ export default function GroupsScreen() {
 
 const styles = StyleSheet.create({
   root: { flex: 1, backgroundColor: theme.bg },
+  topBar: {
+    position: "absolute", top: 6, left: 8, right: 8,
+    borderRadius: 24, paddingTop: 2, zIndex: 40,
+    shadowColor: "#000", shadowOpacity: 0.32, shadowRadius: 14, shadowOffset: { width: 0, height: 6 }, elevation: 10,
+  },
   header: { paddingHorizontal: 20, paddingTop: 16, paddingBottom: 8, flexDirection: "row", alignItems: "center", justifyContent: "space-between", gap: 10 },
   title: { color: theme.textPrimary, fontSize: 28, fontWeight: "800", letterSpacing: -0.5 },
   center: { flex: 1, alignItems: "center", justifyContent: "center" },
