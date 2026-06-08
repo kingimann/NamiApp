@@ -8,13 +8,16 @@ import { theme } from "@/src/theme";
  *
  * The installed PWA disables the browser's native pull-to-refresh (the app locks
  * the viewport), so there's no way to fetch a new deploy from the home-screen
- * app. Pulling down from the very top (the header/status-bar zone, so it never
- * fights content scrolling) reloads the page to get the latest version.
+ * app. Dragging down from ANYWHERE on the screen — as long as the content under
+ * your finger is scrolled to the top — reloads the page to get the latest
+ * version, exactly like a normal scrolling page (no longer limited to the top
+ * strip). Mostly-horizontal swipes are ignored so carousels/tabs still work.
  */
 export default function WebPullToRefresh() {
   const [pull, setPull] = useState(0);
   const pullRef = useRef(0);
   const startY = useRef<number | null>(null);
+  const startX = useRef<number | null>(null);
   const active = useRef(false);
   const THRESHOLD = 90;
 
@@ -36,17 +39,25 @@ export default function WebPullToRefresh() {
       return true;
     };
     const onStart = (e: TouchEvent) => {
-      const y = e.touches[0]?.clientY ?? 0;
-      // Engage when the pull starts in the upper part of the screen AND the
-      // content there is scrolled to the top — a real pull-to-refresh, like a
-      // normal scrolling page.
-      if (y < 240 && atScrollTop(e.target as any)) { startY.current = y; active.current = true; }
-      else { active.current = false; startY.current = null; }
+      const t = e.touches[0];
+      // Engage whenever the scroll container under the finger is at the very top,
+      // regardless of WHERE on the screen the drag starts. A downward drag is
+      // then a pull-to-refresh, just like a normal scrolling page — this is what
+      // lets you pull from the lower part of the screen, not only the top strip.
+      if (atScrollTop(e.target as any)) {
+        startY.current = t?.clientY ?? 0;
+        startX.current = t?.clientX ?? 0;
+        active.current = true;
+      } else { active.current = false; startY.current = null; }
     };
     const onMove = (e: TouchEvent) => {
       if (!active.current || startY.current == null) return;
-      const dy = (e.touches[0]?.clientY ?? 0) - startY.current;
-      if (dy > 0) { pullRef.current = Math.min(dy, 120); setPull(pullRef.current); }
+      const t = e.touches[0];
+      const dy = (t?.clientY ?? 0) - startY.current;
+      const dx = (t?.clientX ?? 0) - (startX.current ?? 0);
+      // Only treat clearly-downward, vertical-dominant drags as a pull, so
+      // horizontal swipes (carousels, tab swipes) aren't hijacked.
+      if (dy > 0 && dy > Math.abs(dx)) { pullRef.current = Math.min(dy, 120); setPull(pullRef.current); }
     };
     const onEnd = () => {
       if (active.current && pullRef.current >= THRESHOLD) {

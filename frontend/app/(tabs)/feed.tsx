@@ -323,8 +323,8 @@ export default function FeedScreen() {
           keyExtractor={(i) => (isAd(i) ? `ad-${i.__ad}` : i.id)}
           onViewableItemsChanged={onViewable}
           viewabilityConfig={{ itemVisiblePercentThreshold: 60, minimumViewTime: 600 }}
-          contentContainerStyle={{ paddingHorizontal: 14, paddingTop: 6, paddingBottom: insets.bottom + 100, gap: 12 }}
-          ItemSeparatorComponent={() => <View style={{ height: 2 }} />}
+          contentContainerStyle={{ paddingHorizontal: 12, paddingTop: 6, paddingBottom: insets.bottom + 100, gap: 9 }}
+          ItemSeparatorComponent={null}
           refreshControl={
             <RefreshControl
               refreshing={refreshing}

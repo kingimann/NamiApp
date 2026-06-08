@@ -337,7 +337,7 @@ export default function PostCard({
         >
           <Ionicons
             name={display.can_comment === false ? "lock-closed-outline" : "chatbubble-outline"}
-            size={17}
+            size={16}
             color={display.can_comment === false ? theme.textMuted : theme.textSecondary}
           />
           <Text style={styles.actionText}>{display.replies_count || 0}</Text>
@@ -352,7 +352,7 @@ export default function PostCard({
         >
           <Ionicons
             name="repeat"
-            size={17}
+            size={16}
             color={display.reposted_by_me ? "#22C55E" : theme.textSecondary}
           />
           <Text style={[styles.actionText, display.reposted_by_me && { color: "#22C55E" }]}>
@@ -373,7 +373,7 @@ export default function PostCard({
             <Animated.View style={{ transform: [{ scale: heartScale }] }}>
               <Ionicons
                 name={display.my_reaction ? "heart" : "heart-outline"}
-                size={18}
+                size={17}
                 color={display.my_reaction ? "#EF4444" : theme.textSecondary}
               />
             </Animated.View>
@@ -392,12 +392,12 @@ export default function PostCard({
               onPress={(e) => { e.stopPropagation?.(); setViewersOpen(true); }}
               testID={`views-${post.id}`}
             >
-              <Ionicons name="eye-outline" size={17} color={theme.textMuted} />
+              <Ionicons name="eye-outline" size={16} color={theme.textMuted} />
               <Text style={styles.actionText}>{display.views_count}</Text>
             </TouchableOpacity>
           ) : (
             <View style={styles.actionBtn}>
-              <Ionicons name="eye-outline" size={17} color={theme.textMuted} />
+              <Ionicons name="eye-outline" size={16} color={theme.textMuted} />
               <Text style={styles.actionText}>{display.views_count}</Text>
             </View>
           )
@@ -701,26 +701,26 @@ const styles = StyleSheet.create({
   reportDone: { marginTop: 16, backgroundColor: theme.primary, borderRadius: 12, paddingVertical: 12, paddingHorizontal: 40 },
   reportDoneText: { color: "#fff", fontWeight: "800", fontSize: 14 },
   card: {
-    backgroundColor: theme.surface, borderRadius: 18,
+    backgroundColor: theme.surface, borderRadius: 16,
     borderWidth: 1, borderColor: theme.border,
-    padding: 16, gap: 11,
+    padding: 14, gap: 8,
   },
   repostBanner: {
     flexDirection: "row", alignItems: "center", gap: 6, marginBottom: -2,
   },
   repostBannerText: { color: theme.textMuted, fontSize: 12, fontWeight: "600", flex: 1 },
-  cardTop: { flexDirection: "row", alignItems: "center", gap: 11 },
+  cardTop: { flexDirection: "row", alignItems: "center", gap: 10 },
   avatar: {
-    width: 44, height: 44, borderRadius: 22, overflow: "hidden",
+    width: 38, height: 38, borderRadius: 19, overflow: "hidden",
     backgroundColor: theme.primary,
     alignItems: "center", justifyContent: "center",
   },
   avatarImg: { width: "100%", height: "100%" },
-  avatarInit: { color: "#fff", fontSize: 18, fontWeight: "700" },
-  author: { color: theme.textPrimary, fontSize: 15.5, fontWeight: "800", flexShrink: 1 },
+  avatarInit: { color: "#fff", fontSize: 16, fontWeight: "700" },
+  author: { color: theme.textPrimary, fontSize: 14.5, fontWeight: "800", flexShrink: 1 },
   dot: { color: theme.textMuted, fontSize: 12 },
-  time: { color: theme.textMuted, fontSize: 12.5 },
-  body: { color: theme.textPrimary, fontSize: 16, lineHeight: 23 },
+  time: { color: theme.textMuted, fontSize: 12 },
+  body: { color: theme.textPrimary, fontSize: 14.5, lineHeight: 20 },
   paywall: { alignItems: "center", gap: 6, paddingVertical: 22, paddingHorizontal: 18, marginVertical: 4, borderRadius: 16, borderWidth: 1, borderColor: "rgba(245,166,35,0.35)", backgroundColor: "rgba(245,166,35,0.07)" },
   paywallIcon: { width: 44, height: 44, borderRadius: 22, alignItems: "center", justifyContent: "center", backgroundColor: "rgba(245,166,35,0.15)" },
   paywallTitle: { color: theme.textPrimary, fontSize: 15, fontWeight: "800" },
@@ -728,7 +728,7 @@ const styles = StyleSheet.create({
   paywallBtn: { flexDirection: "row", alignItems: "center", gap: 6, marginTop: 6, backgroundColor: "#F5A623", borderRadius: 999, paddingHorizontal: 18, paddingVertical: 9 },
   paywallBtnText: { color: "#fff", fontSize: 14, fontWeight: "800" },
   communityTag: { color: theme.primary, fontSize: 12, fontWeight: "800", marginBottom: 2 },
-  threadTitle: { color: theme.textPrimary, fontSize: 17, fontWeight: "800", lineHeight: 22, marginBottom: 4 },
+  threadTitle: { color: theme.textPrimary, fontSize: 16, fontWeight: "800", lineHeight: 21, marginBottom: 3 },
   placeRow: {
     flexDirection: "row", alignItems: "center", gap: 5,
     backgroundColor: theme.surfaceAlt, borderRadius: 8,
@@ -742,10 +742,10 @@ const styles = StyleSheet.create({
   factcheckMore: { color: theme.textMuted, fontSize: 11.5, fontWeight: "600", marginTop: 6 },
   actionsRow: {
     flexDirection: "row", alignItems: "center", flexWrap: "wrap",
-    columnGap: 20, rowGap: 8,
-    paddingTop: 12, marginTop: 6,
+    columnGap: 18, rowGap: 6,
+    paddingTop: 9, marginTop: 4,
     borderTopWidth: StyleSheet.hairlineWidth, borderTopColor: theme.border,
   },
-  actionBtn: { flexDirection: "row", alignItems: "center", gap: 6 },
-  actionText: { color: theme.textSecondary, fontSize: 12.5, fontWeight: "600" },
+  actionBtn: { flexDirection: "row", alignItems: "center", gap: 5 },
+  actionText: { color: theme.textSecondary, fontSize: 12, fontWeight: "600" },
 });

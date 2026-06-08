@@ -30,6 +30,9 @@ export default function CustomEmojiSheet({ visible, emojis, myUserId, onClose, o
   const [pendingImg, setPendingImg] = useState<string | null>(null);
   const [code, setCode] = useState("");
   const [activeCat, setActiveCat] = useState(EMOJI_CATEGORIES[0].key);
+  // Foldable: compact by default so it doesn't cover half the screen; tap the
+  // handle/chevron to expand for browsing more at once.
+  const [expanded, setExpanded] = useState(false);
 
   // On web the composer keeps focus when the picker opens, so the on-screen
   // keyboard stays up and overlaps the sheet. Blur it whenever the sheet opens.
@@ -81,13 +84,27 @@ export default function CustomEmojiSheet({ visible, emojis, myUserId, onClose, o
     <Modal visible={visible} transparent animationType="slide" onRequestClose={onClose}>
       <View style={styles.backdrop}>
         <TouchableOpacity style={StyleSheet.absoluteFill} activeOpacity={1} onPress={onClose} />
-        <View style={[styles.sheet, { paddingBottom: insets.bottom + 12, marginBottom: kb }]}>
-          <View style={styles.handle} />
+        <View style={[styles.sheet, { height: expanded ? "84%" : "42%", paddingBottom: insets.bottom + 12, marginBottom: kb }]}>
+          <TouchableOpacity
+            onPress={() => setExpanded((v) => !v)}
+            activeOpacity={0.7}
+            style={styles.handleHit}
+            testID="emoji-handle"
+          >
+            <View style={styles.handle} />
+          </TouchableOpacity>
           <View style={styles.titleRow}>
-            <Text style={styles.title}>Emojis</Text>
-            <TouchableOpacity onPress={onClose} hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }} testID="emoji-close">
-              <Ionicons name="close" size={22} color={theme.textMuted} />
-            </TouchableOpacity>
+            <Text style={styles.title} numberOfLines={1}>
+              {activeCat === CUSTOM_KEY ? "Custom emojis" : (current?.label || "Emojis")}
+            </Text>
+            <View style={styles.titleActions}>
+              <TouchableOpacity onPress={() => setExpanded((v) => !v)} hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }} testID="emoji-fold">
+                <Ionicons name={expanded ? "chevron-down" : "chevron-up"} size={22} color={theme.textMuted} />
+              </TouchableOpacity>
+              <TouchableOpacity onPress={onClose} hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }} testID="emoji-close">
+                <Ionicons name="close" size={22} color={theme.textMuted} />
+              </TouchableOpacity>
+            </View>
           </View>
 
           {/* Category tabs */}
@@ -191,22 +208,25 @@ const styles = StyleSheet.create({
   backdrop: { flex: 1, backgroundColor: "rgba(0,0,0,0.5)", justifyContent: "flex-end" },
   sheet: {
     backgroundColor: "#0E0E10", borderTopLeftRadius: 22, borderTopRightRadius: 22,
-    paddingTop: 12, paddingHorizontal: 14, height: "66%",
+    paddingTop: 6, paddingHorizontal: 14,
     borderTopWidth: 1, borderColor: theme.border,
   },
-  handle: { alignSelf: "center", width: 40, height: 4, borderRadius: 2, backgroundColor: theme.borderStrong, marginBottom: 12 },
-  titleRow: { flexDirection: "row", alignItems: "center", justifyContent: "space-between", marginBottom: 10 },
-  title: { color: theme.textPrimary, fontSize: 18, fontWeight: "800" },
-  tabBarScroll: { flexGrow: 0, marginBottom: 12 },
+  // Bigger touch target around the grab handle so it's easy to fold/unfold.
+  handleHit: { alignSelf: "center", paddingVertical: 6, paddingHorizontal: 30 },
+  handle: { width: 44, height: 4, borderRadius: 2, backgroundColor: theme.borderStrong },
+  titleRow: { flexDirection: "row", alignItems: "center", justifyContent: "space-between", marginBottom: 10, marginTop: 4 },
+  title: { color: theme.textPrimary, fontSize: 17, fontWeight: "800", flex: 1 },
+  titleActions: { flexDirection: "row", alignItems: "center", gap: 14 },
+  tabBarScroll: { flexGrow: 0, marginBottom: 10 },
   tabBar: { paddingBottom: 2, paddingRight: 8 },
-  tab: { width: 42, height: 42, borderRadius: 12, marginRight: 8, alignItems: "center", justifyContent: "center", backgroundColor: theme.surface, borderWidth: 1, borderColor: "transparent" },
+  tab: { width: 40, height: 40, borderRadius: 12, marginRight: 8, alignItems: "center", justifyContent: "center", backgroundColor: theme.surface, borderWidth: 1, borderColor: "transparent" },
   tabActive: { borderColor: theme.primary, backgroundColor: theme.surfaceAlt },
-  tabIcon: { fontSize: 20 },
+  tabIcon: { fontSize: 19 },
   uniGrid: { flexDirection: "row", flexWrap: "wrap", paddingBottom: 16, paddingHorizontal: 2 },
   // 6 columns with a fixed cell height (not aspectRatio) so rows never
-  // collapse/overlap on web and emojis get comfortable breathing room.
-  uniCell: { width: "16.6666%", height: 54, alignItems: "center", justifyContent: "center" },
-  uniEmoji: { fontSize: 30, ...(Platform.OS === "web" ? ({ lineHeight: 40 } as object) : {}) },
+  // collapse/overlap on web and emojis stay evenly aligned with breathing room.
+  uniCell: { width: "16.6666%", height: 50, alignItems: "center", justifyContent: "center" },
+  uniEmoji: { fontSize: 28, ...(Platform.OS === "web" ? ({ lineHeight: 38 } as object) : {}) },
   uploadRow: { flexDirection: "row", alignItems: "center", gap: 10, marginBottom: 14 },
   imgPick: {
     width: 50, height: 50, borderRadius: 12, alignItems: "center", justifyContent: "center",
