@@ -152,6 +152,25 @@ export default function LeftSidebar() {
 
             <View style={styles.divider} />
 
+            {Platform.OS === "web" && (
+              <TouchableOpacity
+                style={styles.row}
+                onPress={() => {
+                  try {
+                    sessionStorage.setItem("nami_refreshed", "1");
+                    (window as any).location.reload();
+                  } catch {}
+                }}
+                activeOpacity={0.7}
+                testID="side-refresh"
+              >
+                <View style={[styles.rowIcon, { backgroundColor: theme.primary + "22" }]}>
+                  <Ionicons name="refresh" size={20} color={theme.primary} />
+                </View>
+                <Text style={styles.rowLabel}>Refresh / get latest update</Text>
+              </TouchableOpacity>
+            )}
+
             <TouchableOpacity
               style={styles.row}
               onPress={async () => { setOpen(false); await signOut(); }}
