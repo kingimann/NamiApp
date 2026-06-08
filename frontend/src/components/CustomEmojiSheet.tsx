@@ -202,10 +202,11 @@ const styles = StyleSheet.create({
   tab: { width: 42, height: 42, borderRadius: 12, marginRight: 8, alignItems: "center", justifyContent: "center", backgroundColor: theme.surface, borderWidth: 1, borderColor: "transparent" },
   tabActive: { borderColor: theme.primary, backgroundColor: theme.surfaceAlt },
   tabIcon: { fontSize: 20 },
-  uniGrid: { flexDirection: "row", flexWrap: "wrap", paddingBottom: 16 },
-  // Fixed cell height (not aspectRatio) so rows never collapse/overlap on web.
-  uniCell: { width: "14.2857%", height: 48, alignItems: "center", justifyContent: "center" },
-  uniEmoji: { fontSize: 29, ...(Platform.OS === "web" ? ({ lineHeight: 36 } as object) : {}) },
+  uniGrid: { flexDirection: "row", flexWrap: "wrap", paddingBottom: 16, paddingHorizontal: 2 },
+  // 6 columns with a fixed cell height (not aspectRatio) so rows never
+  // collapse/overlap on web and emojis get comfortable breathing room.
+  uniCell: { width: "16.6666%", height: 54, alignItems: "center", justifyContent: "center" },
+  uniEmoji: { fontSize: 30, ...(Platform.OS === "web" ? ({ lineHeight: 40 } as object) : {}) },
   uploadRow: { flexDirection: "row", alignItems: "center", gap: 10, marginBottom: 14 },
   imgPick: {
     width: 50, height: 50, borderRadius: 12, alignItems: "center", justifyContent: "center",
