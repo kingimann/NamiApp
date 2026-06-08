@@ -323,7 +323,7 @@ NamiApp/
 | `ANTHROPIC_API_KEY` | No | **Yes** | *(none)* | Enables Claude **vision + text**: roadside photo moderation, document verification, listing spam checks, and the **@claude** assistant. |
 | `CLAUDE_VISION_MODEL` / `CLAUDE_TEXT_MODEL` | No | No | *(sane defaults)* | Override the Claude models used for vision/text. |
 | `OLLAMA_HOST` | No | No | *(none)* | Optional self-hosted **Ollama** host for AI vision instead of Claude. |
-| `TWILIO_ACCOUNT_SID` / `TWILIO_AUTH_TOKEN` / `TWILIO_FROM_NUMBER` | No | **Yes** | *(none)* | Twilio for all SMS (phone verification, OTP login, 2FA, password reset, notifications). When unset, codes are returned in the API response (`dev_code`). |
+| **SMS provider** (pick one) | No | **Yes** | *(none)* | SMS for phone verification, OTP login, 2FA, password reset, and notifications. The sender is provider-agnostic — set **one** of: **Vonage** (`VONAGE_API_KEY`, `VONAGE_API_SECRET`, `VONAGE_FROM`), **Plivo** (`PLIVO_AUTH_ID`, `PLIVO_AUTH_TOKEN`, `PLIVO_FROM`), or **Twilio** (`TWILIO_ACCOUNT_SID`, `TWILIO_AUTH_TOKEN`, `TWILIO_FROM_NUMBER`). Optionally force one with `SMS_PROVIDER=vonage\|plivo\|twilio`. When none is set, codes are returned in the API response (`dev_code`). |
 | `SMTP_HOST` / `SMTP_PORT` / `SMTP_USER` / `SMTP_PASS` / `SMTP_FROM` | No | **Yes** | `SMTP_PORT=587` | SMTP for password-reset emails and **form submission emails**. Needs at least `SMTP_HOST` + `SMTP_FROM`. |
 | `RECOVERY_SECRET` | No | **Yes** | *(none)* | Break-glass owner password recovery via `/api/auth/recover-password`. |
 | `LIVEKIT_API_KEY` / `LIVEKIT_API_SECRET` / `LIVEKIT_URL` | No | **Yes** | *(none)* | [LiveKit](https://cloud.livekit.io/) for in-app voice/video calls (WebRTC). |
