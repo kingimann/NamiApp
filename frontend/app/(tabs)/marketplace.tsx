@@ -325,8 +325,46 @@ export default function MarketplaceScreen() {
   const openListing = (l: Listing) =>
     router.push({ pathname: "/listing/[id]", params: { id: l.id } });
 
+  // ── Floating top bar that hides on scroll-down and returns on scroll-up,
+  //    mirroring the feed + the bottom LiquidTabBar. ──
+  const [topHidden, setTopHidden] = useState(false);
+  const [topBarH, setTopBarH] = useState(160);  // measured; default avoids initial overlap
+  const topHide = useRef(new Animated.Value(0)).current;  // 0 = shown, 1 = hidden
+  const lastScrollY = useRef(0);
+  const onScroll = useCallback((e: any) => {
+    const y = e?.nativeEvent?.contentOffset?.y ?? 0;
+    const dy = y - lastScrollY.current;
+    if (y <= 4) setTopHidden(false);
+    else if (dy > 6) setTopHidden(true);
+    else if (dy < -6) setTopHidden(false);
+    lastScrollY.current = y;
+  }, []);
+  useEffect(() => {
+    Animated.timing(topHide, {
+      toValue: topHidden ? 1 : 0,
+      duration: 220,
+      easing: Easing.out(Easing.cubic),
+      useNativeDriver: true,
+    }).start();
+  }, [topHidden, topHide]);
+  useFocusEffect(useCallback(() => { setTopHidden(false); lastScrollY.current = 0; }, []));
+
   return (
     <SafeAreaView edges={["top"]} style={styles.root} testID="marketplace-screen">
+      {/* Floating frosted top bar — hides on scroll-down, returns on scroll-up,
+          mirroring the feed + the bottom LiquidTabBar. */}
+      <Animated.View
+        onLayout={(e) => setTopBarH(e.nativeEvent.layout.height)}
+        pointerEvents={topHidden ? "none" : "box-none"}
+        style={[
+          styles.topBar,
+          GLASS,
+          {
+            opacity: topHide.interpolate({ inputRange: [0, 0.7, 1], outputRange: [1, 0.25, 0] }),
+            transform: [{ translateY: topHide.interpolate({ inputRange: [0, 1], outputRange: [0, -(topBarH + insets.top + 14)] }) }],
+          },
+        ]}
+      >
       <View style={styles.header}>
         <SidebarMenuButton />
         <Text style={styles.title}>{savedView ? "Saved" : "Marketplace"}</Text>
@@ -407,16 +445,19 @@ export default function MarketplaceScreen() {
           })}
         </ScrollView>
       )}
+      </Animated.View>
 
       {loading ? (
-        <SkeletonTiles />
+        <View style={{ paddingTop: topBarH }}><SkeletonTiles /></View>
       ) : (
         <FlatList
           data={listings}
           keyExtractor={(i) => i.id}
           numColumns={2}
           columnWrapperStyle={{ gap: 14 }}
-          contentContainerStyle={{ paddingHorizontal: 16, paddingTop: 8, paddingBottom: insets.bottom + 90, gap: 18 }}
+          onScroll={onScroll}
+          scrollEventThrottle={16}
+          contentContainerStyle={{ paddingHorizontal: 16, paddingTop: topBarH + 8, paddingBottom: insets.bottom + 90, gap: 18 }}
           refreshControl={
             <RefreshControl refreshing={refreshing} onRefresh={() => { setRefreshing(true); load(); }} tintColor={theme.primary} />
           }
@@ -835,6 +876,14 @@ export default function MarketplaceScreen() {
 
 const styles = StyleSheet.create({
   root: { flex: 1, backgroundColor: theme.bg },
+  topBar: {
+    position: "absolute", top: 6, left: 8, right: 8,
+    borderRadius: 24,
+    paddingTop: 2, paddingBottom: 6,
+    zIndex: 40,
+    shadowColor: "#000", shadowOpacity: 0.32, shadowRadius: 14, shadowOffset: { width: 0, height: 6 },
+    elevation: 10,
+  },
   header: {
     flexDirection: "row", alignItems: "center", justifyContent: "space-between",
     paddingHorizontal: 16, paddingTop: 12, paddingBottom: 8, gap: 10,
