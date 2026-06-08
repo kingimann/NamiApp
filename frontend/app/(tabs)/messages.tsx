@@ -11,6 +11,7 @@ import { useAuth } from "@/src/context/AuthContext";
 import { theme } from "@/src/theme";
 import { SidebarMenuButton } from "@/src/components/LeftSidebar";
 import RestrictionBanner from "@/src/components/RestrictionBanner";
+import { isE2E, tryDecrypt, getPeerPublicKey } from "@/src/utils/e2e";
 
 type Mode = "new-dm" | "new-group" | null;
 
@@ -47,6 +48,37 @@ export default function MessagesScreen() {
   }, []);
 
   useFocusEffect(useCallback(() => { load(); }, [load]));
+
+  // Decrypt E2E last-message previews so the inbox shows real text (like the
+  // chat does) instead of a permanent "Encrypted message". Re-runs whenever the
+  // conversations reload (incl. after unlocking a key elsewhere, since the
+  // screen reloads on focus).
+  const [previews, setPreviews] = useState<Record<string, string>>({});
+  useEffect(() => {
+    let cancelled = false;
+    (async () => {
+      const next: Record<string, string> = {};
+      for (const c of convs) {
+        const last = c.last_message;
+        if (!last || !last.text || !isE2E(last.text)) continue;
+        try {
+          let peer: Uint8Array | null = null;
+          if (c.kind === "group") {
+            if (last.sender_id !== user?.user_id) {
+              const m = (c.members || []).find((x) => x.user_id === last.sender_id);
+              peer = m ? await getPeerPublicKey(m.user_id) : null;
+            }
+          } else if (c.other_user) {
+            peer = await getPeerPublicKey(c.other_user.user_id);
+          }
+          const plain = await tryDecrypt(last.text, peer);
+          if (plain != null) next[c.id] = plain.slice(0, 140);
+        } catch {}
+      }
+      if (!cancelled && Object.keys(next).length) setPreviews((p) => ({ ...p, ...next }));
+    })();
+    return () => { cancelled = true; };
+  }, [convs, user?.user_id]);
 
   useEffect(() => {
     if (!mode) return;
@@ -263,7 +295,7 @@ export default function MessagesScreen() {
                 : last.type === "post"
                 ? "📄 Shared a post"
                 : (last.text || "").startsWith("e2e:v1:")
-                ? "🔒 Encrypted message"
+                ? (previews[item.id] || "🔒 Encrypted message")
                 : last.text
               : "Say hi 👋";
             return (

@@ -40,10 +40,18 @@ export async function ensureKeyPair(): Promise<{ pub: Uint8Array; priv: Uint8Arr
   return { priv: cachedPriv, pub: cachedPub };
 }
 
+// Cache resolved peer public keys for the session so screens that decrypt many
+// items (e.g. the inbox previews) don't refetch per item. Only successful
+// lookups are cached, so a peer who publishes a key later still resolves.
+const _peerKeyCache = new Map<string, Uint8Array>();
 export async function getPeerPublicKey(userId: string): Promise<Uint8Array | null> {
+  const cached = _peerKeyCache.get(userId);
+  if (cached) return cached;
   try {
     const { public_key } = await api.getUserE2EKey(userId);
-    return public_key ? decodeBase64(public_key) : null;
+    const k = public_key ? decodeBase64(public_key) : null;
+    if (k) _peerKeyCache.set(userId, k);
+    return k;
   } catch { return null; }
 }
 
