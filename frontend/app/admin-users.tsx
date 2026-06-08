@@ -1,7 +1,7 @@
 import React, { useCallback, useState } from "react";
 import {
   View, Text, StyleSheet, TextInput, TouchableOpacity, FlatList, Image,
-  ActivityIndicator, Modal, Pressable, Platform, Alert, ScrollView,
+  ActivityIndicator, Modal, Pressable, Platform, Alert, ScrollView, useWindowDimensions,
 } from "react-native";
 import { SafeAreaView, useSafeAreaInsets } from "react-native-safe-area-context";
 import { Ionicons } from "@expo/vector-icons";
@@ -24,6 +24,7 @@ const SUSPEND_OPTIONS = [
 export default function AdminUsersScreen() {
   const router = useRouter();
   const insets = useSafeAreaInsets();
+  const { height: winH } = useWindowDimensions();
   const { user, refresh } = useAuth() as any;
   const confirm = useConfirm();
   const [q, setQ] = useState("");
@@ -278,6 +279,7 @@ export default function AdminUsersScreen() {
               <Text style={styles.sheetName}>{sel.name}</Text>
               <Text style={styles.sheetSub}>{sel.email}{sel.username ? ` · @${sel.username}` : ""}</Text>
 
+              <ScrollView style={{ maxHeight: winH * 0.5 }} showsVerticalScrollIndicator={false}>
               <Action icon={sel.verified ? "close-circle-outline" : "checkmark-circle-outline"} label={sel.verified ? "Remove verified" : "Verify"} onPress={patch(sel, () => api.adminPatchUser(sel.user_id, { verified: !sel.verified }), { verified: !sel.verified })} />
               <Action icon="shield-half-outline" label={sel.role === "mod" ? "Remove mod" : "Make mod"} onPress={patch(sel, () => api.adminPatchUser(sel.user_id, { role: sel.role === "mod" ? "user" : "mod" }), { role: sel.role === "mod" ? "user" : "mod" })} />
               <Action icon="shield-checkmark-outline" label={sel.role === "admin" ? "Remove admin" : "Make admin"} onPress={patch(sel, () => api.adminPatchUser(sel.user_id, { role: sel.role === "admin" ? "user" : "admin" }), { role: sel.role === "admin" ? "user" : "admin" })} />
@@ -297,6 +299,7 @@ export default function AdminUsersScreen() {
               <Action icon="list-outline" label="View / edit transactions…" onPress={() => loadTxnList(sel)} />
               <Action icon="ribbon-outline" label="Badges…" onPress={() => openBadges(sel)} />
               <Action icon="trash-outline" label="Remove account" danger onPress={() => confirmRemove(sel)} />
+              </ScrollView>
               <TouchableOpacity onPress={() => setSel(null)}><Text style={styles.cancel}>Close</Text></TouchableOpacity>
             </View>
           )}
