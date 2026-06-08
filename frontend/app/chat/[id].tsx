@@ -1318,7 +1318,17 @@ export default function ChatScreen() {
                 </TouchableOpacity>
                 <TouchableOpacity
                   style={styles.attachBtn}
-                  onPress={() => { Keyboard.dismiss(); setAttachOpen(false); setEmojiOpen(true); }}
+                  onPress={() => {
+                    // Keyboard.dismiss() is a no-op on web — blur the focused
+                    // input explicitly so the on-screen keyboard drops before the
+                    // emoji sheet opens (otherwise it overlaps the picker).
+                    Keyboard.dismiss();
+                    if (Platform.OS === "web" && typeof document !== "undefined") {
+                      (document.activeElement as any)?.blur?.();
+                    }
+                    setAttachOpen(false);
+                    setEmojiOpen(true);
+                  }}
                   disabled={sending}
                   testID="emoji-btn"
                 >
