@@ -13,6 +13,8 @@ import { storage } from "@/src/utils/storage";
 
 const HIDE_STORIES_KEY = "hide_stories"; // keep in sync with the feed screen
 const CHAT_FAB_SIDE_KEY = "chat_fab_side"; // keep in sync with ChatFab
+const ACTIVE_STATUS_KEY = "show_active_status"; // shows the green "active now" dot to others
+const READ_RECEIPTS_KEY = "read_receipts"; // lets others see when you've read their messages
 
 const POLICIES = [
   { k: "everyone", label: "Everyone", icon: "earth-outline" },
@@ -45,6 +47,21 @@ export default function PrivacyScreen() {
   const pickChatSide = async (s: "left" | "right") => {
     setChatSide(s);
     await storage.setItem(CHAT_FAB_SIDE_KEY, s);
+  };
+
+  const [activeStatus, setActiveStatus] = useState(true);
+  const [readReceipts, setReadReceipts] = useState(true);
+  React.useEffect(() => {
+    storage.getItem(ACTIVE_STATUS_KEY, true).then((v) => setActiveStatus(v !== false));
+    storage.getItem(READ_RECEIPTS_KEY, true).then((v) => setReadReceipts(v !== false));
+  }, []);
+  const toggleActiveStatus = async () => {
+    const next = !activeStatus; setActiveStatus(next);
+    await storage.setItem(ACTIVE_STATUS_KEY, next);
+  };
+  const toggleReadReceipts = async () => {
+    const next = !readReceipts; setReadReceipts(next);
+    await storage.setItem(READ_RECEIPTS_KEY, next);
   };
 
   const savePolicy = async (k: string) => {
@@ -142,6 +159,30 @@ export default function PrivacyScreen() {
               ))}
             </View>
           </View>
+        </View>
+
+        <Text style={styles.section}>Activity status</Text>
+        <View style={styles.card}>
+          <TouchableOpacity style={[styles.optRow, styles.optDivider]} onPress={toggleActiveStatus} testID="privacy-active-status">
+            <Ionicons name="ellipse" size={18} color={activeStatus ? "#22C55E" : theme.textMuted} />
+            <View style={{ flex: 1 }}>
+              <Text style={styles.optLabel}>Show when you're active</Text>
+              <Text style={styles.optSub}>Others see a green dot when you're online. You won't see theirs if this is off.</Text>
+            </View>
+            <View style={[styles.switch, activeStatus && styles.switchOn]}>
+              <View style={[styles.knob, activeStatus && styles.knobOn]} />
+            </View>
+          </TouchableOpacity>
+          <TouchableOpacity style={styles.optRow} onPress={toggleReadReceipts} testID="privacy-read-receipts">
+            <Ionicons name="checkmark-done-outline" size={18} color={readReceipts ? theme.primary : theme.textMuted} />
+            <View style={{ flex: 1 }}>
+              <Text style={styles.optLabel}>Read receipts</Text>
+              <Text style={styles.optSub}>Let people know when you've read their messages.</Text>
+            </View>
+            <View style={[styles.switch, readReceipts && styles.switchOn]}>
+              <View style={[styles.knob, readReceipts && styles.knobOn]} />
+            </View>
+          </TouchableOpacity>
         </View>
 
         <Text style={styles.section}>Messages</Text>
