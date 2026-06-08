@@ -21,8 +21,8 @@ Every integration is optional except the database + Mapbox; unset features degra
 | `ANTHROPIC_API_KEY` | No | **Yes** | *(none)* | Claude vision + text: roadside photo moderation, document verification, listing spam, and the @claude bot. |
 | `CLAUDE_VISION_MODEL` / `CLAUDE_TEXT_MODEL` | No | No | *(sane defaults)* | Override the Claude models. |
 | `OLLAMA_HOST` | No | No | *(none)* | Optional self-hosted AI vision instead of Claude. |
-| `TWILIO_ACCOUNT_SID` / `TWILIO_AUTH_TOKEN` / `TWILIO_FROM_NUMBER` | No | **Yes** | *(none)* | SMS: phone verification, OTP login, 2FA, password reset, notifications. Unset → codes returned as `dev_code`. |
-| `SMTP_HOST` / `SMTP_PORT` / `SMTP_USER` / `SMTP_PASS` / `SMTP_FROM` | No | **Yes** | `SMTP_PORT=587` | Email: password reset + form-submission emails. Needs at least `SMTP_HOST` + `SMTP_FROM`. |
+| **SMS provider** (pick one) | No | **Yes** | *(none)* | SMS: phone verification, OTP login, 2FA, password reset, notifications. Set one provider: Vonage (`VONAGE_API_KEY`/`VONAGE_API_SECRET`/`VONAGE_FROM`), Plivo (`PLIVO_AUTH_ID`/`PLIVO_AUTH_TOKEN`/`PLIVO_FROM`), or Twilio (`TWILIO_ACCOUNT_SID`/`TWILIO_AUTH_TOKEN`/`TWILIO_FROM_NUMBER`). Force one with `SMS_PROVIDER`. Unset → codes returned as `dev_code`. |
+| `SMTP_HOST` / `SMTP_PORT` / `SMTP_USER` / `SMTP_PASS` / `SMTP_FROM` | No | **Yes** | `SMTP_PORT=587` | Email (password reset + form-submission emails) over plain SMTP — works with any provider: Amazon SES, Brevo, Mailgun, Zoho, etc. Needs at least `SMTP_HOST` + `SMTP_FROM`. |
 | `RECOVERY_SECRET` | No | **Yes** | *(none)* | Break-glass owner password recovery via `/api/auth/recover-password`. |
 | `LIVEKIT_API_KEY` / `LIVEKIT_API_SECRET` / `LIVEKIT_URL` | No | **Yes** | *(none)* | In-app voice/video calls (WebRTC). |
 | `EXPO_ACCESS_TOKEN` | No | **Yes** | *(none)* | Optional Expo token to raise push rate limits. |

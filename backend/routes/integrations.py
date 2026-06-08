@@ -40,17 +40,23 @@ async def _check_stripe() -> tuple[bool, str]:
         return False, f"Stripe call failed: {str(e)[:120]}"
 
 
-async def _check_twilio() -> tuple[bool, str]:
-    sid = os.environ.get("TWILIO_ACCOUNT_SID", "")
-    tok = os.environ.get("TWILIO_AUTH_TOKEN", "")
-    if not (sid and tok and os.environ.get("TWILIO_FROM_NUMBER")):
-        return False, "Twilio credentials not fully set."
-    try:
-        async with httpx.AsyncClient(timeout=10) as c:
-            r = await c.get(f"https://api.twilio.com/2010-04-01/Accounts/{sid}.json", auth=(sid, tok))
-        return (r.status_code == 200), (f"Account reachable." if r.status_code == 200 else f"HTTP {r.status_code}")
-    except Exception as e:
-        return False, f"Twilio call failed: {str(e)[:120]}"
+async def _check_sms() -> tuple[bool, str]:
+    """SMS is provider-agnostic (Vonage / Plivo / Twilio). Report the active
+    provider, and for Twilio do a live account ping."""
+    from services.sms import active_provider
+    provider = active_provider()
+    if not provider:
+        return False, "No SMS provider configured."
+    if provider == "twilio":
+        sid = os.environ.get("TWILIO_ACCOUNT_SID", "")
+        tok = os.environ.get("TWILIO_AUTH_TOKEN", "")
+        try:
+            async with httpx.AsyncClient(timeout=10) as c:
+                r = await c.get(f"https://api.twilio.com/2010-04-01/Accounts/{sid}.json", auth=(sid, tok))
+            return (r.status_code == 200), ("Twilio account reachable." if r.status_code == 200 else f"Twilio HTTP {r.status_code}")
+        except Exception as e:
+            return False, f"Twilio call failed: {str(e)[:120]}"
+    return True, f"Active SMS provider: {provider}."
 
 
 async def _check_transitland() -> tuple[bool, str]:
@@ -202,13 +208,14 @@ _INTEGRATIONS = [
         "configured": lambda: _present("STRIPE_SECRET_KEY"), "live": _check_stripe,
     },
     {
-        "key": "twilio", "name": "Twilio (SMS)", "category": "Auth & messaging",
-        "required": False, "env": ["TWILIO_ACCOUNT_SID", "TWILIO_AUTH_TOKEN", "TWILIO_FROM_NUMBER"],
-        "summary": "Phone verification, OTP login, SMS two-factor, password reset by text, SMS notifications. Falls back to dev codes when unset.",
-        "fix": "Set TWILIO_ACCOUNT_SID, TWILIO_AUTH_TOKEN, and TWILIO_FROM_NUMBER from your Twilio console.",
-        "docs": "https://console.twilio.com/",
-        "configured": lambda: _present("TWILIO_ACCOUNT_SID", "TWILIO_AUTH_TOKEN", "TWILIO_FROM_NUMBER"),
-        "live": _check_twilio,
+        "key": "sms", "name": "SMS (Vonage / Plivo / Twilio)", "category": "Auth & messaging",
+        "required": False,
+        "env": ["VONAGE_API_KEY", "VONAGE_API_SECRET", "VONAGE_FROM", "PLIVO_AUTH_ID", "PLIVO_AUTH_TOKEN", "PLIVO_FROM", "TWILIO_ACCOUNT_SID", "TWILIO_AUTH_TOKEN", "TWILIO_FROM_NUMBER", "SMS_PROVIDER"],
+        "summary": "Phone verification, OTP login, SMS two-factor, password reset by text, SMS notifications. Pick any provider — falls back to dev codes when none is set.",
+        "fix": "Set ONE provider: Vonage (VONAGE_API_KEY/SECRET/FROM), Plivo (PLIVO_AUTH_ID/TOKEN/FROM), or Twilio (TWILIO_ACCOUNT_SID/AUTH_TOKEN/FROM_NUMBER). Optionally force one with SMS_PROVIDER.",
+        "docs": "https://dashboard.nexmo.com/",
+        "configured": lambda: bool(__import__("services.sms", fromlist=["active_provider"]).active_provider()),
+        "live": _check_sms,
     },
     {
         "key": "transitland", "name": "TransitLand (transit)", "category": "Maps",
