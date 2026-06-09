@@ -4,9 +4,12 @@ Scaffold for running the app **off Expo** on the web. It keeps every React
 Native component (via `react-native-web`); only the **bundler** (Metro/Expo →
 Vite) and **router** (expo-router → react-router-dom) change.
 
-> ⚠️ **Untested scaffold.** Written without a local build/`node_modules`. It's a
-> strong starting point, not a guaranteed-green build — expect to iterate on
-> config and a few routing semantics. Paste errors back and they're quick fixes.
+> ✅ **The web build is verified green** (`yarn install` + `yarn build:web`
+> succeed; all ~600 modules bundle, `dist/` emitted). What's **not** yet
+> confirmed is **runtime rendering** — a green build doesn't prove every screen
+> paints in a browser, so do a `yarn dev` smoke-test and paste any console
+> errors. Phases W3 (browser impls for the native-feature seams) and W4
+> (cleanup) still remain.
 
 ## Files
 
