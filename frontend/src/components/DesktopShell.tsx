@@ -1,0 +1,129 @@
+import React from "react";
+import {
+  View, Text, StyleSheet, Pressable, ScrollView, Platform, useWindowDimensions, Image,
+} from "react-native";
+import { Ionicons } from "@expo/vector-icons";
+import { usePathname, useRouter } from "expo-router";
+import { theme } from "@/src/theme";
+import { useAuth } from "@/src/context/AuthContext";
+import { useSidebar } from "@/src/context/SidebarContext";
+
+// Below this width we keep the mobile layout untouched. At/above it (desktop
+// web only) we render a real website chrome: a persistent left nav rail and a
+// centred, max-width content column — instead of full-bleed mobile UI.
+const DESKTOP_BP = 900;
+const RAIL_W = 244;
+const CONTENT_MAX = 680;
+
+type Item = {
+  label: string;
+  route: string;
+  icon: keyof typeof Ionicons.glyphMap;     // filled name; outline = `${icon}-outline`
+  activeOn?: string[];
+};
+
+const ITEMS: Item[] = [
+  { label: "Home", route: "/feed", icon: "home", activeOn: ["/feed", "/post", "/user", "/hashtag"] },
+  { label: "Map", route: "/", icon: "map", activeOn: ["/", "/directions", "/place", "/guide", "/g", "/eta"] },
+  { label: "Reels", route: "/reels", icon: "play-circle" },
+  { label: "Marketplace", route: "/marketplace", icon: "storefront", activeOn: ["/marketplace", "/listing", "/seller", "/business", "/my-marketplace", "/my-listings", "/shop"] },
+  { label: "Groups", route: "/groups", icon: "people", activeOn: ["/groups", "/group"] },
+  { label: "Communities", route: "/communities", icon: "planet", activeOn: ["/communities", "/c"] },
+  { label: "Notifications", route: "/notifications", icon: "notifications" },
+  { label: "Profile", route: "/profile", icon: "person", activeOn: ["/profile"] },
+];
+
+export default function DesktopShell({ children }: { children: React.ReactNode }) {
+  const { width } = useWindowDimensions();
+  const { user } = useAuth();
+  const pathname = usePathname() || "/";
+  const router = useRouter();
+  const sidebar = useSidebar();
+
+  const desktop = Platform.OS === "web" && width >= DESKTOP_BP && !!user;
+  if (!desktop) return <>{children}</>;
+
+  const isActive = (it: Item) => {
+    const ons = it.activeOn || [it.route];
+    return ons.some((p) =>
+      p === "/" ? pathname === "/" : (pathname === p || pathname.startsWith(p + "/")),
+    );
+  };
+
+  return (
+    <View style={styles.row}>
+      <View style={styles.rail}>
+        <Pressable style={styles.brandRow} onPress={() => router.push("/feed")}>
+          <View style={styles.brandDot}><Ionicons name="planet" size={18} color="#fff" /></View>
+          <Text style={styles.brand}>OkaySpace</Text>
+        </Pressable>
+        <ScrollView showsVerticalScrollIndicator={false} style={{ flex: 1 }}>
+          {ITEMS.map((it) => {
+            const active = isActive(it);
+            return (
+              <Pressable
+                key={it.route}
+                style={[styles.navItem, active && styles.navItemActive]}
+                onPress={() => router.push(it.route as any)}
+                testID={`desktop-nav-${it.label.toLowerCase()}`}
+              >
+                <Ionicons
+                  name={(active ? it.icon : (`${it.icon}-outline` as keyof typeof Ionicons.glyphMap))}
+                  size={24}
+                  color={active ? theme.primary : theme.textPrimary}
+                />
+                <Text style={[styles.navText, active && { color: theme.primary, fontWeight: "800" }]}>{it.label}</Text>
+              </Pressable>
+            );
+          })}
+          <Pressable style={styles.navItem} onPress={() => router.push("/settings")} testID="desktop-nav-settings">
+            <Ionicons name="settings-outline" size={24} color={theme.textPrimary} />
+            <Text style={styles.navText}>Settings</Text>
+          </Pressable>
+          <Pressable style={styles.navItem} onPress={() => sidebar.setOpen(true)} testID="desktop-nav-more">
+            <Ionicons name="menu" size={24} color={theme.textPrimary} />
+            <Text style={styles.navText}>More</Text>
+          </Pressable>
+        </ScrollView>
+
+        <Pressable style={styles.account} onPress={() => router.push("/profile")} testID="desktop-account">
+          <Image source={{ uri: user?.picture || "https://api.dicebear.com/7.x/initials/png?seed=" + encodeURIComponent(user?.name || "U") }} style={styles.accountAvatar} />
+          <View style={{ flex: 1 }}>
+            <Text style={styles.accountName} numberOfLines={1}>{user?.name || "You"}</Text>
+            {!!user?.username && <Text style={styles.accountHandle} numberOfLines={1}>@{user.username}</Text>}
+          </View>
+        </Pressable>
+      </View>
+
+      <View style={styles.contentWrap}>
+        <View style={styles.content}>{children}</View>
+      </View>
+    </View>
+  );
+}
+
+const styles = StyleSheet.create({
+  row: { flex: 1, flexDirection: "row", backgroundColor: theme.bg, justifyContent: "center" },
+  rail: {
+    width: RAIL_W, paddingHorizontal: 12, paddingVertical: 16,
+    borderRightWidth: StyleSheet.hairlineWidth, borderRightColor: theme.border,
+    backgroundColor: theme.bg,
+  },
+  brandRow: { flexDirection: "row", alignItems: "center", gap: 10, paddingHorizontal: 10, marginBottom: 14 },
+  brandDot: { width: 32, height: 32, borderRadius: 16, backgroundColor: theme.primary, alignItems: "center", justifyContent: "center" },
+  brand: { color: theme.textPrimary, fontSize: 19, fontWeight: "900" },
+  navItem: { flexDirection: "row", alignItems: "center", gap: 16, paddingHorizontal: 12, paddingVertical: 11, borderRadius: 999, marginBottom: 2 },
+  navItemActive: { backgroundColor: theme.surfaceAlt },
+  navText: { color: theme.textPrimary, fontSize: 16, fontWeight: "600" },
+  account: { flexDirection: "row", alignItems: "center", gap: 10, padding: 8, borderRadius: 999, marginTop: 8 },
+  accountAvatar: { width: 36, height: 36, borderRadius: 18, backgroundColor: theme.surfaceAlt },
+  accountName: { color: theme.textPrimary, fontSize: 14, fontWeight: "800" },
+  accountHandle: { color: theme.textMuted, fontSize: 12.5 },
+  // The page content, pinned to a comfortable reading column and centred.
+  contentWrap: { flex: 1, alignItems: "center" },
+  content: {
+    flex: 1, width: "100%", maxWidth: CONTENT_MAX,
+    borderRightWidth: StyleSheet.hairlineWidth, borderRightColor: theme.border,
+    borderLeftWidth: StyleSheet.hairlineWidth, borderLeftColor: theme.border,
+  },
+});

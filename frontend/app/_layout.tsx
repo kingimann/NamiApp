@@ -2,7 +2,7 @@ import { Stack, usePathname, useRouter } from "expo-router";
 import * as SplashScreen from "expo-splash-screen";
 import { useEffect } from "react";
 import { StatusBar } from "expo-status-bar";
-import { Platform, View } from "react-native";
+import { Platform, View, useWindowDimensions } from "react-native";
 import { SafeAreaProvider } from "react-native-safe-area-context";
 import { GestureHandlerRootView } from "react-native-gesture-handler";
 
@@ -17,6 +17,7 @@ import EdgeSwipe from "@/src/components/EdgeSwipe";
 import WebNavGuard from "@/src/components/WebNavGuard";
 import MobileOnlyGate from "@/src/components/MobileOnlyGate";
 import MobileFrame from "@/src/components/MobileFrame";
+import DesktopShell from "@/src/components/DesktopShell";
 import WebPullToRefresh from "@/src/components/WebPullToRefresh";
 import LeftSidebar from "@/src/components/LeftSidebar";
 import LiquidTabBar from "@/src/components/LiquidTabBar";
@@ -111,7 +112,10 @@ function shouldShowBar(pathname: string) {
 function GlobalTabBar() {
   const { user } = useAuth();
   const pathname = usePathname();
+  const { width } = useWindowDimensions();
   if (!user) return null;
+  // On desktop web the left nav rail (DesktopShell) replaces the floating pill.
+  if (Platform.OS === "web" && width >= 900) return null;
   if (!shouldShowBar(pathname || "")) return null;
   return <LiquidTabBar />;
 }
@@ -141,12 +145,14 @@ export default function RootLayout() {
                       <StatusBar style="light" />
                       <WebPullToRefresh />
                       <MobileFrame>
-                        <View style={{ flex: 1 }}>
-                          {/* Web: instant transitions (the fade adds lag and jank
-                              to every navigation). Native keeps the fade. */}
-                          <Stack screenOptions={{ headerShown: false, animation: Platform.OS === "web" ? "none" : "fade", animationDuration: 220, contentStyle: { backgroundColor: "#0A0A0A" } }} />
-                          {Platform.OS !== "web" && <EdgeSwipe />}
-                        </View>
+                        <DesktopShell>
+                          <View style={{ flex: 1 }}>
+                            {/* Web: instant transitions (the fade adds lag and jank
+                                to every navigation). Native keeps the fade. */}
+                            <Stack screenOptions={{ headerShown: false, animation: Platform.OS === "web" ? "none" : "fade", animationDuration: 220, contentStyle: { backgroundColor: "#0A0A0A" } }} />
+                            {Platform.OS !== "web" && <EdgeSwipe />}
+                          </View>
+                        </DesktopShell>
                         <GlobalTabBar />
                         <AuthedSidebar />
                         <UsernameGate />
