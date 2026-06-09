@@ -8,7 +8,7 @@ import { Ionicons } from "@expo/vector-icons";
 import { LinearGradient } from "expo-linear-gradient";
 import * as ImagePicker from "expo-image-picker";
 import { assetToUri } from "@/src/utils/thumbnail";
-import { useFocusEffect, useRouter } from "expo-router";
+import { useFocusEffect, useLocalSearchParams, useRouter } from "expo-router";
 import { useAuth } from "@/src/context/AuthContext";
 import { api, Post, mediaUri } from "@/src/api/client";
 import { theme } from "@/src/theme";
@@ -211,6 +211,16 @@ export default function ProfileScreen() {
     setEditOpen(true);
   };
 
+  // Open the editor when arriving from Settings → Edit profile (?edit=1).
+  const params = useLocalSearchParams<{ edit?: string }>();
+  useEffect(() => {
+    if (params.edit === "1" && user) {
+      openEdit();
+      router.setParams({ edit: undefined } as any);
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [params.edit, user?.user_id]);
+
   // Live username availability check
   useEffect(() => {
     if (!editOpen) return;
@@ -363,6 +373,11 @@ export default function ProfileScreen() {
             )}
 
             <View style={styles.socialBar}>
+              <View style={styles.socialItem}>
+                <Text style={styles.socialNum}>{myPosts.length}</Text>
+                <Text style={styles.socialLabel}>Posts</Text>
+              </View>
+              <View style={styles.socialDivider} />
               <TouchableOpacity
                 style={styles.socialItem}
                 onPress={() => router.push({ pathname: "/connections", params: { userId: user?.user_id || "", name: user?.name || "You", tab: "followers" } })}
@@ -390,39 +405,6 @@ export default function ProfileScreen() {
                 <Text style={styles.socialLabel}>Friends</Text>
               </TouchableOpacity>
             </View>
-
-            <View style={styles.heroActions}>
-              <TouchableOpacity
-                style={[styles.actionBtn, styles.actionPrimary]}
-                onPress={openEdit}
-                activeOpacity={0.85}
-                testID="edit-profile-btn"
-              >
-                <Ionicons name="create-outline" size={16} color="#fff" />
-                <Text style={styles.actionPrimaryText}>Edit profile</Text>
-              </TouchableOpacity>
-              <TouchableOpacity
-                style={[styles.actionBtn, styles.actionGhost]}
-                onPress={() => router.push("/people")}
-                activeOpacity={0.85}
-                testID="find-friends-btn"
-              >
-                <Ionicons name="person-add-outline" size={16} color={theme.primary} />
-                <Text style={styles.actionGhostText}>Find friends</Text>
-              </TouchableOpacity>
-            </View>
-          </View>
-        </View>
-
-        <View style={styles.statsCard}>
-          <View style={styles.statCell}>
-            <Text style={styles.statNum}>{myPosts.length}</Text>
-            <Text style={styles.statLabel}>Posts</Text>
-          </View>
-          <View style={styles.statCellDivider} />
-          <View style={styles.statCell}>
-            <Text style={styles.statNum}>{stats.reviews}</Text>
-            <Text style={styles.statLabel}>Reviews</Text>
           </View>
         </View>
 
