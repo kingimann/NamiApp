@@ -169,6 +169,12 @@ export default function SettingsScreen() {
           <Row icon="help-buoy-outline" label="Support & disputes" color="#06B6D4" badge={supportUnread} onPress={() => router.push("/support")} last />
         </View>
 
+        <Text style={styles.groupTitle}>About & Legal</Text>
+        <View style={styles.group}>
+          <Row icon="reader-outline" label="Terms of Service" color="#3B82F6" onPress={() => router.push("/legal/terms")} />
+          <Row icon="shield-outline" label="Privacy Policy" color="#14B8A6" onPress={() => router.push("/legal/privacy")} last />
+        </View>
+
         {(user?.role === "admin" || user?.role === "mod") && (
           <>
             <Text style={styles.groupTitle}>Admin</Text>

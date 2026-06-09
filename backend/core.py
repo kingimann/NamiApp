@@ -318,8 +318,8 @@ async def get_current_user(authorization: Optional[str] = Header(None)) -> dict:
 # Current legal policy versions. Bump these (to the new effective date) whenever
 # the Terms of Service or Privacy Policy materially change — anyone who agreed to
 # an older version is re-prompted to accept before they can keep using the app.
-TOS_VERSION = "2026-06-05"
-PRIVACY_VERSION = "2026-06-05"
+TOS_VERSION = "2026-06-09"
+PRIVACY_VERSION = "2026-06-09"
 
 
 # Developer API is a paid add-on with tiered plans — higher tier, more access.
