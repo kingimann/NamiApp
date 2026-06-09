@@ -285,6 +285,8 @@ async def update_me(body: ProfilePatch, authorization: Optional[str] = Header(No
         patch["connections_visibility"] = body.connections_visibility
     if body.hide_likes is not None:
         patch["hide_likes"] = bool(body.hide_likes)
+    if body.show_points is not None:
+        patch["show_points"] = bool(body.show_points)
     if body.tag_policy in ("everyone", "followers", "nobody"):
         patch["tag_policy"] = body.tag_policy
     if body.muted_keywords is not None:

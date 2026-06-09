@@ -456,6 +456,7 @@ ACTIVE_POINTS_DAILY_CAP = 300  # max activity (heartbeat) points earnable per da
 POINTS_PER_POST = 5
 POINTS_PER_STORY = 3
 POINTS_PER_MESSAGE = 1
+POINTS_PER_FOLLOWER = 4   # awarded to a user when someone follows them
 
 
 async def award_points(user_id: str, n: int) -> None:
@@ -466,6 +467,44 @@ async def award_points(user_id: str, n: int) -> None:
         await db.users.update_one({"user_id": user_id}, {"$inc": {"points": int(n)}})
     except Exception:
         pass
+
+
+# Level tiers: (minimum points, title). A user's level is their index in this
+# ladder (1-based); the title comes from the highest tier they've reached.
+POINTS_TIERS = [
+    (0, "Newcomer"),
+    (50, "Explorer"),
+    (150, "Regular"),
+    (400, "Insider"),
+    (900, "Star"),
+    (2000, "Influencer"),
+    (5000, "Icon"),
+    (12000, "Legend"),
+    (30000, "Mythic"),
+]
+
+
+def level_info(points: int) -> dict:
+    """Compute level number, title, and progress to the next tier for a score."""
+    p = max(0, int(points or 0))
+    level = 1
+    title = POINTS_TIERS[0][1]
+    cur_floor = 0
+    for i, (threshold, name) in enumerate(POINTS_TIERS):
+        if p >= threshold:
+            level = i + 1
+            title = name
+            cur_floor = threshold
+        else:
+            break
+    next_floor = POINTS_TIERS[level][0] if level < len(POINTS_TIERS) else None
+    return {
+        "level": level,
+        "title": title,
+        "current_floor": cur_floor,
+        "next_floor": next_floor,
+        "max_level": level >= len(POINTS_TIERS),
+    }
 
 
 def _user_doc_to_model(d: dict) -> dict:
@@ -521,6 +560,9 @@ def _user_doc_to_model(d: dict) -> dict:
         "searchable": bool(d.get("searchable", True)),
         "hide_online": bool(d.get("hide_online", False)),
         "points": int(d.get("points", 0) or 0),
+        "level": level_info(d.get("points", 0))["level"],
+        "level_title": level_info(d.get("points", 0))["title"],
+        "show_points": bool(d.get("show_points", True)),
         "connections_visibility": d.get("connections_visibility") or "everyone",
         "hide_likes": bool(d.get("hide_likes", False)),
         "tag_policy": d.get("tag_policy") or "everyone",
@@ -649,7 +691,11 @@ async def _public_user(user_id: str, viewer_id: Optional[str] = None):
         is_followed_by=is_followed_by,
         friend_status=friend_status,
         poked_me=poked_me,
-        points=int(u.get("points", 0) or 0),
+        # Respect "show my points" — others see 0 when the owner hides their score.
+        points=(int(u.get("points", 0) or 0) if (u.get("show_points", True) or viewer_id == user_id) else 0),
+        level=level_info(u.get("points", 0))["level"],
+        level_title=level_info(u.get("points", 0))["title"],
+        show_points=bool(u.get("show_points", True)) or viewer_id == user_id,
     )
 
 

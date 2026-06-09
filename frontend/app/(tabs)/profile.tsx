@@ -32,6 +32,7 @@ import { SOCIAL_PLATFORMS, SOCIAL_BY_KEY, socialUrl, fmtBirthday } from "@/src/l
 import AdSlot from "@/src/components/AdSlot";
 import { interleaveAds, isAd } from "@/src/lib/ads";
 import { AVATAR_STYLES, avatarsForStyle } from "@/src/lib/avatars";
+import { levelInfo } from "@/src/lib/points";
 
 const DEFAULT_AVATAR =
   "https://images.unsplash.com/photo-1544005313-94ddf0286df2?crop=entropy&cs=srgb&fm=jpg&ixid=M3w4NTYxOTJ8MHwxfHNlYXJjaHwxfHxwb3J0cmFpdCUyMHBlcnNvbnxlbnwwfHx8fDE3ODA1NTgzMjh8MA&ixlib=rb-4.1.0&q=85";
@@ -70,10 +71,21 @@ export default function ProfileScreen() {
   const [editLinks, setEditLinks] = useState<FeaturedLink[]>([]);
   const [editFrame, setEditFrame] = useState("none");
   const [editBg, setEditBg] = useState("default");
+  // Privacy & control toggles (all already supported server-side).
+  const [editPrivate, setEditPrivate] = useState(false);
+  const [editSearchable, setEditSearchable] = useState(true);
+  const [editHideOnline, setEditHideOnline] = useState(false);
+  const [editShowPoints, setEditShowPoints] = useState(true);
+  const [editMsgPolicy, setEditMsgPolicy] = useState("everyone");
+  const [editCommentPolicy, setEditCommentPolicy] = useState("everyone");
+  const [editTagPolicy, setEditTagPolicy] = useState("everyone");
+  const [editConnVis, setEditConnVis] = useState("everyone");
+  const [editHideLikes, setEditHideLikes] = useState(false);
+  const [editLikesOff, setEditLikesOff] = useState(false);
   const [usernameCheck, setUsernameCheck] = useState<{ checking: boolean; available: boolean | null }>({ checking: false, available: null });
   const [saving, setSaving] = useState(false);
   const [saveError, setSaveError] = useState("");
-  const [editTab, setEditTab] = useState<"basics" | "look" | "about" | "links">("basics");
+  const [editTab, setEditTab] = useState<"basics" | "look" | "about" | "links" | "privacy">("basics");
   const [uploadingAvatar, setUploadingAvatar] = useState(false);
   const [uploadingCover, setUploadingCover] = useState(false);
   const [avatarPickerOpen, setAvatarPickerOpen] = useState(false);
@@ -278,6 +290,16 @@ export default function ProfileScreen() {
     setEditLinks((user?.featured_links || []).map((l) => ({ ...l })));
     setEditFrame(user?.avatar_frame || "none");
     setEditBg(user?.profile_background || "default");
+    setEditPrivate(!!user?.is_private);
+    setEditSearchable(user?.searchable !== false);
+    setEditHideOnline(!!user?.hide_online);
+    setEditShowPoints(user?.show_points !== false);
+    setEditMsgPolicy(user?.message_policy || "everyone");
+    setEditCommentPolicy(user?.default_comment_policy || "everyone");
+    setEditTagPolicy(user?.tag_policy || "everyone");
+    setEditConnVis(user?.connections_visibility || "everyone");
+    setEditHideLikes(!!user?.hide_likes);
+    setEditLikesOff(!!user?.default_likes_disabled);
     setUsernameCheck({ checking: false, available: true });
     setSaveError("");
     setEditTab("basics");
@@ -377,6 +399,16 @@ export default function ProfileScreen() {
         featured_links: links,
         avatar_frame: editFrame,
         profile_background: editBg,
+        is_private: editPrivate,
+        searchable: editSearchable,
+        hide_online: editHideOnline,
+        show_points: editShowPoints,
+        message_policy: editMsgPolicy,
+        default_comment_policy: editCommentPolicy,
+        tag_policy: editTagPolicy,
+        connections_visibility: editConnVis,
+        hide_likes: editHideLikes,
+        default_likes_disabled: editLikesOff,
       });
       if (usernameChanged) await api.setUsername(u);
       await refresh();
@@ -396,6 +428,36 @@ export default function ProfileScreen() {
   }, [loadPosts, loadStats]);
 
   const accent = resolveAccent(user?.accent_color);
+  const lvl = levelInfo(user?.points || 0);
+
+  // Editor helpers for the Privacy tab.
+  const renderToggle = (label: string, hint: string, val: boolean, set: (v: boolean) => void, testID?: string) => (
+    <TouchableOpacity style={styles.privRow} activeOpacity={0.7} onPress={() => set(!val)} testID={testID}>
+      <View style={{ flex: 1, paddingRight: 12 }}>
+        <Text style={styles.privLabel}>{label}</Text>
+        {!!hint && <Text style={styles.privHint}>{hint}</Text>}
+      </View>
+      <View style={[styles.toggle, val && { backgroundColor: accent }]}>
+        <View style={[styles.knob, val && styles.knobOn]} />
+      </View>
+    </TouchableOpacity>
+  );
+  const renderSeg = (label: string, val: string, set: (v: string) => void, opts: { v: string; label: string }[]) => (
+    <>
+      <Text style={styles.label}>{label}</Text>
+      <View style={styles.segRow}>
+        {opts.map((o) => (
+          <TouchableOpacity
+            key={o.v}
+            style={[styles.segBtn, val === o.v && { backgroundColor: accent, borderColor: accent }]}
+            onPress={() => set(o.v)}
+          >
+            <Text style={[styles.segText, val === o.v && { color: "#fff" }]}>{o.label}</Text>
+          </TouchableOpacity>
+        ))}
+      </View>
+    </>
+  );
 
   return (
     <SafeAreaView edges={["top"]} style={styles.root} testID="profile-screen">
@@ -465,11 +527,30 @@ export default function ProfileScreen() {
             {!!user?.username && (
               <Text style={[styles.handle, { color: accent }]} numberOfLines={1}>@{user.username}</Text>
             )}
-            <View style={[styles.scorePill, { borderColor: accent + "55" }]} testID="profile-score">
-              <Ionicons name="flame" size={14} color={accent} />
-              <Text style={[styles.scoreText, { color: accent }]}>{compactCount(user?.points || 0)}</Text>
-              <Text style={styles.scoreLabel}>points</Text>
-            </View>
+            <TouchableOpacity
+              style={[styles.scoreCard, { borderColor: accent + "55" }]}
+              activeOpacity={0.85}
+              onPress={() => router.push("/leaderboard")}
+              testID="profile-score"
+            >
+              <View style={styles.scoreTopRow}>
+                <Ionicons name="flame" size={15} color={accent} />
+                <Text style={[styles.scoreText, { color: accent }]}>{compactCount(user?.points || 0)}</Text>
+                <Text style={styles.scoreLabel}>points</Text>
+                <View style={[styles.levelBadge, { backgroundColor: accent }]}>
+                  <Text style={styles.levelBadgeText}>Lv {lvl.level}</Text>
+                </View>
+                <Text style={styles.levelTitle} numberOfLines={1}>{lvl.title}</Text>
+                {user?.show_points === false && <Ionicons name="eye-off" size={13} color={theme.textMuted} />}
+                <Ionicons name="chevron-forward" size={14} color={theme.textMuted} />
+              </View>
+              <View style={styles.levelBarTrack}>
+                <View style={[styles.levelBarFill, { width: `${Math.round(lvl.progress * 100)}%`, backgroundColor: accent }]} />
+              </View>
+              <Text style={styles.levelHint}>
+                {lvl.maxLevel ? "Max level reached 🎉" : `${compactCount(lvl.toNext)} pts to Lv ${lvl.level + 1}`}
+              </Text>
+            </TouchableOpacity>
             {!!user?.status && (
               <View style={[styles.statusPillP, { borderColor: accent + "55" }]}>
                 <Text style={styles.statusPillText} numberOfLines={1}>{user.status}</Text>
@@ -839,6 +920,7 @@ export default function ProfileScreen() {
                 ["look", "Look", "color-palette-outline"],
                 ["about", "About", "information-circle-outline"],
                 ["links", "Links", "link-outline"],
+                ["privacy", "Privacy", "lock-closed-outline"],
               ] as const).map(([key, label, icon]) => {
                 const on = editTab === key;
                 return (
@@ -1171,6 +1253,33 @@ export default function ProfileScreen() {
               </TouchableOpacity>
             )}
             </>)}
+
+            {editTab === "privacy" && (<>
+            <Text style={styles.label}>Account</Text>
+            {renderToggle("Private account", "Only approved followers can see your posts.", editPrivate, setEditPrivate, "priv-private")}
+            {renderToggle("Appear in search", "Let people find you by name or @username.", editSearchable, setEditSearchable, "priv-search")}
+            {renderToggle("Show active status", "Let others see when you're online.", !editHideOnline, (v) => setEditHideOnline(!v), "priv-online")}
+            {renderToggle("Show my points", "Display your activity score on your profile.", editShowPoints, setEditShowPoints, "priv-points")}
+
+            {renderSeg("Who can message you", editMsgPolicy, setEditMsgPolicy, [
+              { v: "everyone", label: "Everyone" }, { v: "followers", label: "Followers" },
+              { v: "friends", label: "Friends" }, { v: "nobody", label: "No one" },
+            ])}
+            {renderSeg("Who can comment on your posts", editCommentPolicy, setEditCommentPolicy, [
+              { v: "everyone", label: "Everyone" }, { v: "followers", label: "Followers" },
+              { v: "friends", label: "Friends" }, { v: "nobody", label: "No one" },
+            ])}
+            {renderSeg("Who can tag you", editTagPolicy, setEditTagPolicy, [
+              { v: "everyone", label: "Everyone" }, { v: "followers", label: "Followers" }, { v: "nobody", label: "No one" },
+            ])}
+            {renderSeg("Who can see your connections", editConnVis, setEditConnVis, [
+              { v: "everyone", label: "Everyone" }, { v: "followers", label: "Followers" }, { v: "nobody", label: "No one" },
+            ])}
+
+            <Text style={[styles.label, { marginTop: 16 }]}>Posts</Text>
+            {renderToggle("Hide my liked posts", "Keep the list of posts you've liked private.", editHideLikes, setEditHideLikes, "priv-hidelikes")}
+            {renderToggle("Turn off likes on new posts", "New posts won't show a like count by default.", editLikesOff, setEditLikesOff, "priv-likesoff")}
+            </>)}
             </ScrollView>
 
             {/* Sticky footer: error + Save stay visible regardless of section. */}
@@ -1388,9 +1497,16 @@ const styles = StyleSheet.create({
   headline: { color: theme.textSecondary, fontSize: 14, fontWeight: "600", marginTop: 6, textAlign: "center", paddingHorizontal: 8 },
   statusPillP: { marginTop: 8, borderWidth: 1, borderRadius: 16, paddingHorizontal: 12, paddingVertical: 6, backgroundColor: theme.surfaceAlt, maxWidth: "90%" },
   statusPillText: { color: theme.textPrimary, fontSize: 13, fontWeight: "600" },
-  scorePill: { flexDirection: "row", alignItems: "center", gap: 5, marginTop: 8, borderWidth: 1, borderRadius: 16, paddingHorizontal: 12, paddingVertical: 6, backgroundColor: theme.surfaceAlt },
-  scoreText: { fontSize: 14, fontWeight: "800" },
+  scoreCard: { alignSelf: "stretch", marginTop: 10, borderWidth: 1, borderRadius: 14, paddingHorizontal: 14, paddingVertical: 10, backgroundColor: theme.surfaceAlt, gap: 7 },
+  scoreTopRow: { flexDirection: "row", alignItems: "center", gap: 6 },
+  scoreText: { fontSize: 15, fontWeight: "800" },
   scoreLabel: { color: theme.textMuted, fontSize: 12, fontWeight: "600" },
+  levelBadge: { borderRadius: 8, paddingHorizontal: 7, paddingVertical: 2, marginLeft: 2 },
+  levelBadgeText: { color: "#fff", fontSize: 11, fontWeight: "800" },
+  levelTitle: { flex: 1, color: theme.textSecondary, fontSize: 12.5, fontWeight: "700" },
+  levelBarTrack: { height: 6, borderRadius: 3, backgroundColor: theme.border, overflow: "hidden" },
+  levelBarFill: { height: 6, borderRadius: 3 },
+  levelHint: { color: theme.textMuted, fontSize: 11, fontWeight: "600" },
   interestWrap: { flexDirection: "row", flexWrap: "wrap", justifyContent: "center", gap: 7, marginTop: 12 },
   interestChip: { borderWidth: 1, borderRadius: 14, paddingHorizontal: 11, paddingVertical: 5 },
   interestText: { fontSize: 12.5, fontWeight: "700" },
@@ -1402,6 +1518,15 @@ const styles = StyleSheet.create({
   },
   linkLabel: { flex: 1, color: theme.textPrimary, fontSize: 14, fontWeight: "700" },
 
+  privRow: { flexDirection: "row", alignItems: "center", paddingVertical: 12, borderBottomWidth: StyleSheet.hairlineWidth, borderBottomColor: theme.border },
+  privLabel: { color: theme.textPrimary, fontSize: 14.5, fontWeight: "700" },
+  privHint: { color: theme.textMuted, fontSize: 12, marginTop: 2, lineHeight: 16 },
+  toggle: { width: 46, height: 28, borderRadius: 14, backgroundColor: theme.borderStrong, padding: 3, justifyContent: "center" },
+  knob: { width: 22, height: 22, borderRadius: 11, backgroundColor: "#fff" },
+  knobOn: { alignSelf: "flex-end" },
+  segRow: { flexDirection: "row", flexWrap: "wrap", gap: 8, marginBottom: 6 },
+  segBtn: { paddingHorizontal: 14, paddingVertical: 8, borderRadius: 18, backgroundColor: theme.surface, borderWidth: 1, borderColor: theme.border },
+  segText: { color: theme.textSecondary, fontSize: 13, fontWeight: "700" },
   editTabs: { flexDirection: "row", gap: 4, backgroundColor: theme.surface, borderRadius: 14, padding: 4, marginBottom: 14, borderWidth: 1, borderColor: theme.border },
   editTab: { flex: 1, flexDirection: "row", alignItems: "center", justifyContent: "center", gap: 4, paddingVertical: 9, borderRadius: 10 },
   editTabOn: { backgroundColor: theme.surfaceAlt },

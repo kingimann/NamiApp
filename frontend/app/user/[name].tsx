@@ -12,6 +12,7 @@ import { useAuth } from "@/src/context/AuthContext";
 import { theme } from "@/src/theme";
 import { SOCIAL_BY_KEY, socialUrl, fmtBirthday } from "@/src/lib/socials";
 import { resolveAccent, accentGradient, normalizeLinkUrl, prettyLinkLabel } from "@/src/lib/profileCustomize";
+import { levelInfo } from "@/src/lib/points";
 import { AvatarFrame, ProfileBackground } from "@/src/components/ProfileDecor";
 import PostCard from "@/src/components/PostCard";
 import VerifiedBadge from "@/src/components/VerifiedBadge";
@@ -253,11 +254,21 @@ export default function UserProfileScreen() {
               {!!user.role && user.role !== "user" && (
                 <Text style={styles.roleTag}>{user.role === "admin" ? "ADMIN" : "MODERATOR"}</Text>
               )}
-              <View style={[styles.scorePill, { borderColor: accent + "55" }]} testID="user-score">
-                <Ionicons name="flame" size={14} color={accent} />
-                <Text style={[styles.scoreText, { color: accent }]}>{compactCount(user.points || 0)}</Text>
-                <Text style={styles.scoreLabel}>points</Text>
-              </View>
+              {user.show_points !== false && (
+                <TouchableOpacity
+                  style={[styles.scorePill, { borderColor: accent + "55" }]}
+                  activeOpacity={0.85}
+                  onPress={() => router.push("/leaderboard")}
+                  testID="user-score"
+                >
+                  <Ionicons name="flame" size={14} color={accent} />
+                  <Text style={[styles.scoreText, { color: accent }]}>{compactCount(user.points || 0)}</Text>
+                  <View style={[styles.levelBadge, { backgroundColor: accent }]}>
+                    <Text style={styles.levelBadgeText}>Lv {user.level || levelInfo(user.points || 0).level}</Text>
+                  </View>
+                  <Text style={styles.scoreLabel} numberOfLines={1}>{user.level_title || levelInfo(user.points || 0).title}</Text>
+                </TouchableOpacity>
+              )}
               {!!user.status && (
                 <View style={[styles.statusPillP, { borderColor: accent + "55" }]}>
                   <Text style={styles.statusPillText} numberOfLines={1}>{user.status}</Text>
@@ -587,9 +598,11 @@ const styles = StyleSheet.create({
     marginTop: -18, marginHorizontal: -18, marginBottom: 0,
   },
   headline: { color: theme.textSecondary, fontSize: 13.5, fontWeight: "600", textAlign: "center", marginTop: 2, paddingHorizontal: 20 },
-  scorePill: { flexDirection: "row", alignItems: "center", gap: 5, marginTop: 8, borderWidth: 1, borderRadius: 16, paddingHorizontal: 12, paddingVertical: 6, backgroundColor: theme.surfaceAlt },
+  scorePill: { flexDirection: "row", alignItems: "center", gap: 6, marginTop: 8, borderWidth: 1, borderRadius: 16, paddingHorizontal: 12, paddingVertical: 6, backgroundColor: theme.surfaceAlt, maxWidth: "90%" },
   scoreText: { fontSize: 14, fontWeight: "800" },
-  scoreLabel: { color: theme.textMuted, fontSize: 12, fontWeight: "600" },
+  scoreLabel: { color: theme.textSecondary, fontSize: 12, fontWeight: "700", flexShrink: 1 },
+  levelBadge: { borderRadius: 8, paddingHorizontal: 7, paddingVertical: 2 },
+  levelBadgeText: { color: "#fff", fontSize: 11, fontWeight: "800" },
   statusPillP: { marginTop: 8, borderWidth: 1, borderRadius: 16, paddingHorizontal: 12, paddingVertical: 6, backgroundColor: theme.surfaceAlt, maxWidth: "90%" },
   statusPillText: { color: theme.textPrimary, fontSize: 13, fontWeight: "600" },
   interestWrap: { flexDirection: "row", flexWrap: "wrap", justifyContent: "center", gap: 7, marginTop: 10 },

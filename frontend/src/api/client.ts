@@ -60,7 +60,8 @@ async function request<T>(path: string, opts: RequestInit = {}): Promise<T> {
 
 export const api = {
   me: () => request<User>("/auth/me"),
-  presencePing: () => request<{ ok: boolean }>("/presence/ping", { method: "POST" }),
+  presencePing: () => request<{ ok: boolean; awarded?: number }>("/presence/ping", { method: "POST" }),
+  pointsLeaderboard: () => request<{ leaders: LeaderboardEntry[] }>("/points/leaderboard"),
   listBadges: () => request<Badge[]>("/badges"),
   adminCreateBadge: (body: { label: string; icon: string; color?: string }) =>
     request<Badge>("/admin/badges", { method: "POST", body: JSON.stringify(body) }),
@@ -1104,8 +1105,14 @@ export type User = {
   is_private?: boolean;
   searchable?: boolean;
   hide_online?: boolean;
+  tag_policy?: string; // everyone | followers | nobody
+  connections_visibility?: string; // everyone | followers | nobody
+  hide_likes?: boolean;
   needs_policy_agreement?: boolean;
   points?: number;
+  level?: number;
+  level_title?: string;
+  show_points?: boolean;
 };
 export type ProfilePatch = {
   name?: string; bio?: string; picture?: string;
@@ -1136,6 +1143,7 @@ export type ProfilePatch = {
   searchable?: boolean;
   hide_online?: boolean;
   sms_notifications?: boolean;
+  show_points?: boolean;
 };
 // /auth/login returns either a session (success) or a two-factor challenge.
 export type TwofaChallenge = {
@@ -1297,6 +1305,22 @@ export type PublicUser = {
   friend_status?: FriendStatus;
   poked_me?: boolean;
   points?: number;
+  level?: number;
+  level_title?: string;
+  show_points?: boolean;
+};
+export type LeaderboardEntry = {
+  rank: number;
+  user_id: string;
+  name: string;
+  username?: string | null;
+  picture?: string | null;
+  avatar_frame?: string | null;
+  verified?: boolean;
+  points: number;
+  level: number;
+  level_title: string;
+  is_me?: boolean;
 };
 export type Circle = {
   id: string;

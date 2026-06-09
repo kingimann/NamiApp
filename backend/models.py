@@ -62,10 +62,13 @@ class User(BaseModel):
     connections_visibility: str = "everyone"  # who can see your followers/following: everyone | followers | nobody
     hide_likes: bool = False             # hide the list of posts you've liked from others
     tag_policy: str = "everyone"         # who can tag/mention you in a post: everyone | followers | nobody
+    show_points: bool = True             # show your activity points/score on your profile
     muted_keywords: List[str] = []       # feed filter: hide posts whose text/hashtags match any of these
     boost_keywords: List[str] = []       # feed prioritize: surface posts whose text/hashtags match these higher
     needs_policy_agreement: bool = False  # must accept current ToS/Privacy before use
     points: int = 0                       # Snapscore-style activity points
+    level: int = 1                        # derived level from points
+    level_title: str = ""                 # title for the current level
     created_at: datetime
 
 
@@ -94,6 +97,7 @@ class PublicUser(BaseModel):
     featured_links: List[dict] = []
     avatar_frame: Optional[str] = None
     profile_background: Optional[str] = None
+    show_points: bool = True
     verified: bool = False
     phone_verified: bool = False
     email_verified: bool = False
@@ -111,6 +115,8 @@ class PublicUser(BaseModel):
     friend_status: str = "none"  # none | request_sent | request_received | friends
     poked_me: bool = False        # this user has an active poke waiting for the viewer
     points: int = 0               # Snapscore-style activity points
+    level: int = 1                # derived level from points
+    level_title: str = ""         # title for the current level
 
 
 class AdminUserPatch(BaseModel):
@@ -159,6 +165,7 @@ class ProfilePatch(BaseModel):
     tag_policy: Optional[str] = None              # who can tag you: everyone | followers | nobody
     muted_keywords: Optional[List[str]] = None    # feed keyword/topic filters
     boost_keywords: Optional[List[str]] = None     # feed topics to prioritize
+    show_points: Optional[bool] = None             # show your points/score on profile
     currency: Optional[str] = None   # preferred display currency (USD, EUR, ...)
     sms_notifications: Optional[bool] = None  # mirror notifications to SMS (needs verified phone)
 

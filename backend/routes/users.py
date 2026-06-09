@@ -11,6 +11,7 @@ from db import DuplicateKeyError
 from core import (
     _public_user, db, get_current_user, is_admin, _effective_role, _norm_dt,
     SUBSCRIPTION_TIERS, SUBSCRIPTION_TIERS_BY_ID, _invalidate_badge_cache,
+    level_info,
 )
 from services.email import send_email
 from models import AdminUserPatch, Badge, PublicUser, Tip, TipCreate, WalletSummary, WalletTxn
@@ -655,6 +656,39 @@ async def presence_ping(authorization: Optional[str] = Header(None)):
     return {"ok": True, "awarded": ACTIVE_POINTS_PER_TICK if award else 0}
 
 
+@router.get("/points/leaderboard")
+async def points_leaderboard(authorization: Optional[str] = Header(None)):
+    """Top users by activity points (Snapscore leaderboard)."""
+    me = await get_current_user(authorization)
+    rows = await db.users.find(
+        {"points": {"$gt": 0}},
+        {"_id": 0, "user_id": 1, "name": 1, "username": 1, "picture": 1,
+         "points": 1, "show_points": 1, "banned": 1, "verified": 1, "avatar_frame": 1},
+    ).sort("points", -1).limit(150).to_list(150)
+    leaders = []
+    for r in rows:
+        # Respect hidden scores and banned accounts (but always include yourself).
+        if r["user_id"] != me["user_id"] and (r.get("banned") or r.get("show_points") is False):
+            continue
+        li = level_info(r.get("points", 0))
+        leaders.append({
+            "rank": len(leaders) + 1,
+            "user_id": r["user_id"],
+            "name": r.get("name", ""),
+            "username": r.get("username"),
+            "picture": r.get("picture"),
+            "avatar_frame": r.get("avatar_frame"),
+            "verified": bool(r.get("verified", False)),
+            "points": int(r.get("points", 0) or 0),
+            "level": li["level"],
+            "level_title": li["title"],
+            "is_me": r["user_id"] == me["user_id"],
+        })
+        if len(leaders) >= 50:
+            break
+    return {"leaders": leaders}
+
+
 @router.get("/users/search", response_model=List[PublicUser])
 async def search_users(
     q: str = Query(..., min_length=1),
@@ -710,10 +744,15 @@ async def toggle_follow(user_id: str, authorization: Optional[str] = Header(None
             "follower_id": me["user_id"], "followee_id": user_id,
             "created_at": datetime.now(timezone.utc),
         })
-        # notify the followee
+        # notify the followee + award them points for gaining a follower
         try:
             from routes.notifications import emit_notification
             await emit_notification(user_id=user_id, actor_id=me["user_id"], ntype="follow")
+        except Exception:
+            pass
+        try:
+            from core import award_points, POINTS_PER_FOLLOWER
+            await award_points(user_id, POINTS_PER_FOLLOWER)
         except Exception:
             pass
     except DuplicateKeyError:
