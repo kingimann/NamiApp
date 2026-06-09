@@ -2,9 +2,9 @@
 
 ## Render (recommended)
 `render.yaml` is a Render **Blueprint** that provisions:
-- a managed **Postgres** database (`nampo-db`),
-- the **FastAPI API** from `backend/Dockerfile` (`nampo-backend`, with a `/health` check and `autoDeploy`),
-- the **Expo web build** as a static site (`nampo-web`).
+- a managed **Postgres** database (`okayspace-db`),
+- the **FastAPI API** from `backend/Dockerfile` (`okayspace`, with a `/health` check and `autoDeploy`),
+- the **Expo web build** as a static site (`okayspace-web`).
 
 `DATABASE_URL` is injected automatically (`fromDatabase`). The static site gets `EXPO_PUBLIC_BACKEND_URL` + `EXPO_PUBLIC_MAPBOX_TOKEN` (and optional `EXPO_PUBLIC_CLOUDINARY_*`). Add the secret env vars from **[[Configuration]]** in the Render dashboard (or manage them in-app via **[[Admin Tools]]** once `RENDER_API_KEY` is set).
 

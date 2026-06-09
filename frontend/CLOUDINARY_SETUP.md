@@ -20,7 +20,7 @@ Cloudinary; when they're unset it transparently falls back to the base64 path.
 
 Both are public `EXPO_PUBLIC_` vars baked into the build.
 
-**Web (Render):** in the `nampo-web` static site → Environment, add:
+**Web (Render):** in the `okayspace-web` static site → Environment, add:
 ```
 EXPO_PUBLIC_CLOUDINARY_CLOUD_NAME   = your-cloud-name
 EXPO_PUBLIC_CLOUDINARY_UPLOAD_PRESET = your-unsigned-preset

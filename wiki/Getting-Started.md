@@ -16,7 +16,7 @@ The backend and frontend run as two separate processes.
 cd backend
 pip install -r requirements.txt              # a virtualenv is recommended
 
-export DATABASE_URL="postgresql://user:password@localhost:5432/nampo"
+export DATABASE_URL="postgresql://user:password@localhost:5432/okayspace"
 # Optional, e.g.:
 # export MESSAGE_ENC_KEY="$(python -c 'from cryptography.fernet import Fernet;print(Fernet.generate_key().decode())')"
 

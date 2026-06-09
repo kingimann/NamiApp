@@ -15,7 +15,7 @@ import { theme } from "@/src/theme";
 const webInput = Platform.OS === "web" ? ({ outlineStyle: "none" } as object) : {};
 
 const SDK_SNIPPET = `<!-- Build a whole 3D game with the OkaySpace API (Three.js is bundled) -->
-<script src="https://nampo-backend.onrender.com/api/pub/games/sdk.js"></script>
+<script src="https://okayspace.onrender.com/api/pub/games/sdk.js"></script>
 <script>
   NamiGames.create3D({
     background: 0x101018,
