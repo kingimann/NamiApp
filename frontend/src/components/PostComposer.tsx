@@ -6,7 +6,7 @@ import {
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { Ionicons } from "@expo/vector-icons";
 import * as ImagePicker from "expo-image-picker";
-import { api, Post, PostMedia, Draft, mediaUri } from "@/src/api/client";
+import { api, Post, PostMedia, Draft, PublicUser, mediaUri } from "@/src/api/client";
 import { cloudinaryEnabled, uploadToCloudinary } from "@/src/api/cloudinary";
 import { pickThumbnailUri } from "@/src/utils/thumbnail";
 import ReelPoster from "@/src/components/ReelPoster";
@@ -29,6 +29,16 @@ type Props = {
 const MAX_MEDIA = 4;
 const MAX_MEDIA_BYTES = 25 * 1024 * 1024; // mirrors the backend per-item limit
 const TEXT_MAX = 500;
+
+// Find an in-progress "@handle" token ending at the cursor (so we can offer
+// autocomplete). Returns the @ position + the partial handle, or null.
+function activeMentionAt(t: string, cursor: number): { start: number; query: string } | null {
+  const upto = t.slice(0, Math.max(0, cursor));
+  const m = upto.match(/(?:^|\s)@([\w.]{1,30})$/);
+  return m ? { start: cursor - m[1].length - 1, query: m[1] } : null;
+}
+function escapeRe(s: string): string { return s.replace(/[.*+?^${}()|[\]\\]/g, "\\$&"); }
+
 const COMMENT_POLICIES = [
   { k: "everyone", label: "Everyone", icon: "earth-outline" },
   { k: "followers", label: "Followers", icon: "people-outline" },
@@ -65,6 +75,10 @@ export default function PostComposer({
   }, []);
   const [text, setText] = useState("");
   const [media, setMedia] = useState<PostMedia[]>([]);
+  // @mention tagging: track tagged users + the live autocomplete.
+  const [tagged, setTagged] = useState<PublicUser[]>([]);
+  const [sel, setSel] = useState({ start: 0, end: 0 });
+  const [mentions, setMentions] = useState<PublicUser[]>([]);
   const [submitting, setSubmitting] = useState(false);
   const [processing, setProcessing] = useState(false);
   const [coverBusy, setCoverBusy] = useState(false);
@@ -209,12 +223,40 @@ export default function PostComposer({
       setCommentPolicy("everyone");
       setSubTier(0);
       setThread([]);
+      setTagged([]);
+      setMentions([]);
       setDraftId(null);
       setDiscardOpen(false);
       setDraftsOpen(false);
       api.listDrafts().then(setDrafts).catch(() => {});
     }
   }, [visible, editing]);
+
+  // @mention autocomplete: search users for the handle being typed at the cursor.
+  useEffect(() => {
+    const am = activeMentionAt(text, sel.start);
+    if (!am) { setMentions([]); return; }
+    const t = setTimeout(async () => {
+      try { setMentions((await api.searchUsers(am.query)).slice(0, 6)); }
+      catch { setMentions([]); }
+    }, 220);
+    return () => clearTimeout(t);
+  }, [text, sel.start]);
+
+  // Insert "@username " at the active mention token and remember the user.
+  const insertMention = (u: PublicUser) => {
+    const am = activeMentionAt(text, sel.start);
+    if (!am) return;
+    const handle = (u.username || u.name || "").replace(/\s+/g, "");
+    const next = (text.slice(0, am.start) + "@" + handle + " " + text.slice(sel.start)).slice(0, TEXT_MAX);
+    setText(next);
+    setTagged((arr) => (arr.some((x) => x.user_id === u.user_id) ? arr : [...arr, u]));
+    setMentions([]);
+  };
+
+  // Tagged users still referenced in the text (the user may have deleted a mention).
+  const mentionedIds = (t: string): string[] =>
+    tagged.filter((u) => new RegExp(`@${escapeRe(u.username || u.name || "")}\\b`, "i").test(t)).map((u) => u.user_id);
 
   const pickMedia = async (target: "root" | number = "root") => {
     if (mediaCountOf(target) >= MAX_MEDIA) {
@@ -365,6 +407,7 @@ export default function PostComposer({
 
   const submit = async () => {
     const t = text.trim();
+    const taggedIds = mentionedIds(t);
     const validPoll = showPoll && pollOptions.filter((o) => o.trim()).length >= 2;
     if (!t && media.length === 0 && !quoting && !validPoll) return;
     setSubmitting(true);
@@ -393,6 +436,7 @@ export default function PostComposer({
             options: pollOptions.map((o) => o.trim()).filter(Boolean),
             duration_hours: pollHours,
           } : undefined,
+          ...(taggedIds.length ? { tagged_user_ids: taggedIds } : {}),
           ...(showPrivacy ? { likes_disabled: likesOff, comment_policy: commentPolicy, min_sub_tier: subTier } : {}),
         });
       }
@@ -481,12 +525,38 @@ export default function PostComposer({
               style={styles.input}
               value={text}
               onChangeText={(s) => setText(s.slice(0, TEXT_MAX))}
-              placeholder={replyTo ? "Post your reply" : media.some((m) => m.type === "video") ? "Add a description for your reel…" : "What's happening?"}
+              onSelectionChange={(e) => setSel(e.nativeEvent.selection)}
+              placeholder={replyTo ? "Post your reply" : media.some((m) => m.type === "video") ? "Add a description for your reel…" : "What's happening? Tag friends with @"}
               placeholderTextColor={theme.textMuted}
               multiline
               autoFocus
               testID="composer-text"
             />
+
+            {mentions.length > 0 && (
+              <View style={styles.mentionBox}>
+                {mentions.map((u) => (
+                  <TouchableOpacity
+                    key={u.user_id}
+                    style={styles.mentionRow}
+                    onPress={() => insertMention(u)}
+                    testID={`mention-${u.user_id}`}
+                  >
+                    {u.picture ? (
+                      <Image source={{ uri: u.picture }} style={styles.mentionAvatar} />
+                    ) : (
+                      <View style={[styles.mentionAvatar, styles.mentionAvatarFallback]}>
+                        <Text style={styles.mentionInit}>{(u.name?.[0] || "?").toUpperCase()}</Text>
+                      </View>
+                    )}
+                    <View style={{ flex: 1 }}>
+                      <Text style={styles.mentionName} numberOfLines={1}>{u.name}</Text>
+                      {!!u.username && <Text style={styles.mentionHandle} numberOfLines={1}>@{u.username}</Text>}
+                    </View>
+                  </TouchableOpacity>
+                ))}
+              </View>
+            )}
 
             {(media.length > 0 || processing) && (
               <View style={styles.mediaRow}>
@@ -908,6 +978,13 @@ const styles = StyleSheet.create({
     textAlignVertical: "top",
     ...(Platform.OS === "web" ? ({ outlineStyle: "none" } as object) : {}),
   },
+  mentionBox: { backgroundColor: theme.surface, borderWidth: 1, borderColor: theme.border, borderRadius: 12, overflow: "hidden", marginTop: 2, marginBottom: 8 },
+  mentionRow: { flexDirection: "row", alignItems: "center", gap: 10, paddingHorizontal: 12, paddingVertical: 9, borderBottomWidth: StyleSheet.hairlineWidth, borderBottomColor: theme.border },
+  mentionAvatar: { width: 34, height: 34, borderRadius: 17, backgroundColor: theme.surfaceAlt },
+  mentionAvatarFallback: { alignItems: "center", justifyContent: "center" },
+  mentionInit: { color: theme.textPrimary, fontSize: 14, fontWeight: "800" },
+  mentionName: { color: theme.textPrimary, fontSize: 14, fontWeight: "700" },
+  mentionHandle: { color: theme.textMuted, fontSize: 12, marginTop: 1 },
   mediaRow: { flexDirection: "row", flexWrap: "wrap", gap: 8, marginTop: 8, paddingBottom: 12 },
   threadPart: {
     flexDirection: "row", gap: 10,
