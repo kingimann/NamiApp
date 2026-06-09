@@ -108,6 +108,7 @@ async def init_pool() -> None:
         ("story_views", "uniq_story_views", "((doc ->> 'story_id'), (doc ->> 'viewer_id'))", ["story_id", "viewer_id"]),
         ("ad_hides", "uniq_ad_hides", "((doc ->> 'viewer_id'), (doc ->> 'post_id'))", ["viewer_id", "post_id"]),
         ("profile_view_payouts", "uniq_profile_view_payouts", "((doc ->> 'user_id'), (doc ->> 'milestone'))", ["user_id", "milestone"]),
+        ("community_karma", "uniq_community_karma", "((doc ->> 'post_id'), (doc ->> 'voter_id'))", ["post_id", "voter_id"]),
     ]
     async with _real_db._pool.acquire() as conn:
         for table, idx, cols, keys in _DEDUP_UNIQUE_INDEXES:
@@ -457,6 +458,7 @@ POINTS_PER_POST = 5
 POINTS_PER_STORY = 3
 POINTS_PER_MESSAGE = 1
 POINTS_PER_FOLLOWER = 4   # awarded to a user when someone follows them
+POINTS_PER_UPVOTE = 2     # community karma: per upvote on your community post
 
 
 async def award_points(user_id: str, n: int) -> None:

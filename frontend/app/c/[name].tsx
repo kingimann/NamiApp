@@ -182,7 +182,9 @@ export default function CommunityScreen() {
                   </View>
                   <View style={{ flex: 1 }}>
                     <Text style={styles.cTitle}>{community.title}</Text>
-                    <Text style={styles.cMeta}>{community.member_count || 0} members · {community.post_count || 0} posts</Text>
+                    <TouchableOpacity onPress={() => router.push({ pathname: "/c/[name]/members", params: { name: community.name } })} testID="community-members-link">
+                      <Text style={styles.cMeta}>{community.member_count || 0} members · {community.post_count || 0} posts ›</Text>
+                    </TouchableOpacity>
                   </View>
                   {community.can_moderate && (
                     <TouchableOpacity style={styles.gearBtn} onPress={openEdit} testID="community-edit">

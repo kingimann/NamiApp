@@ -1098,6 +1098,7 @@ async def _apply_reaction(post_id: str, user: dict, emoji: str) -> Post:
     # SELECT ... FOR UPDATE) instead of clobbering a $set of the whole recomputed
     # dict. _reaction_list already hides any key left at <= 0.
     inc: dict = {}
+    new_reaction = False
 
     existing = await db.post_reactions.find_one({"post_id": post_id, "user_id": uid}, {"_id": 0})
     if existing and existing.get("emoji") == emoji:
@@ -1125,6 +1126,7 @@ async def _apply_reaction(post_id: str, user: dict, emoji: str) -> Post:
             })
             inc[f"reactions.{emoji}"] = inc.get(f"reactions.{emoji}", 0) + 1
             inc["likes_count"] = inc.get("likes_count", 0) + 1
+            new_reaction = True
             await emit_notification(
                 user_id=doc["user_id"], actor_id=uid, ntype="like",
                 post_id=post_id, message=f"{emoji} {(doc.get('text') or '')[:120]}".strip(),
@@ -1133,6 +1135,18 @@ async def _apply_reaction(post_id: str, user: dict, emoji: str) -> Post:
             pass
     if inc:
         await db.posts.update_one({"id": post_id}, {"$inc": inc})
+    # Community karma → points: a 👍 on someone's community post earns the author
+    # points, once per voter ever (the unique index prevents toggle-farming).
+    if new_reaction and emoji == "👍" and doc.get("community_id") and doc["user_id"] != uid:
+        try:
+            await db.community_karma.insert_one({
+                "post_id": post_id, "voter_id": uid,
+                "created_at": datetime.now(timezone.utc),
+            })
+            from core import award_points, POINTS_PER_UPVOTE
+            await award_points(doc["user_id"], POINTS_PER_UPVOTE)
+        except DuplicateKeyError:
+            pass
     updated = await db.posts.find_one({"id": post_id}, {"_id": 0})
     return await _hydrate_post(updated, uid)
 

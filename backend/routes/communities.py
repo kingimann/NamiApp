@@ -184,6 +184,59 @@ async def remove_moderator(name: str, user_id: str, authorization: Optional[str]
     return {"ok": True}
 
 
+@router.get("/communities/{name}/members")
+async def list_members(name: str, authorization: Optional[str] = Header(None)):
+    """List a community's members with their roles (owner/mod/member)."""
+    await get_current_user(authorization)
+    doc = await db.communities.find_one({"name": name.lower()}, {"_id": 0, "id": 1, "owner_id": 1})
+    if not doc:
+        raise HTTPException(status_code=404, detail="Community not found")
+    rows = await db.community_members.find(
+        {"community_id": doc["id"]}, {"_id": 0, "user_id": 1, "role": 1, "joined_at": 1}
+    ).limit(500).to_list(500)
+    ids = [r["user_id"] for r in rows]
+    users = {}
+    if ids:
+        urows = await db.users.find(
+            {"user_id": {"$in": ids}},
+            {"_id": 0, "user_id": 1, "name": 1, "username": 1, "picture": 1, "verified": 1, "avatar_frame": 1},
+        ).to_list(len(ids))
+        users = {u["user_id"]: u for u in urows}
+    # owner first, then mods, then members
+    rank = {"owner": 0, "mod": 1, "member": 2}
+    rows.sort(key=lambda r: rank.get(r.get("role"), 3))
+    out = []
+    for r in rows:
+        u = users.get(r["user_id"], {})
+        out.append({
+            "user_id": r["user_id"],
+            "name": u.get("name", ""),
+            "username": u.get("username"),
+            "picture": u.get("picture"),
+            "avatar_frame": u.get("avatar_frame"),
+            "verified": bool(u.get("verified", False)),
+            "role": r.get("role", "member"),
+        })
+    return {"members": out}
+
+
+@router.delete("/communities/{name}/members/{user_id}")
+async def remove_member(name: str, user_id: str, authorization: Optional[str] = Header(None)):
+    """Moderator removes a member from the community."""
+    user = await get_current_user(authorization)
+    doc = await _require_moderator(name, user)
+    if user_id == doc["owner_id"]:
+        raise HTTPException(status_code=400, detail="The owner can't be removed")
+    # Only the owner can remove a fellow moderator.
+    target = await db.community_members.find_one(
+        {"community_id": doc["id"], "user_id": user_id}, {"_id": 0, "role": 1}
+    )
+    if target and target.get("role") == "mod" and doc["owner_id"] != user["user_id"]:
+        raise HTTPException(status_code=403, detail="Only the owner can remove a moderator")
+    await db.community_members.delete_one({"community_id": doc["id"], "user_id": user_id})
+    return {"ok": True}
+
+
 @router.post("/communities/{name}/posts/{post_id}/remove")
 async def remove_community_post(name: str, post_id: str, authorization: Optional[str] = Header(None)):
     """Moderator removes a post from the community."""
