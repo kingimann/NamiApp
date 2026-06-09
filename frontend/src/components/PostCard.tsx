@@ -278,7 +278,12 @@ export default function PostCard({
         <Text style={styles.communityTag}>/{display.community_name}</Text>
       )}
       {!!display.title && (
-        <Text style={styles.threadTitle}>{display.title}</Text>
+        <View style={{ flexDirection: "row", alignItems: "center", flexWrap: "wrap", gap: 6 }}>
+          {!!display.flair && (
+            <View style={styles.flairTag}><Text style={styles.flairTagText}>{display.flair}</Text></View>
+          )}
+          <Text style={[styles.threadTitle, { flexShrink: 1 }]}>{display.title}</Text>
+        </View>
       )}
 
       {display.locked && (
@@ -755,6 +760,8 @@ const styles = StyleSheet.create({
   paywallBtnText: { color: "#fff", fontSize: 14, fontWeight: "800" },
   communityTag: { color: theme.primary, fontSize: 12, fontWeight: "800", marginBottom: 2 },
   threadTitle: { color: theme.textPrimary, fontSize: 16, fontWeight: "800", lineHeight: 21, marginBottom: 3 },
+  flairTag: { backgroundColor: theme.primary + "22", borderRadius: 6, paddingHorizontal: 7, paddingVertical: 2, marginBottom: 3 },
+  flairTagText: { color: theme.primary, fontSize: 11, fontWeight: "800" },
   placeRow: {
     flexDirection: "row", alignItems: "center", gap: 5,
     backgroundColor: theme.surfaceAlt, borderRadius: 8,

@@ -93,7 +93,14 @@ over REST + WebSockets to a **FastAPI** server (`backend/`) backed by
 - Spam protection: a hidden **honeypot** field + a per-IP **rate limit**
 
 ### Profile, settings & legal
-- Profiles with avatar, bio, username, and home/work saved locations; **ready-made default avatars** auto-assigned at sign-up
+- Profiles with avatar, bio, username, and home/work saved locations
+- **Deep profile customization** (Edit profile is organized into **Basics / Look / About / Links / Privacy** tabs):
+  - **Avatar gallery** — a huge multi-style avatar picker (14 DiceBear art styles) with a **Shuffle** for effectively unlimited options, or upload your own
+  - **Look**: a **cover/banner photo**, an **accent color** (curated palette + custom hex), **one-tap theme presets**, **Steam-style avatar frames** (gradient rings) and **full-profile backgrounds**
+  - **About**: a short **status** (emoji + text), a **headline** tagline, pronouns, location, birthday, and **interest tags**
+  - **Links**: social links + a **link-in-bio** list of featured links
+  - **Privacy tab**: private account, appear-in-search, show active status, show points, and who-can **message / comment / tag / see-connections**, all in one place
+- **Activity points (Snapscore-style)** — earn points for being active and creating content (posting, stories, messages, gaining followers), shown as a flame **points + level** card with progress; **level tiers** (Newcomer → Mythic) and a **global leaderboard** (`/leaderboard`)
 - **Verified blue checkmark** across posts, comments, and profiles
 - **Per-post privacy**: who can comment (everyone/followers/friends/nobody), likes off, and viewer list
 - **Privacy controls**: default comment policy, disable likes, hide the stories row, chat-button position, **activity status** (green "active now" dot), and **read receipts** toggles
@@ -125,7 +132,7 @@ over REST + WebSockets to a **FastAPI** server (`backend/`) backed by
 
 ### Discovery
 - User search, saved **places** + **recents**, **guides** (curated, optionally public/cloneable collections with shareable slugs), place **reviews** (1–5★)
-- **Communities (forum)**: Reddit-style — create/discover, join/leave, post threads, vote, comment, sort **Hot / New / Top**
+- **Communities (forum)**: Reddit-style — create/discover, join/leave, post threads, up/down-vote, comment, and sort **Hot / New / Top / Rising** (real time-decayed "hot" ranking). Each community has a **banner**, editable **rules**, and **post flairs** (filterable); **moderators** (owner can promote members) can **remove** and **pin** posts and edit community settings
 - **Groups**: public/private chat communities with posts, pinned posts, join requests, and member roles — distinct from the forum
 - Notifications feed (unread counts, mark-as-read)
 
@@ -265,7 +272,7 @@ NamiApp/
     │   ├── login.tsx, auth.tsx, legal/        # auth + ToS/Privacy
     │   ├── chat/[id].tsx, call/               # conversation + voice/video call
     │   ├── reels.tsx, story/[userId].tsx      # reels + story viewer
-    │   ├── post/[id].tsx, hashtag/[tag].tsx, bookmarks.tsx, notifications.tsx
+    │   ├── post/[id].tsx, hashtag/[tag].tsx, bookmarks.tsx, notifications.tsx, leaderboard.tsx
     │   ├── communities.tsx, c/[name].tsx      # forum: discover + community page
     │   ├── group/[id]/...                     # chat group detail + members
     │   ├── listing/, seller/, my-listings.tsx # marketplace
@@ -443,14 +450,14 @@ require an `Authorization: Bearer <session token | API key>` header.
 | Route group | Base paths (examples) | What it does |
 | --- | --- | --- |
 | **Auth** | `/auth/register`, `/auth/login`(+`/2fa`,`/phone`), `/auth/me`, `/auth/logout`, `/auth/username`, `/auth/me/email\|password\|phone`, `/auth/forgot-password{,/sms}`, `/auth/reset-password{,/code}`, `/auth/recover-password`, `/auth/api-keys`, `/policies`, `/auth/accept-policies` | Email/username + password auth (bcrypt, session tokens), **SMS 2FA**, **phone OTP login**, phone verification, password reset by email/SMS, developer **API keys**, ToS/Privacy acceptance. |
-| **Users** | `/users/search`, `/users/{id}/public`, `/users/{id}/follow`, `/friends/*`, `/users/{id}/tip\|subscribe`, `/wallet`, `/admin/users/{id}` | Search, public profiles, follow/friends, **tips & subscriptions**, the creator **wallet**, and admin verify/role/ban/suspend + audit. |
+| **Users** | `/users/search`, `/users/{id}/public`, `/users/{id}/follow`, `/friends/*`, `/users/{id}/tip\|subscribe`, `/wallet`, `/presence/ping`, `/points/leaderboard`, `/admin/users/{id}` | Search, public profiles, follow/friends, **tips & subscriptions**, the creator **wallet**, **activity points + leaderboard**, and admin verify/role/ban/suspend + audit. |
 | **Posts / Feed** | `/posts`, `/feed/home\|explore\|reels`, `/posts/{id}/like\|dislike\|repost\|bookmark\|vote\|view\|promote\|report\|pin`, `/posts/{id}/replies\|thread`, `/drafts`, `/bookmarks`, `/hashtags/{tag}` | Posts, feeds, full comment threads, likes/dislikes, reposts/quotes, bookmarks, polls, views, promotion, reporting, pinning, hashtags, and **post drafts**. |
 | **Stories** | `/stories`, `/stories/tray`, `/stories/{id}/view\|viewers\|reply` | 24h stories, tray, views, viewer lists, replies. |
 | **Messaging** | `/conversations`, `/conversations/groups`, `/conversations/{id}/messages`(+`/react`,`/read`,`/presence`), `/emojis` | DMs & group chats; text/place/media/voice/gif/file/contact/post; reactions, edits, receipts, presence, custom emoji. |
 | **Calls / Push** | `/calls/{id}/token\|ring`, `/push/register` | LiveKit room tokens + ring; device push-token registration. |
 | **Maps** | `/eta`(+`/update`,`/stop`), `/public/eta/{id}`, **WS** `/ws/eta/{id}`, `/foursquare/match`, `/transit/nearby` | Live ETA shares (REST + WS + public read), Foursquare business profiles, transit departures. |
 | **Marketplace** | `/listings?lat&lng&radius_km&sort`, `/listings/{id}`(+`/contact`,`/save`), `/marketplace/users/{id}` | Listings, location/radius browse, save, seller profiles & reviews, start a DM. |
-| **Communities / Groups** | `/communities`(+`/{name}/join\|posts`), `/groups`(+`/{id}/join\|posts\|pins\|requests\|members/*`) | Reddit-style forum (Hot/New/Top) and public/private chat groups. |
+| **Communities / Groups** | `/communities`(+`/{name}` PATCH,`/{name}/join\|posts\|mods/{id}\|posts/{id}/remove\|pin`), `/groups`(+`/{id}/join\|posts\|pins\|requests\|members/*`) | Reddit-style forum (Hot/New/Top/Rising, rules, flairs, banner, moderators) and public/private chat groups. |
 | **Roadside** | `/roadside/requests`(+`/{id}/accept\|decline\|enroute\|arrived\|cancel`), `/roadside/admin/calls`, `/admin/roadside/*` | Request roadside help, helper accept/decline + en route/on location (GPS-gated), photo AI moderation, **daily call numbers**, **admin dispatch** (create/search/view calls), staff verification. |
 | **Support** | `/support/tickets`(+`/{id}/messages`), `/admin/support/*` | Open tickets/disputes, message staff, admin triage/resolve. |
 | **Forms** | `/forms`(+`/{id}`,`/{id}/submissions{,.csv}`), `/pub/form`, `/pub/form-submit`, `/pub/form-embed.js`, `/pub/form-unit` | Build forms, list/export responses, and public (no-auth) render/submit/themeable embeds. |

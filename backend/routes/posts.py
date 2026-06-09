@@ -419,6 +419,7 @@ async def _hydrate_post(doc: dict, viewer_id: Optional[str]) -> Post:
         community_id=doc.get("community_id"),
         community_name=_community_name,
         title=doc.get("title"),
+        flair=doc.get("flair"),
         factcheck=None if locked else doc.get("factcheck"),
         created_at=doc["created_at"],
     )
@@ -456,8 +457,9 @@ async def create_post(body: PostCreate, authorization: Optional[str] = Header(No
     has_poll = bool(body.poll and (body.poll.options or []))
     title = (body.title or "").strip()[:200] or None
     community_id = None
+    flair = None
     if body.community_id:
-        comm = await db.communities.find_one({"id": body.community_id}, {"_id": 0, "id": 1})
+        comm = await db.communities.find_one({"id": body.community_id}, {"_id": 0, "id": 1, "flairs": 1})
         if not comm:
             raise HTTPException(status_code=404, detail="Community not found")
         if not is_admin(user) and not await db.community_members.find_one(
@@ -465,6 +467,11 @@ async def create_post(body: PostCreate, authorization: Optional[str] = Header(No
         ):
             raise HTTPException(status_code=403, detail="Join the community to post here")
         community_id = body.community_id
+        # Only accept a flair the community actually offers.
+        if body.flair:
+            f = body.flair.strip()[:24]
+            if f in (comm.get("flairs") or []):
+                flair = f
     if not text and not media and not has_quote and not has_poll and not title:
         raise HTTPException(status_code=400, detail="Empty post")
     parent_id = None
@@ -551,6 +558,7 @@ async def create_post(body: PostCreate, authorization: Optional[str] = Header(No
         "hashtags": hashtags,
         "community_id": community_id,
         "title": title,
+        "flair": flair,
         "likes_disabled": likes_disabled,
         "comment_policy": comment_policy,
         "min_sub_tier": min_sub_tier,

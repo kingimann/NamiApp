@@ -723,11 +723,22 @@ export const api = {
   // Communities (forum)
   listCommunities: (q?: string) => request<Community[]>(`/communities${q ? `?q=${encodeURIComponent(q)}` : ""}`),
   getCommunity: (name: string) => request<Community>(`/communities/${name}`),
-  createCommunity: (body: { name: string; title?: string; description?: string; color?: string; icon?: string }) =>
+  createCommunity: (body: { name: string; title?: string; description?: string; color?: string; icon?: string; rules?: string[]; flairs?: string[]; banner?: string | null }) =>
     request<Community>("/communities", { method: "POST", body: JSON.stringify(body) }),
+  updateCommunity: (name: string, body: CommunityPatch) =>
+    request<Community>(`/communities/${name}`, { method: "PATCH", body: JSON.stringify(body) }),
+  addCommunityMod: (name: string, userId: string) =>
+    request<{ ok: boolean }>(`/communities/${name}/mods/${userId}`, { method: "POST" }),
+  removeCommunityMod: (name: string, userId: string) =>
+    request<{ ok: boolean }>(`/communities/${name}/mods/${userId}`, { method: "DELETE" }),
+  removeCommunityPost: (name: string, postId: string) =>
+    request<{ ok: boolean }>(`/communities/${name}/posts/${postId}/remove`, { method: "POST" }),
+  pinCommunityPost: (name: string, postId: string) =>
+    request<{ pinned: boolean }>(`/communities/${name}/posts/${postId}/pin`, { method: "POST" }),
   joinCommunity: (name: string) => request<{ joined: boolean }>(`/communities/${name}/join`, { method: "POST" }),
   leaveCommunity: (name: string) => request<{ joined: boolean }>(`/communities/${name}/join`, { method: "DELETE" }),
-  communityPosts: (name: string, sort = "hot") => request<Post[]>(`/communities/${name}/posts?sort=${sort}`),
+  communityPosts: (name: string, sort = "hot", flair?: string) =>
+    request<Post[]>(`/communities/${name}/posts?sort=${sort}${flair ? `&flair=${encodeURIComponent(flair)}` : ""}`),
   listUserPosts: (uid: string) => request<Post[]>(`/posts/user/${uid}`),
   homeFeed: () => request<Post[]>("/feed/home"),
   exploreFeed: () => request<Post[]>("/feed/explore"),
@@ -1791,6 +1802,7 @@ export type Post = {
   promoted?: boolean; promoted_until?: string | null;
   pinned?: boolean;
   community_id?: string | null; community_name?: string | null; title?: string | null;
+  flair?: string | null;
   factcheck?: { id: string; text: string; source_url: string } | null;  // shown community note
   edited_at?: string | null;
   created_at: string;
@@ -1828,7 +1840,7 @@ export type PostCreate = {
   place_name?: string; place_longitude?: number; place_latitude?: number;
   media?: PostMedia[];
   poll?: PollCreate;
-  community_id?: string; title?: string;
+  community_id?: string; title?: string; flair?: string;
   likes_disabled?: boolean;
   comment_policy?: string;
   min_sub_tier?: number;   // 0 = public; 1-3 = subscribers-only
@@ -1838,9 +1850,15 @@ export type PostCreate = {
 
 export type Community = {
   id: string; name: string; title: string; description?: string;
-  color?: string; icon?: string; owner_id: string;
+  color?: string; icon?: string; banner?: string | null;
+  rules?: string[]; flairs?: string[];
+  owner_id: string;
   member_count?: number; post_count?: number;
-  is_member?: boolean; role?: string | null; created_at: string;
+  is_member?: boolean; role?: string | null; can_moderate?: boolean; created_at: string;
+};
+export type CommunityPatch = {
+  title?: string; description?: string; color?: string; icon?: string;
+  banner?: string | null; rules?: string[]; flairs?: string[];
 };
 
 export const MAPBOX_TOKEN = process.env.EXPO_PUBLIC_MAPBOX_TOKEN as string;

@@ -1,14 +1,17 @@
 import React, { useCallback, useState } from "react";
 import {
   View, Text, StyleSheet, FlatList, TouchableOpacity, TextInput,
-  ActivityIndicator, RefreshControl, Modal, KeyboardAvoidingView, Platform, ScrollView, Animated,
+  ActivityIndicator, RefreshControl, Modal, KeyboardAvoidingView, Platform, ScrollView, Animated, Image,
 } from "react-native";
 import { SafeAreaView, useSafeAreaInsets } from "react-native-safe-area-context";
 import { Ionicons } from "@expo/vector-icons";
 import { Stack, useFocusEffect, useLocalSearchParams, useRouter } from "expo-router";
 import { safeBack } from "@/src/utils/nav";
+import * as ImagePicker from "expo-image-picker";
+import { assetToUri } from "@/src/utils/thumbnail";
 import { api, Community, Post } from "@/src/api/client";
 import { useAuth } from "@/src/context/AuthContext";
+import { useConfirm } from "@/src/context/ConfirmContext";
 import { theme } from "@/src/theme";
 import { GLASS } from "@/src/lib/glass";
 import { useFloatingHeader } from "@/src/hooks/useFloatingHeader";
@@ -21,6 +24,7 @@ const SORTS = [
   { key: "hot", label: "Hot" },
   { key: "new", label: "New" },
   { key: "top", label: "Top" },
+  { key: "rising", label: "Rising" },
 ];
 
 export default function CommunityScreen() {
@@ -28,24 +32,31 @@ export default function CommunityScreen() {
   const insets = useSafeAreaInsets();
   const fh = useFloatingHeader();
   const { user } = useAuth();
+  const confirm = useConfirm();
   const { name } = useLocalSearchParams<{ name: string }>();
   const [community, setCommunity] = useState<Community | null>(null);
   const [posts, setPosts] = useState<Post[]>([]);
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
   const [sort, setSort] = useState("hot");
+  const [flairFilter, setFlairFilter] = useState<string>("");
   const [commentsPost, setCommentsPost] = useState<Post | null>(null);
   const [composeOpen, setComposeOpen] = useState(false);
-  const [draft, setDraft] = useState({ title: "", body: "" });
+  const [draft, setDraft] = useState<{ title: string; body: string; flair: string }>({ title: "", body: "", flair: "" });
   const [posting, setPosting] = useState(false);
+  const [rulesOpen, setRulesOpen] = useState(false);
+  const [editOpen, setEditOpen] = useState(false);
+  const [edit, setEdit] = useState({ title: "", description: "", rules: "", flairs: "", banner: "" as string | null });
+  const [savingEdit, setSavingEdit] = useState(false);
+  const [editErr, setEditErr] = useState("");
 
   const load = useCallback(async () => {
     if (!name) return;
     try {
-      const [c, p] = await Promise.all([api.getCommunity(name), api.communityPosts(name, sort)]);
+      const [c, p] = await Promise.all([api.getCommunity(name), api.communityPosts(name, sort, flairFilter || undefined)]);
       setCommunity(c); setPosts(p);
     } catch {} finally { setLoading(false); setRefreshing(false); }
-  }, [name, sort]);
+  }, [name, sort, flairFilter]);
   useFocusEffect(useCallback(() => { load(); }, [load]));
 
   const toggleJoin = async () => {
@@ -77,11 +88,58 @@ export default function CommunityScreen() {
     if (!title) return;
     setPosting(true);
     try {
-      const p = await api.createPost({ community_id: community.id, title, text: draft.body.trim() });
+      const p = await api.createPost({ community_id: community.id, title, text: draft.body.trim(), flair: draft.flair || undefined });
       setPosts((arr) => [p, ...arr]);
-      setDraft({ title: "", body: "" });
+      setDraft({ title: "", body: "", flair: "" });
       setComposeOpen(false);
     } catch {} finally { setPosting(false); }
+  };
+
+  const openEdit = () => {
+    if (!community) return;
+    setEdit({
+      title: community.title || "",
+      description: community.description || "",
+      rules: (community.rules || []).join("\n"),
+      flairs: (community.flairs || []).join(", "),
+      banner: community.banner || "",
+    });
+    setEditErr("");
+    setEditOpen(true);
+  };
+  const pickBanner = async () => {
+    if (Platform.OS !== "web") {
+      const perm = await ImagePicker.requestMediaLibraryPermissionsAsync();
+      if (!perm.granted) return;
+    }
+    const res = await ImagePicker.launchImageLibraryAsync({ mediaTypes: ["images"] as any, allowsEditing: true, aspect: [4, 1], quality: 0.7, base64: true });
+    if (res.canceled || !res.assets?.[0]) return;
+    const uri = await assetToUri(res.assets[0], "image");
+    if (uri) setEdit((e) => ({ ...e, banner: uri }));
+  };
+  const saveEdit = async () => {
+    if (!community) return;
+    setSavingEdit(true); setEditErr("");
+    try {
+      const rules = edit.rules.split("\n").map((s) => s.trim()).filter(Boolean).slice(0, 15);
+      const flairs = edit.flairs.split(",").map((s) => s.trim()).filter(Boolean).slice(0, 20);
+      const c = await api.updateCommunity(community.name, {
+        title: edit.title.trim() || community.name,
+        description: edit.description.trim(),
+        rules, flairs, banner: edit.banner || "",
+      });
+      setCommunity(c);
+      setEditOpen(false);
+    } catch (e: any) {
+      setEditErr(e?.message || "Couldn't save changes.");
+    } finally { setSavingEdit(false); }
+  };
+
+  const onMore = async (p: Post) => {
+    if (!community?.can_moderate) return;
+    if (!(await confirm({ title: "Remove this post?", message: "It will be removed from the community.", confirmLabel: "Remove", destructive: true }))) return;
+    setPosts((arr) => arr.filter((x) => x.id !== p.id));
+    try { await api.removeCommunityPost(community.name, p.id); } catch { load(); }
   };
 
   return (
@@ -115,6 +173,9 @@ export default function CommunityScreen() {
           ListHeaderComponent={
             community ? (
               <View>
+                {!!community.banner && (
+                  <Image source={{ uri: community.banner }} style={styles.bannerImg} resizeMode="cover" />
+                )}
                 <View style={styles.banner}>
                   <View style={[styles.cIcon, { backgroundColor: (community.color || theme.primary) + "22" }]}>
                     <Ionicons name={(community.icon as any) || "people"} size={26} color={community.color || theme.primary} />
@@ -123,11 +184,28 @@ export default function CommunityScreen() {
                     <Text style={styles.cTitle}>{community.title}</Text>
                     <Text style={styles.cMeta}>{community.member_count || 0} members · {community.post_count || 0} posts</Text>
                   </View>
+                  {community.can_moderate && (
+                    <TouchableOpacity style={styles.gearBtn} onPress={openEdit} testID="community-edit">
+                      <Ionicons name="settings-outline" size={20} color={theme.textPrimary} />
+                    </TouchableOpacity>
+                  )}
                   <TouchableOpacity style={[styles.joinBtn, community.is_member && styles.joinBtnGhost]} onPress={toggleJoin} testID="community-join">
                     <Text style={[styles.joinText, community.is_member && { color: theme.textPrimary }]}>{community.is_member ? "Joined" : "Join"}</Text>
                   </TouchableOpacity>
                 </View>
                 {!!community.description && <Text style={styles.cDesc}>{community.description}</Text>}
+                {!!community.rules?.length && (
+                  <View style={styles.rulesCard}>
+                    <TouchableOpacity style={styles.rulesHead} onPress={() => setRulesOpen((v) => !v)} testID="community-rules">
+                      <Ionicons name="shield-checkmark-outline" size={16} color={theme.primary} />
+                      <Text style={styles.rulesTitle}>Community rules</Text>
+                      <Ionicons name={rulesOpen ? "chevron-up" : "chevron-down"} size={16} color={theme.textMuted} />
+                    </TouchableOpacity>
+                    {rulesOpen && community.rules.map((r, i) => (
+                      <Text key={i} style={styles.ruleItem}>{i + 1}. {r}</Text>
+                    ))}
+                  </View>
+                )}
                 <View style={styles.sortRow}>
                   {SORTS.map((s) => (
                     <TouchableOpacity key={s.key} onPress={() => setSort(s.key)} style={[styles.sortChip, sort === s.key && styles.sortChipOn]} testID={`sort-${s.key}`}>
@@ -135,6 +213,18 @@ export default function CommunityScreen() {
                     </TouchableOpacity>
                   ))}
                 </View>
+                {!!community.flairs?.length && (
+                  <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.flairRow}>
+                    <TouchableOpacity onPress={() => setFlairFilter("")} style={[styles.flairChip, !flairFilter && styles.flairChipOn]}>
+                      <Text style={[styles.flairChipText, !flairFilter && { color: "#fff" }]}>All</Text>
+                    </TouchableOpacity>
+                    {community.flairs.map((f) => (
+                      <TouchableOpacity key={f} onPress={() => setFlairFilter(f === flairFilter ? "" : f)} style={[styles.flairChip, flairFilter === f && styles.flairChipOn]}>
+                        <Text style={[styles.flairChipText, flairFilter === f && { color: "#fff" }]}>{f}</Text>
+                      </TouchableOpacity>
+                    ))}
+                  </ScrollView>
+                )}
               </View>
             ) : null
           }
@@ -150,6 +240,7 @@ export default function CommunityScreen() {
               onBookmark={onBookmark}
               onReply={(p) => setCommentsPost(p)}
               onComments={(p) => setCommentsPost(p)}
+              onMore={community?.can_moderate ? onMore : undefined}
             />)
           )}
         />
@@ -165,6 +256,44 @@ export default function CommunityScreen() {
 
       <CommentsSheet visible={!!commentsPost} post={commentsPost} onClose={() => setCommentsPost(null)} />
 
+      <Modal visible={editOpen} transparent animationType="slide" onRequestClose={() => setEditOpen(false)}>
+        <KeyboardAvoidingView behavior={Platform.OS === "ios" ? "padding" : undefined} style={styles.backdrop}>
+          <TouchableOpacity style={StyleSheet.absoluteFill} activeOpacity={1} onPress={() => setEditOpen(false)} />
+          <View style={[styles.sheet, { paddingBottom: insets.bottom + 20 }]}>
+            <View style={styles.handle} />
+            <ScrollView keyboardShouldPersistTaps="handled">
+              <Text style={styles.sheetTitle}>Community settings</Text>
+
+              <Text style={styles.fieldLabel}>Banner</Text>
+              <TouchableOpacity onPress={pickBanner} testID="edit-banner">
+                {edit.banner ? (
+                  <Image source={{ uri: edit.banner }} style={styles.bannerEditImg} resizeMode="cover" />
+                ) : (
+                  <View style={styles.bannerEditEmpty}><Ionicons name="image-outline" size={22} color={theme.textMuted} /><Text style={styles.bannerEditText}>Add a banner image</Text></View>
+                )}
+              </TouchableOpacity>
+              {!!edit.banner && (
+                <TouchableOpacity onPress={() => setEdit((e) => ({ ...e, banner: "" }))}><Text style={styles.removeBanner}>Remove banner</Text></TouchableOpacity>
+              )}
+
+              <Text style={styles.fieldLabel}>Title</Text>
+              <TextInput style={styles.titleInput} value={edit.title} onChangeText={(t) => setEdit((e) => ({ ...e, title: t }))} maxLength={60} placeholderTextColor={theme.textMuted} />
+              <Text style={styles.fieldLabel}>Description</Text>
+              <TextInput style={styles.bodyInput} value={edit.description} onChangeText={(t) => setEdit((e) => ({ ...e, description: t }))} multiline maxLength={500} placeholderTextColor={theme.textMuted} />
+              <Text style={styles.fieldLabel}>Rules (one per line)</Text>
+              <TextInput style={styles.bodyInput} value={edit.rules} onChangeText={(t) => setEdit((e) => ({ ...e, rules: t }))} multiline placeholder={"Be respectful\nNo spam"} placeholderTextColor={theme.textMuted} />
+              <Text style={styles.fieldLabel}>Flairs (comma-separated)</Text>
+              <TextInput style={styles.titleInput} value={edit.flairs} onChangeText={(t) => setEdit((e) => ({ ...e, flairs: t }))} placeholder="Discussion, Question, News" placeholderTextColor={theme.textMuted} autoCapitalize="none" />
+
+              {!!editErr && <Text style={styles.editErr}>{editErr}</Text>}
+              <TouchableOpacity style={[styles.postBtn, savingEdit && { opacity: 0.5 }]} onPress={saveEdit} disabled={savingEdit} testID="community-save">
+                {savingEdit ? <ActivityIndicator color="#fff" /> : <Text style={styles.postBtnText}>Save settings</Text>}
+              </TouchableOpacity>
+            </ScrollView>
+          </View>
+        </KeyboardAvoidingView>
+      </Modal>
+
       <Modal visible={composeOpen} transparent animationType="slide" onRequestClose={() => setComposeOpen(false)}>
         <KeyboardAvoidingView behavior={Platform.OS === "ios" ? "padding" : undefined} style={styles.backdrop}>
           <TouchableOpacity style={StyleSheet.absoluteFill} activeOpacity={1} onPress={() => setComposeOpen(false)} />
@@ -172,6 +301,15 @@ export default function CommunityScreen() {
             <View style={styles.handle} />
             <ScrollView keyboardShouldPersistTaps="handled">
               <Text style={styles.sheetTitle}>New thread in /{community?.name}</Text>
+              {!!community?.flairs?.length && (
+                <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={{ gap: 8, paddingBottom: 10 }}>
+                  {community.flairs.map((f) => (
+                    <TouchableOpacity key={f} onPress={() => setDraft((d) => ({ ...d, flair: d.flair === f ? "" : f }))} style={[styles.flairChip, draft.flair === f && styles.flairChipOn]}>
+                      <Text style={[styles.flairChipText, draft.flair === f && { color: "#fff" }]}>{f}</Text>
+                    </TouchableOpacity>
+                  ))}
+                </ScrollView>
+              )}
               <TextInput style={styles.titleInput} placeholder="Title" placeholderTextColor={theme.textMuted} value={draft.title} onChangeText={(t) => setDraft({ ...draft, title: t })} maxLength={200} testID="thread-title" />
               <TextInput style={[styles.bodyInput]} placeholder="Body (optional)" placeholderTextColor={theme.textMuted} value={draft.body} onChangeText={(t) => setDraft({ ...draft, body: t })} multiline maxLength={500} testID="thread-body" />
               <TouchableOpacity style={[styles.postBtn, (!draft.title.trim() || posting) && { opacity: 0.5 }]} onPress={createThread} disabled={!draft.title.trim() || posting} testID="thread-submit">
@@ -196,7 +334,23 @@ const styles = StyleSheet.create({
   iconBtn: { width: 40, height: 40, borderRadius: 20, alignItems: "center", justifyContent: "center" },
   headerTitle: { flex: 1, color: theme.textPrimary, fontSize: 17, fontWeight: "800", textAlign: "center" },
   center: { flex: 1, alignItems: "center", justifyContent: "center" },
+  bannerImg: { width: "100%", height: 110, backgroundColor: theme.surfaceAlt },
   banner: { flexDirection: "row", alignItems: "center", gap: 12, padding: 16 },
+  gearBtn: { width: 38, height: 38, borderRadius: 19, alignItems: "center", justifyContent: "center", backgroundColor: theme.surface, borderWidth: 1, borderColor: theme.border },
+  rulesCard: { marginHorizontal: 16, marginBottom: 8, backgroundColor: theme.surface, borderRadius: 12, borderWidth: 1, borderColor: theme.border, paddingHorizontal: 14, paddingVertical: 10 },
+  rulesHead: { flexDirection: "row", alignItems: "center", gap: 8 },
+  rulesTitle: { flex: 1, color: theme.textPrimary, fontSize: 14, fontWeight: "800" },
+  ruleItem: { color: theme.textSecondary, fontSize: 13, lineHeight: 19, marginTop: 8 },
+  flairRow: { flexDirection: "row", gap: 8, paddingHorizontal: 16, paddingVertical: 8 },
+  flairChip: { paddingHorizontal: 12, paddingVertical: 6, borderRadius: 14, backgroundColor: theme.surface, borderWidth: 1, borderColor: theme.border },
+  flairChipOn: { backgroundColor: theme.primary, borderColor: theme.primary },
+  flairChipText: { color: theme.textSecondary, fontSize: 12.5, fontWeight: "700" },
+  fieldLabel: { color: theme.textSecondary, fontSize: 12, fontWeight: "700", marginTop: 14, marginBottom: 6 },
+  bannerEditImg: { width: "100%", height: 90, borderRadius: 12, backgroundColor: theme.surfaceAlt },
+  bannerEditEmpty: { height: 90, borderRadius: 12, borderWidth: 1, borderColor: theme.border, borderStyle: "dashed", alignItems: "center", justifyContent: "center", gap: 6, backgroundColor: theme.surface },
+  bannerEditText: { color: theme.textMuted, fontSize: 13, fontWeight: "600" },
+  removeBanner: { color: theme.error, fontSize: 12.5, fontWeight: "700", marginTop: 6 },
+  editErr: { color: theme.error, fontSize: 12.5, fontWeight: "600", marginTop: 12 },
   cIcon: { width: 52, height: 52, borderRadius: 26, alignItems: "center", justifyContent: "center" },
   cTitle: { color: theme.textPrimary, fontSize: 20, fontWeight: "800" },
   cMeta: { color: theme.textMuted, fontSize: 12, marginTop: 2 },

@@ -656,6 +656,7 @@ class PostCreate(BaseModel):
     poll: Optional[PollCreate] = None  # NEW
     community_id: Optional[str] = None  # forum: post belongs to a community
     title: Optional[str] = None         # forum thread title
+    flair: Optional[str] = None         # forum: post flair (must be one of the community's flairs)
     likes_disabled: Optional[bool] = None              # turn off likes for this post
     comment_policy: Optional[str] = None               # everyone | followers | friends | nobody
     min_sub_tier: Optional[int] = None                 # 0 = public; 1-3 = subscribers-only (Twitch-style)
@@ -669,6 +670,19 @@ class CommunityCreate(BaseModel):
     description: Optional[str] = ""
     color: Optional[str] = "#3B82F6"
     icon: Optional[str] = "people"
+    rules: Optional[List[str]] = None
+    flairs: Optional[List[str]] = None
+    banner: Optional[str] = None
+
+
+class CommunityPatch(BaseModel):
+    title: Optional[str] = None
+    description: Optional[str] = None
+    color: Optional[str] = None
+    icon: Optional[str] = None
+    rules: Optional[List[str]] = None
+    flairs: Optional[List[str]] = None
+    banner: Optional[str] = None       # "" clears the banner image
 
 
 class Community(BaseModel):
@@ -678,11 +692,15 @@ class Community(BaseModel):
     description: str = ""
     color: str = "#3B82F6"
     icon: str = "people"
+    banner: Optional[str] = None       # cover image (URL / data URI)
+    rules: List[str] = []              # community rules shown in the sidebar
+    flairs: List[str] = []             # post flair options
     owner_id: str
     member_count: int = 0
     post_count: int = 0
     is_member: bool = False
     role: Optional[str] = None         # owner | mod | member | None
+    can_moderate: bool = False         # viewer is owner or mod
     created_at: datetime
 
 
@@ -773,6 +791,7 @@ class Post(BaseModel):
     community_id: Optional[str] = None
     community_name: Optional[str] = None
     title: Optional[str] = None
+    flair: Optional[str] = None        # forum post flair
     factcheck: Optional[dict] = None   # shown community Factcheck note {id, text, source_url}
     created_at: datetime
 
