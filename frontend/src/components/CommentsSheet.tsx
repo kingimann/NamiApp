@@ -1,7 +1,7 @@
 import React, { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import {
   View, Text, StyleSheet, Modal, FlatList, TextInput, TouchableOpacity,
-  ActivityIndicator, Image, KeyboardAvoidingView, Platform, Pressable, Animated,
+  ActivityIndicator, Image, KeyboardAvoidingView, Platform, Pressable, Animated, Linking,
 } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { Ionicons } from "@expo/vector-icons";
@@ -71,6 +71,13 @@ export default function CommentsSheet({ visible, post, onClose, onCommented }: P
   const [editingId, setEditingId] = useState<string | null>(null);
   const [replyTo, setReplyTo] = useState<Post | null>(null);
   const [gifOpen, setGifOpen] = useState(false);
+  // Proof-of-read friction: if this post links out, gate commenting behind a
+  // short delay OR an explicit click-through, to discourage knee-jerk replies.
+  const linkUrl = post?.link_preview?.url || null;
+  const GATE_SECS = 20;
+  const [gateOpened, setGateOpened] = useState(false);
+  const [secsLeft, setSecsLeft] = useState(0);
+  const gateOk = !linkUrl || gateOpened || secsLeft <= 0;
   // Which top-level comments have their reply threads expanded (TikTok-style).
   const [expanded, setExpanded] = useState<Set<string>>(new Set());
   const inputRef = useRef<TextInput>(null);
@@ -88,8 +95,26 @@ export default function CommentsSheet({ visible, post, onClose, onCommented }: P
   }, [post]);
 
   useEffect(() => {
-    if (visible && post) { setText(""); setEditingId(null); setReplyTo(null); setExpanded(new Set()); load(); }
+    if (visible && post) {
+      setText(""); setEditingId(null); setReplyTo(null); setExpanded(new Set());
+      setGateOpened(false);
+      setSecsLeft(post.link_preview?.url ? GATE_SECS : 0);
+      load();
+    }
   }, [visible, post, load]);
+
+  // Tick down the proof-of-read delay while the sheet is open on a link post.
+  useEffect(() => {
+    if (!visible || !linkUrl || gateOpened || secsLeft <= 0) return;
+    const t = setInterval(() => setSecsLeft((s) => (s <= 1 ? 0 : s - 1)), 1000);
+    return () => clearInterval(t);
+  }, [visible, linkUrl, gateOpened, secsLeft]);
+
+  const openLink = useCallback(async () => {
+    if (!linkUrl) return;
+    setGateOpened(true);  // clicking through proves engagement → unlock immediately
+    try { await Linking.openURL(linkUrl); } catch {}
+  }, [linkUrl]);
 
   // Build render rows: each top-level comment, then a "View N replies" expander,
   // and its descendant replies only when that thread is expanded (TikTok-style).
@@ -139,6 +164,7 @@ export default function CommentsSheet({ visible, post, onClose, onCommented }: P
   const send = async () => {
     const body = text.trim();
     if (!body || !post || sending) return;
+    if (!editingId && !gateOk) return;  // proof-of-read gate (new comments only)
     setSending(true);
     try {
       if (editingId) {
@@ -167,7 +193,7 @@ export default function CommentsSheet({ visible, post, onClose, onCommented }: P
   // Post a GIF as a comment — its URL renders inline (getInlineImage).
   const sendGif = async (url: string) => {
     setGifOpen(false);
-    if (!post || !url) return;
+    if (!post || !url || !gateOk) return;
     try {
       const parentId = replyTo ? replyTo.id : post.id;
       const reply = await api.createPost({ text: url, parent_id: parentId });
@@ -344,6 +370,23 @@ export default function CommentsSheet({ visible, post, onClose, onCommented }: P
               />
             )}
 
+            {!gateOk && !editingId && (
+              <View style={styles.gate}>
+                <View style={styles.gateIcon}>
+                  <Ionicons name="reader-outline" size={16} color={theme.primary} />
+                </View>
+                <View style={{ flex: 1 }}>
+                  <Text style={styles.gateTitle}>Read before you reply</Text>
+                  <Text style={styles.gateSub}>
+                    Open the link or wait {secsLeft}s to comment on this post.
+                  </Text>
+                </View>
+                <TouchableOpacity onPress={openLink} style={styles.gateBtn} testID="comment-gate-open">
+                  <Ionicons name="open-outline" size={14} color="#fff" />
+                  <Text style={styles.gateBtnText}>Open link</Text>
+                </TouchableOpacity>
+              </View>
+            )}
             {replyTo && !editingId && (
               <View style={styles.editHint}>
                 <Ionicons name="arrow-undo-outline" size={14} color={theme.primary} />
@@ -381,14 +424,14 @@ export default function CommentsSheet({ visible, post, onClose, onCommented }: P
                 testID="comment-input"
               />
               {!editingId && (
-                <TouchableOpacity onPress={() => setGifOpen(true)} style={styles.gifBtn} testID="comment-gif">
+                <TouchableOpacity onPress={() => setGifOpen(true)} disabled={!gateOk} style={[styles.gifBtn, !gateOk && { opacity: 0.4 }]} testID="comment-gif">
                   <Ionicons name="film-outline" size={20} color={theme.primary} />
                 </TouchableOpacity>
               )}
               <TouchableOpacity
                 onPress={send}
-                disabled={!text.trim() || sending}
-                style={[styles.sendBtn, (!text.trim() || sending) && { opacity: 0.4 }]}
+                disabled={!text.trim() || sending || (!editingId && !gateOk)}
+                style={[styles.sendBtn, (!text.trim() || sending || (!editingId && !gateOk)) && { opacity: 0.4 }]}
                 testID="comment-send"
               >
                 {sending ? <ActivityIndicator color="#fff" size="small" /> : <Ionicons name={editingId ? "checkmark" : "arrow-up"} size={18} color="#fff" />}
@@ -451,6 +494,24 @@ const styles = StyleSheet.create({
     backgroundColor: theme.surface, borderRadius: 10, borderWidth: 1, borderColor: theme.border,
   },
   editHintText: { color: theme.textSecondary, fontSize: 12, fontWeight: "600" },
+
+  gate: {
+    flexDirection: "row", alignItems: "center", gap: 10,
+    marginHorizontal: 16, marginBottom: 6, paddingHorizontal: 12, paddingVertical: 9,
+    backgroundColor: theme.primary + "14", borderRadius: 12,
+    borderWidth: 1, borderColor: theme.primary + "33",
+  },
+  gateIcon: {
+    width: 30, height: 30, borderRadius: 15,
+    backgroundColor: theme.primary + "22", alignItems: "center", justifyContent: "center",
+  },
+  gateTitle: { color: theme.textPrimary, fontSize: 13, fontWeight: "800" },
+  gateSub: { color: theme.textMuted, fontSize: 11.5, marginTop: 1 },
+  gateBtn: {
+    flexDirection: "row", alignItems: "center", gap: 4,
+    backgroundColor: theme.primary, borderRadius: 14, paddingHorizontal: 11, paddingVertical: 7,
+  },
+  gateBtnText: { color: "#fff", fontSize: 12, fontWeight: "800" },
 
   inputRow: {
     flexDirection: "row", alignItems: "flex-end", gap: 10,
