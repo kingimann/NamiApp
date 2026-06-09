@@ -1055,6 +1055,7 @@ export async function fetchPublicEta(share_id: string): Promise<EtaShare | null>
   }
 }
 
+export type FeaturedLink = { label: string; url: string };
 export type User = {
   user_id: string;
   email: string;
@@ -1068,10 +1069,17 @@ export type User = {
   twofa_enabled?: boolean;
   sms_notifications?: boolean;
   bio?: string;
+  headline?: string | null;
   location?: string | null;
   pronouns?: string | null;
   birthday?: string | null;
   socials?: Record<string, string> | null;
+  cover_photo?: string | null;
+  accent_color?: string | null;
+  interests?: string[];
+  featured_links?: FeaturedLink[];
+  avatar_frame?: string | null;
+  profile_background?: string | null;
   home_name?: string | null;
   home_longitude?: number | null;
   home_latitude?: number | null;
@@ -1096,8 +1104,15 @@ export type User = {
 };
 export type ProfilePatch = {
   name?: string; bio?: string; picture?: string;
+  headline?: string | null;
   location?: string | null; pronouns?: string | null; birthday?: string | null;
   socials?: Record<string, string>;
+  cover_photo?: string | null;
+  accent_color?: string | null;
+  interests?: string[];
+  featured_links?: FeaturedLink[];
+  avatar_frame?: string | null;
+  profile_background?: string | null;
   home_name?: string | null; home_longitude?: number | null; home_latitude?: number | null;
   work_name?: string | null; work_longitude?: number | null; work_latitude?: number | null;
   sub_price?: number;
@@ -1247,10 +1262,17 @@ export type PublicUser = {
   username?: string | null;
   picture?: string | null;
   bio?: string;
+  headline?: string | null;
   location?: string | null;
   pronouns?: string | null;
   birthday?: string | null;
   socials?: Record<string, string> | null;
+  cover_photo?: string | null;
+  accent_color?: string | null;
+  interests?: string[];
+  featured_links?: FeaturedLink[];
+  avatar_frame?: string | null;
+  profile_background?: string | null;
   verified?: boolean;
   phone_verified?: boolean;
   email_verified?: boolean;

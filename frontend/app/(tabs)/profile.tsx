@@ -10,9 +10,15 @@ import * as ImagePicker from "expo-image-picker";
 import { assetToUri } from "@/src/utils/thumbnail";
 import { useFocusEffect, useLocalSearchParams, useRouter } from "expo-router";
 import { useAuth } from "@/src/context/AuthContext";
-import { api, Post, mediaUri } from "@/src/api/client";
+import { api, Post, mediaUri, FeaturedLink } from "@/src/api/client";
 import { theme } from "@/src/theme";
 import { GLASS } from "@/src/lib/glass";
+import {
+  ACCENT_COLORS, resolveAccent, isValidHex, accentGradient,
+  normalizeLinkUrl, prettyLinkLabel,
+  AVATAR_FRAMES, PROFILE_BACKGROUNDS, frameColors, backgroundColors,
+} from "@/src/lib/profileCustomize";
+import { AvatarFrame, ProfileBackground } from "@/src/components/ProfileDecor";
 import { useFloatingHeader } from "@/src/hooks/useFloatingHeader";
 import { SidebarMenuButton } from "@/src/components/LeftSidebar";
 import PostCard from "@/src/components/PostCard";
@@ -53,9 +59,17 @@ export default function ProfileScreen() {
   const [editPronouns, setEditPronouns] = useState("");
   const [editBirthday, setEditBirthday] = useState("");
   const [editSocials, setEditSocials] = useState<Record<string, string>>({});
+  const [editHeadline, setEditHeadline] = useState("");
+  const [editAccent, setEditAccent] = useState("");
+  const [editInterests, setEditInterests] = useState<string[]>([]);
+  const [interestInput, setInterestInput] = useState("");
+  const [editLinks, setEditLinks] = useState<FeaturedLink[]>([]);
+  const [editFrame, setEditFrame] = useState("none");
+  const [editBg, setEditBg] = useState("default");
   const [usernameCheck, setUsernameCheck] = useState<{ checking: boolean; available: boolean | null }>({ checking: false, available: null });
   const [saving, setSaving] = useState(false);
   const [uploadingAvatar, setUploadingAvatar] = useState(false);
+  const [uploadingCover, setUploadingCover] = useState(false);
   const [avatarPickerOpen, setAvatarPickerOpen] = useState(false);
   const [myPosts, setMyPosts] = useState<Post[]>([]);
   const [replies, setReplies] = useState<Post[] | null>(null);
@@ -180,6 +194,39 @@ export default function ProfileScreen() {
     } finally { setUploadingAvatar(false); }
   };
 
+  const changeCover = async () => {
+    if (uploadingCover) return;
+    if (Platform.OS !== "web") {
+      const perm = await ImagePicker.requestMediaLibraryPermissionsAsync();
+      if (!perm.granted) return;
+    }
+    const result = await ImagePicker.launchImageLibraryAsync({
+      mediaTypes: ["images"] as any,
+      allowsEditing: true, aspect: [3, 1],
+      quality: 0.7, base64: true,
+    });
+    if (result.canceled || !result.assets?.[0]) return;
+    setUploadingCover(true);
+    try {
+      const cover = await assetToUri(result.assets[0], "image");
+      if (!cover) { setUploadingCover(false); return; }
+      await api.updateMe({ cover_photo: cover });
+      await refresh();
+    } catch (e: any) {
+      Alert.alert("Couldn't update cover", e?.message || String(e));
+    } finally { setUploadingCover(false); }
+  };
+
+  const removeCover = async () => {
+    setUploadingCover(true);
+    try {
+      await api.updateMe({ cover_photo: "" });
+      await refresh();
+    } catch (e: any) {
+      Alert.alert("Couldn't remove cover", e?.message || String(e));
+    } finally { setUploadingCover(false); }
+  };
+
   const loadStats = useCallback(async () => {
     if (!user) return;
     try {
@@ -207,9 +254,32 @@ export default function ProfileScreen() {
     setEditPronouns(user?.pronouns || "");
     setEditBirthday(user?.birthday || "");
     setEditSocials({ ...(user?.socials || {}) });
+    setEditHeadline(user?.headline || "");
+    setEditAccent(user?.accent_color || "");
+    setEditInterests([...(user?.interests || [])]);
+    setInterestInput("");
+    setEditLinks((user?.featured_links || []).map((l) => ({ ...l })));
+    setEditFrame(user?.avatar_frame || "none");
+    setEditBg(user?.profile_background || "default");
     setUsernameCheck({ checking: false, available: true });
     setEditOpen(true);
   };
+
+  const addInterest = () => {
+    const t = interestInput.trim().slice(0, 30);
+    if (!t) return;
+    setEditInterests((arr) => {
+      if (arr.length >= 12 || arr.some((x) => x.toLowerCase() === t.toLowerCase())) return arr;
+      return [...arr, t];
+    });
+    setInterestInput("");
+  };
+  const removeInterest = (t: string) => setEditInterests((arr) => arr.filter((x) => x !== t));
+
+  const addLink = () => setEditLinks((arr) => (arr.length >= 5 ? arr : [...arr, { label: "", url: "" }]));
+  const updateLink = (i: number, key: keyof FeaturedLink, val: string) =>
+    setEditLinks((arr) => arr.map((l, idx) => (idx === i ? { ...l, [key]: val } : l)));
+  const removeLink = (i: number) => setEditLinks((arr) => arr.filter((_, idx) => idx !== i));
 
   // Open the editor when arriving from Settings → Edit profile (?edit=1).
   const params = useLocalSearchParams<{ edit?: string }>();
@@ -256,10 +326,21 @@ export default function ProfileScreen() {
         }
         await api.setUsername(u);
       }
+      // Keep only links that have a real URL; normalize the scheme.
+      const links = editLinks
+        .map((l) => ({ label: l.label.trim().slice(0, 40), url: normalizeLinkUrl(l.url) }))
+        .filter((l) => /^https?:\/\//i.test(l.url))
+        .slice(0, 5);
       await api.updateMe({
         name: editName, bio: editBio,
         location: editLocation, pronouns: editPronouns, birthday: editBirthday,
         socials: editSocials,
+        headline: editHeadline,
+        accent_color: editAccent && isValidHex(editAccent) ? editAccent : "",
+        interests: editInterests,
+        featured_links: links,
+        avatar_frame: editFrame,
+        profile_background: editBg,
       });
       await refresh();
       setEditOpen(false);
@@ -274,8 +355,11 @@ export default function ProfileScreen() {
     finally { setRefreshing(false); }
   }, [loadPosts, loadStats]);
 
+  const accent = resolveAccent(user?.accent_color);
+
   return (
     <SafeAreaView edges={["top"]} style={styles.root} testID="profile-screen">
+      <ProfileBackground background={user?.profile_background} style={{ left: -20, right: -20 }} />
       <Animated.View
         onLayout={(e) => fh.setTopBarH(e.nativeEvent.layout.height)}
         pointerEvents={fh.barPointerEvents}
@@ -300,29 +384,48 @@ export default function ProfileScreen() {
         }
       >
         <View style={styles.hero}>
-          <LinearGradient
-            colors={[theme.primaryHover, theme.primary, theme.primaryActive]}
-            start={{ x: 0, y: 0 }}
-            end={{ x: 1, y: 1 }}
-            style={styles.cover}
-          />
-          <View style={styles.heroBody}>
-            <TouchableOpacity onPress={changeAvatar} activeOpacity={0.85} style={styles.avatarWrap} testID="change-avatar-btn">
-              <Image
-                source={{ uri: user?.picture || DEFAULT_AVATAR }}
-                style={styles.avatar}
+          <TouchableOpacity activeOpacity={0.9} onPress={changeCover} testID="change-cover-btn">
+            {user?.cover_photo ? (
+              <Image source={{ uri: user.cover_photo }} style={styles.cover} resizeMode="cover" />
+            ) : (
+              <LinearGradient
+                colors={accentGradient(user?.accent_color)}
+                start={{ x: 0, y: 0 }}
+                end={{ x: 1, y: 1 }}
+                style={styles.cover}
               />
-              <View style={styles.avatarBadge}>
-                {uploadingAvatar
-                  ? <ActivityIndicator color="#fff" size="small" />
-                  : <Ionicons name="camera" size={14} color="#fff" />}
-              </View>
-            </TouchableOpacity>
+            )}
+            <View style={styles.coverBadge}>
+              {uploadingCover
+                ? <ActivityIndicator color="#fff" size="small" />
+                : <Ionicons name="camera" size={14} color="#fff" />}
+            </View>
+            {!!user?.cover_photo && !uploadingCover && (
+              <TouchableOpacity style={styles.coverRemove} onPress={removeCover} testID="remove-cover-btn">
+                <Ionicons name="close" size={14} color="#fff" />
+              </TouchableOpacity>
+            )}
+          </TouchableOpacity>
+          <View style={styles.heroBody}>
+            <AvatarFrame frame={user?.avatar_frame} size={104} ring={3}>
+              <TouchableOpacity onPress={changeAvatar} activeOpacity={0.85} style={styles.avatarWrap} testID="change-avatar-btn">
+                <Image
+                  source={{ uri: user?.picture || DEFAULT_AVATAR }}
+                  style={styles.avatar}
+                />
+                <View style={styles.avatarBadge}>
+                  {uploadingAvatar
+                    ? <ActivityIndicator color="#fff" size="small" />
+                    : <Ionicons name="camera" size={14} color="#fff" />}
+                </View>
+              </TouchableOpacity>
+            </AvatarFrame>
 
             <Text style={styles.name} numberOfLines={1}>{user?.name || "Explorer"}</Text>
             {!!user?.username && (
-              <Text style={styles.handle} numberOfLines={1}>@{user.username}</Text>
+              <Text style={[styles.handle, { color: accent }]} numberOfLines={1}>@{user.username}</Text>
             )}
+            {!!user?.headline && <Text style={styles.headline} numberOfLines={2}>{user.headline}</Text>}
             {!!user?.bio && <Text style={styles.bio}>{user.bio}</Text>}
 
             {(!!user?.pronouns || !!user?.location || !!user?.birthday) && (
@@ -359,6 +462,34 @@ export default function ProfileScreen() {
                     </TouchableOpacity>
                   );
                 })}
+              </View>
+            )}
+
+            {!!user?.interests?.length && (
+              <View style={styles.interestWrap}>
+                {user.interests.map((t) => (
+                  <View key={t} style={[styles.interestChip, { borderColor: accent + "55" }]}>
+                    <Text style={[styles.interestText, { color: accent }]}>{t}</Text>
+                  </View>
+                ))}
+              </View>
+            )}
+
+            {!!user?.featured_links?.length && (
+              <View style={styles.linksWrap}>
+                {user.featured_links.map((l, i) => (
+                  <TouchableOpacity
+                    key={`${l.url}-${i}`}
+                    style={styles.linkRow}
+                    activeOpacity={0.7}
+                    onPress={() => Linking.openURL(normalizeLinkUrl(l.url)).catch(() => {})}
+                    testID={`profile-link-${i}`}
+                  >
+                    <Ionicons name="link" size={15} color={accent} />
+                    <Text style={styles.linkLabel} numberOfLines={1}>{l.label || prettyLinkLabel(l.url)}</Text>
+                    <Ionicons name="open-outline" size={14} color={theme.textMuted} />
+                  </TouchableOpacity>
+                ))}
               </View>
             )}
 
@@ -636,6 +767,105 @@ export default function ProfileScreen() {
             />
             <Text style={styles.helper}>{editBio.length}/280</Text>
 
+            <Text style={styles.label}>Headline</Text>
+            <TextInput
+              style={styles.input}
+              value={editHeadline}
+              onChangeText={setEditHeadline}
+              placeholder="A short tagline, e.g. Designer · Coffee addict"
+              placeholderTextColor={theme.textMuted}
+              maxLength={60}
+              testID="edit-headline"
+            />
+            <Text style={styles.helper}>{editHeadline.length}/60</Text>
+
+            <Text style={styles.label}>Accent color</Text>
+            <View style={styles.swatchRow}>
+              {ACCENT_COLORS.map((c) => {
+                const on = (editAccent || "").toLowerCase() === c.toLowerCase();
+                return (
+                  <TouchableOpacity
+                    key={c}
+                    style={[styles.swatch, { backgroundColor: c }, on && styles.swatchOn]}
+                    onPress={() => setEditAccent(c)}
+                    testID={`accent-${c}`}
+                  >
+                    {on ? <Ionicons name="checkmark" size={15} color="#fff" /> : null}
+                  </TouchableOpacity>
+                );
+              })}
+              <TouchableOpacity
+                style={[styles.swatch, styles.swatchClear]}
+                onPress={() => setEditAccent("")}
+                testID="accent-clear"
+              >
+                <Ionicons name="refresh" size={15} color={theme.textMuted} />
+              </TouchableOpacity>
+            </View>
+            <View style={[styles.input, { flexDirection: "row", alignItems: "center", gap: 8 }]}>
+              <View style={[styles.hexPreview, { backgroundColor: resolveAccent(editAccent) }]} />
+              <TextInput
+                style={{ flex: 1, color: theme.textPrimary, fontSize: 14, ...(Platform.OS === "web" ? { outlineStyle: "none" } as object : {}) }}
+                value={editAccent}
+                onChangeText={(t) => setEditAccent(t.startsWith("#") || t === "" ? t : `#${t}`)}
+                placeholder="#7C3AED (custom hex)"
+                placeholderTextColor={theme.textMuted}
+                autoCapitalize="none"
+                autoCorrect={false}
+                maxLength={7}
+                testID="edit-accent-hex"
+              />
+              {editAccent !== "" && !isValidHex(editAccent) ? (
+                <Ionicons name="alert-circle" size={16} color="#EF4444" />
+              ) : null}
+            </View>
+
+            <Text style={styles.label}>Avatar frame</Text>
+            <Text style={styles.helper2}>A decorative ring around your profile picture.</Text>
+            <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={{ gap: 12, paddingVertical: 2 }}>
+              {AVATAR_FRAMES.map((f) => {
+                const on = editFrame === f.key;
+                const cols = frameColors(f.key);
+                return (
+                  <TouchableOpacity key={f.key} style={{ alignItems: "center", gap: 5 }} onPress={() => setEditFrame(f.key)} testID={`frame-${f.key}`}>
+                    {cols.length >= 2 ? (
+                      <AvatarFrame frame={f.key} size={42} ring={3}>
+                        <View style={styles.framePreviewInner} />
+                      </AvatarFrame>
+                    ) : (
+                      <View style={[styles.framePreviewNone, on && { borderColor: theme.primary }]}>
+                        <Ionicons name="ban-outline" size={18} color={theme.textMuted} />
+                      </View>
+                    )}
+                    <Text style={[styles.frameLabel, on && { color: theme.primary, fontWeight: "800" }]}>{f.label}</Text>
+                  </TouchableOpacity>
+                );
+              })}
+            </ScrollView>
+
+            <Text style={styles.label}>Profile background</Text>
+            <Text style={styles.helper2}>A themed backdrop shown behind your whole profile.</Text>
+            <View style={styles.bgGrid}>
+              {PROFILE_BACKGROUNDS.map((b) => {
+                const on = editBg === b.key;
+                const cols = backgroundColors(b.key);
+                return (
+                  <TouchableOpacity key={b.key} style={styles.bgCellWrap} onPress={() => setEditBg(b.key)} testID={`bg-${b.key}`}>
+                    {cols.length >= 2 ? (
+                      <LinearGradient colors={cols as any} start={{ x: 0, y: 0 }} end={{ x: 1, y: 1 }} style={[styles.bgCell, on && styles.bgCellOn]}>
+                        {on ? <Ionicons name="checkmark-circle" size={18} color="#fff" /> : null}
+                      </LinearGradient>
+                    ) : (
+                      <View style={[styles.bgCell, { backgroundColor: theme.surfaceAlt }, on && styles.bgCellOn]}>
+                        {on ? <Ionicons name="checkmark-circle" size={18} color={theme.primary} /> : null}
+                      </View>
+                    )}
+                    <Text style={[styles.frameLabel, on && { color: theme.primary, fontWeight: "800" }]}>{b.label}</Text>
+                  </TouchableOpacity>
+                );
+              })}
+            </View>
+
             <Text style={styles.label}>Pronouns</Text>
             <TextInput
               style={styles.input}
@@ -680,6 +910,76 @@ export default function ProfileScreen() {
                 />
               </View>
             ))}
+
+            <Text style={styles.label}>Interests</Text>
+            <Text style={styles.helper2}>Up to 12 tags shown as chips on your profile.</Text>
+            {editInterests.length > 0 && (
+              <View style={styles.interestEditWrap}>
+                {editInterests.map((t) => (
+                  <TouchableOpacity key={t} style={styles.interestEditChip} onPress={() => removeInterest(t)} testID={`interest-chip-${t}`}>
+                    <Text style={styles.interestEditText}>{t}</Text>
+                    <Ionicons name="close" size={13} color={theme.textSecondary} />
+                  </TouchableOpacity>
+                ))}
+              </View>
+            )}
+            {editInterests.length < 12 && (
+              <View style={[styles.input, { flexDirection: "row", alignItems: "center", gap: 6, paddingVertical: 0 }]}>
+                <TextInput
+                  style={{ flex: 1, color: theme.textPrimary, fontSize: 15, paddingVertical: 12, ...(Platform.OS === "web" ? { outlineStyle: "none" } as object : {}) }}
+                  value={interestInput}
+                  onChangeText={setInterestInput}
+                  onSubmitEditing={addInterest}
+                  placeholder="Add an interest and press +"
+                  placeholderTextColor={theme.textMuted}
+                  maxLength={30}
+                  returnKeyType="done"
+                  testID="interest-input"
+                />
+                <TouchableOpacity onPress={addInterest} style={styles.addChipBtn} testID="interest-add">
+                  <Ionicons name="add" size={18} color="#fff" />
+                </TouchableOpacity>
+              </View>
+            )}
+
+            <Text style={styles.label}>Featured links</Text>
+            <Text style={styles.helper2}>Up to 5 links shown on your profile (link-in-bio).</Text>
+            {editLinks.map((l, i) => (
+              <View key={i} style={styles.linkEditRow}>
+                <View style={{ flex: 1, gap: 6 }}>
+                  <TextInput
+                    style={styles.input}
+                    value={l.label}
+                    onChangeText={(t) => updateLink(i, "label", t)}
+                    placeholder="Label (e.g. My website)"
+                    placeholderTextColor={theme.textMuted}
+                    maxLength={40}
+                    testID={`link-label-${i}`}
+                  />
+                  <TextInput
+                    style={styles.input}
+                    value={l.url}
+                    onChangeText={(t) => updateLink(i, "url", t)}
+                    placeholder="https://example.com"
+                    placeholderTextColor={theme.textMuted}
+                    autoCapitalize="none"
+                    autoCorrect={false}
+                    keyboardType="url"
+                    maxLength={300}
+                    testID={`link-url-${i}`}
+                  />
+                </View>
+                <TouchableOpacity onPress={() => removeLink(i)} style={styles.linkDelBtn} testID={`link-remove-${i}`}>
+                  <Ionicons name="trash-outline" size={18} color="#EF4444" />
+                </TouchableOpacity>
+              </View>
+            ))}
+            {editLinks.length < 5 && (
+              <TouchableOpacity style={styles.addLinkBtn} onPress={addLink} testID="link-add">
+                <Ionicons name="add-circle-outline" size={18} color={theme.primary} />
+                <Text style={styles.addLinkText}>Add link</Text>
+              </TouchableOpacity>
+            )}
 
             <TouchableOpacity
               style={[styles.saveBtn, saving && { opacity: 0.6 }]}
@@ -869,4 +1169,53 @@ const styles = StyleSheet.create({
     backgroundColor: theme.primary, alignItems: "center",
   },
   saveText: { color: "#fff", fontWeight: "700", fontSize: 15 },
+
+  // ── Customization: cover, headline, interests, links, accent picker ──────
+  coverBadge: {
+    position: "absolute", bottom: 8, right: 10,
+    width: 30, height: 30, borderRadius: 15,
+    backgroundColor: "rgba(0,0,0,0.45)", alignItems: "center", justifyContent: "center",
+  },
+  coverRemove: {
+    position: "absolute", top: 8, right: 10,
+    width: 26, height: 26, borderRadius: 13,
+    backgroundColor: "rgba(0,0,0,0.45)", alignItems: "center", justifyContent: "center",
+  },
+  headline: { color: theme.textSecondary, fontSize: 14, fontWeight: "600", marginTop: 6, textAlign: "center", paddingHorizontal: 8 },
+  interestWrap: { flexDirection: "row", flexWrap: "wrap", justifyContent: "center", gap: 7, marginTop: 12 },
+  interestChip: { borderWidth: 1, borderRadius: 14, paddingHorizontal: 11, paddingVertical: 5 },
+  interestText: { fontSize: 12.5, fontWeight: "700" },
+  linksWrap: { alignSelf: "stretch", gap: 8, marginTop: 14 },
+  linkRow: {
+    flexDirection: "row", alignItems: "center", gap: 10,
+    backgroundColor: theme.surfaceAlt, borderWidth: 1, borderColor: theme.border,
+    borderRadius: 12, paddingHorizontal: 14, paddingVertical: 12,
+  },
+  linkLabel: { flex: 1, color: theme.textPrimary, fontSize: 14, fontWeight: "700" },
+
+  helper2: { color: theme.textMuted, fontSize: 11.5, marginBottom: 8, marginTop: -2 },
+  swatchRow: { flexDirection: "row", flexWrap: "wrap", gap: 10, marginBottom: 10 },
+  swatch: { width: 34, height: 34, borderRadius: 17, alignItems: "center", justifyContent: "center", borderWidth: 2, borderColor: "transparent" },
+  swatchOn: { borderColor: theme.textPrimary },
+  swatchClear: { backgroundColor: theme.surface, borderColor: theme.border },
+  hexPreview: { width: 22, height: 22, borderRadius: 11, borderWidth: 1, borderColor: theme.border },
+  interestEditWrap: { flexDirection: "row", flexWrap: "wrap", gap: 8, marginBottom: 10 },
+  interestEditChip: {
+    flexDirection: "row", alignItems: "center", gap: 5,
+    backgroundColor: theme.surface, borderWidth: 1, borderColor: theme.border,
+    borderRadius: 14, paddingHorizontal: 11, paddingVertical: 6,
+  },
+  interestEditText: { color: theme.textPrimary, fontSize: 13, fontWeight: "600" },
+  addChipBtn: { width: 34, height: 34, borderRadius: 17, backgroundColor: theme.primary, alignItems: "center", justifyContent: "center" },
+  linkEditRow: { flexDirection: "row", alignItems: "center", gap: 8, marginBottom: 10 },
+  linkDelBtn: { width: 40, height: 40, borderRadius: 12, alignItems: "center", justifyContent: "center", backgroundColor: theme.surface, borderWidth: 1, borderColor: theme.border },
+  addLinkBtn: { flexDirection: "row", alignItems: "center", justifyContent: "center", gap: 8, paddingVertical: 12, borderRadius: 12, borderWidth: 1, borderColor: theme.border, borderStyle: "dashed" },
+  addLinkText: { color: theme.primary, fontSize: 14, fontWeight: "700" },
+  framePreviewInner: { width: 42, height: 42, borderRadius: 21, backgroundColor: theme.surfaceAlt },
+  framePreviewNone: { width: 48, height: 48, borderRadius: 24, borderWidth: 2, borderColor: theme.border, alignItems: "center", justifyContent: "center", backgroundColor: theme.surface },
+  frameLabel: { color: theme.textMuted, fontSize: 11, fontWeight: "600" },
+  bgGrid: { flexDirection: "row", flexWrap: "wrap", gap: 12 },
+  bgCellWrap: { alignItems: "center", gap: 5 },
+  bgCell: { width: 66, height: 44, borderRadius: 10, alignItems: "center", justifyContent: "center", borderWidth: 2, borderColor: "transparent" },
+  bgCellOn: { borderColor: theme.primary },
 });

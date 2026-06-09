@@ -4,12 +4,15 @@ import {
 } from "react-native";
 import { SafeAreaView, useSafeAreaInsets } from "react-native-safe-area-context";
 import { Ionicons } from "@expo/vector-icons";
+import { LinearGradient } from "expo-linear-gradient";
 import { Stack, useFocusEffect, useLocalSearchParams, useRouter } from "expo-router";
 import { safeBack } from "@/src/utils/nav";
 import { api, Post, PublicUser, FriendStatus, SubTier } from "@/src/api/client";
 import { useAuth } from "@/src/context/AuthContext";
 import { theme } from "@/src/theme";
 import { SOCIAL_BY_KEY, socialUrl, fmtBirthday } from "@/src/lib/socials";
+import { resolveAccent, accentGradient, normalizeLinkUrl, prettyLinkLabel } from "@/src/lib/profileCustomize";
+import { AvatarFrame, ProfileBackground } from "@/src/components/ProfileDecor";
 import PostCard from "@/src/components/PostCard";
 import VerifiedBadge from "@/src/components/VerifiedBadge";
 import PresenceDot, { presenceLabel } from "@/src/components/PresenceDot";
@@ -191,8 +194,11 @@ export default function UserProfileScreen() {
     } catch {}
   };
 
+  const accent = resolveAccent(user?.accent_color);
+
   return (
     <SafeAreaView edges={["top"]} style={styles.root} testID="user-profile-screen">
+      <ProfileBackground background={user?.profile_background} />
       <Stack.Screen options={{ headerShown: false }} />
       <View style={styles.header}>
         <TouchableOpacity onPress={goBack} style={styles.backBtn} hitSlop={10} testID="user-back">
@@ -215,16 +221,23 @@ export default function UserProfileScreen() {
           }
           ListHeaderComponent={
             <View style={styles.profileBlock}>
-              <View style={styles.avatarWrap}>
-                <View style={styles.avatar}>
-                  {user.picture ? (
-                    <Image source={{ uri: user.picture }} style={{ width: "100%", height: "100%" }} />
-                  ) : (
-                    <Text style={styles.avatarInit}>{(user.name?.[0] || "?").toUpperCase()}</Text>
-                  )}
+              {user.cover_photo ? (
+                <Image source={{ uri: user.cover_photo }} style={styles.cover} resizeMode="cover" />
+              ) : (
+                <LinearGradient colors={accentGradient(user.accent_color)} start={{ x: 0, y: 0 }} end={{ x: 1, y: 1 }} style={styles.cover} />
+              )}
+              <AvatarFrame frame={user.avatar_frame} size={80} ring={3} style={{ marginTop: -42 }}>
+                <View style={styles.avatarWrap}>
+                  <View style={styles.avatar}>
+                    {user.picture ? (
+                      <Image source={{ uri: user.picture }} style={{ width: "100%", height: "100%" }} />
+                    ) : (
+                      <Text style={styles.avatarInit}>{(user.name?.[0] || "?").toUpperCase()}</Text>
+                    )}
+                  </View>
+                  <PresenceDot online={user.online} size={18} borderColor={theme.bg} style={{ right: 3, bottom: 3 }} />
                 </View>
-                <PresenceDot online={user.online} size={18} borderColor={theme.bg} style={{ right: 3, bottom: 3 }} />
-              </View>
+              </AvatarFrame>
               <View style={{ flexDirection: "row", alignItems: "center", justifyContent: "center" }}>
                 <Text style={styles.name}>{user.name}</Text>
                 {user.verified && <VerifiedBadge size={18} />}
@@ -234,6 +247,7 @@ export default function UserProfileScreen() {
               {!!user.role && user.role !== "user" && (
                 <Text style={styles.roleTag}>{user.role === "admin" ? "ADMIN" : "MODERATOR"}</Text>
               )}
+              {!!user.headline && <Text style={styles.headline} numberOfLines={2}>{user.headline}</Text>}
               {!!user.bio && <Text style={styles.bio}>{user.bio}</Text>}
 
               {(!!user.pronouns || !!user.location || !!user.birthday) && (
@@ -270,6 +284,34 @@ export default function UserProfileScreen() {
                       </TouchableOpacity>
                     );
                   })}
+                </View>
+              )}
+
+              {!!user.interests?.length && (
+                <View style={styles.interestWrap}>
+                  {user.interests.map((t) => (
+                    <View key={t} style={[styles.interestChip, { borderColor: accent + "55" }]}>
+                      <Text style={[styles.interestText, { color: accent }]}>{t}</Text>
+                    </View>
+                  ))}
+                </View>
+              )}
+
+              {!!user.featured_links?.length && (
+                <View style={styles.linksWrap}>
+                  {user.featured_links.map((l, i) => (
+                    <TouchableOpacity
+                      key={`${l.url}-${i}`}
+                      style={styles.linkRow}
+                      activeOpacity={0.7}
+                      onPress={() => Linking.openURL(normalizeLinkUrl(l.url)).catch(() => {})}
+                      testID={`user-link-${i}`}
+                    >
+                      <Ionicons name="link" size={15} color={accent} />
+                      <Text style={styles.linkLabel} numberOfLines={1}>{l.label || prettyLinkLabel(l.url)}</Text>
+                      <Ionicons name="open-outline" size={14} color={theme.textMuted} />
+                    </TouchableOpacity>
+                  ))}
                 </View>
               )}
 
@@ -522,7 +564,23 @@ const styles = StyleSheet.create({
     alignItems: "center", padding: 18, gap: 6,
     backgroundColor: theme.surface, borderRadius: 16,
     borderWidth: 1, borderColor: theme.border, marginBottom: 6,
+    overflow: "hidden",
   },
+  cover: {
+    height: 92, alignSelf: "stretch",
+    marginTop: -18, marginHorizontal: -18, marginBottom: 0,
+  },
+  headline: { color: theme.textSecondary, fontSize: 13.5, fontWeight: "600", textAlign: "center", marginTop: 2, paddingHorizontal: 20 },
+  interestWrap: { flexDirection: "row", flexWrap: "wrap", justifyContent: "center", gap: 7, marginTop: 10 },
+  interestChip: { borderWidth: 1, borderRadius: 14, paddingHorizontal: 11, paddingVertical: 5 },
+  interestText: { fontSize: 12.5, fontWeight: "700" },
+  linksWrap: { alignSelf: "stretch", gap: 8, marginTop: 12 },
+  linkRow: {
+    flexDirection: "row", alignItems: "center", gap: 10,
+    backgroundColor: theme.surfaceAlt, borderWidth: 1, borderColor: theme.border,
+    borderRadius: 12, paddingHorizontal: 14, paddingVertical: 12,
+  },
+  linkLabel: { flex: 1, color: theme.textPrimary, fontSize: 14, fontWeight: "700" },
   avatarWrap: { width: 80, height: 80 },
   avatar: {
     width: 80, height: 80, borderRadius: 40, overflow: "hidden",

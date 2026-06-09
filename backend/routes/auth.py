@@ -173,6 +173,52 @@ async def update_me(body: ProfilePatch, authorization: Optional[str] = Header(No
             if k in allowed and isinstance(v, str) and v.strip():
                 cleaned[k] = v.strip()[:120]
         patch["socials"] = cleaned
+    if body.headline is not None:
+        patch["headline"] = body.headline.strip()[:60] or None
+    if body.cover_photo is not None:
+        # A banner image URL / data URI; empty string clears it.
+        patch["cover_photo"] = body.cover_photo or None
+    if body.accent_color is not None:
+        # Only accept a #RRGGBB hex; anything else (incl. "") clears it.
+        c = (body.accent_color or "").strip()
+        patch["accent_color"] = c if re.match(r"^#[0-9a-fA-F]{6}$", c) else None
+    if body.interests is not None:
+        # Trim, drop empties, dedupe case-insensitively (keep first casing), cap at 12.
+        cleaned_int: list = []
+        seen_int = set()
+        for w in body.interests:
+            t = (w or "").strip()[:30]
+            key = t.lower()
+            if t and key not in seen_int:
+                seen_int.add(key)
+                cleaned_int.append(t)
+            if len(cleaned_int) >= 12:
+                break
+        patch["interests"] = cleaned_int
+    if body.featured_links is not None:
+        # Link-in-bio rows: [{label, url}]. Require a valid http(s) url; cap at 5.
+        cleaned_links: list = []
+        for item in body.featured_links:
+            if not isinstance(item, dict):
+                continue
+            url = str(item.get("url") or "").strip()[:300]
+            if not re.match(r"^https?://", url, re.IGNORECASE):
+                continue
+            label = str(item.get("label") or "").strip()[:40]
+            cleaned_links.append({"label": label, "url": url})
+            if len(cleaned_links) >= 5:
+                break
+        patch["featured_links"] = cleaned_links
+    if body.avatar_frame is not None:
+        # Steam-style decorative ring; must be a known preset (else clear).
+        frames = {"none", "gold", "emerald", "ruby", "sapphire", "amethyst", "rgb", "frost", "molten", "mono"}
+        f = (body.avatar_frame or "").strip()
+        patch["avatar_frame"] = f if f in frames and f != "none" else None
+    if body.profile_background is not None:
+        # Full-profile themed background; must be a known preset (else clear).
+        bgs = {"default", "midnight", "sunset", "aurora", "crimson", "forest", "nebula", "carbon"}
+        b = (body.profile_background or "").strip()
+        patch["profile_background"] = b if b in bgs and b != "default" else None
     for k in ("home_name", "home_longitude", "home_latitude",
               "work_name", "work_longitude", "work_latitude"):
         v = getattr(body, k)
