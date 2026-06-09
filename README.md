@@ -393,7 +393,7 @@ The backend and frontend run as two separate processes.
 cd backend
 pip install -r requirements.txt              # a virtualenv is recommended
 
-export DATABASE_URL="postgresql://user:password@localhost:5432/nampo"
+export DATABASE_URL="postgresql://user:password@localhost:5432/okayspace"
 # Optional, e.g.:
 # export MESSAGE_ENC_KEY="$(python -c 'from cryptography.fernet import Fernet;print(Fernet.generate_key().decode())')"
 
@@ -437,7 +437,7 @@ A successful response returns a `session_token` and your user object.
 
 ## Deployment
 
-- **Render (recommended):** `render.yaml` is a Render **Blueprint** that provisions a managed Postgres database (`nampo-db`), deploys the FastAPI API from `backend/Dockerfile` (`nampo-backend`, with a `/health` check and `autoDeploy`), **and** deploys the Expo web build as a static site (`nampo-web`). `DATABASE_URL` is injected automatically (`fromDatabase`); the static site gets `EXPO_PUBLIC_BACKEND_URL` + `EXPO_PUBLIC_MAPBOX_TOKEN` (and optional `EXPO_PUBLIC_CLOUDINARY_*`). Full backend step-by-step in **`DEPLOY.md`** (~15 minutes).
+- **Render (recommended):** `render.yaml` is a Render **Blueprint** that provisions a managed Postgres database (`okayspace-db`), deploys the FastAPI API from `backend/Dockerfile` (`okayspace-api`, with a `/health` check and `autoDeploy`), **and** deploys the Expo web build as a static site (`okayspace-web`). `DATABASE_URL` is injected automatically (`fromDatabase`); the static site gets `EXPO_PUBLIC_BACKEND_URL` + `EXPO_PUBLIC_MAPBOX_TOKEN` (and optional `EXPO_PUBLIC_CLOUDINARY_*`). Full backend step-by-step in **`DEPLOY.md`** (~15 minutes).
 - **Docker:** `backend/Dockerfile` produces a self-contained image running `uvicorn server:app` on `$PORT` (default `8080`). Run it anywhere that can reach Postgres via `DATABASE_URL`.
 - **AWS App Runner:** `backend/apprunner.yaml` is provided for source-based deploys.
 - **Mobile binaries:** built with **EAS** — see **`frontend/IOS_BUILD.md`** for the iOS/App Store flow (no Mac required) and `frontend/EAS_SETUP.md`.
