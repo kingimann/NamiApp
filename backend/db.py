@@ -38,7 +38,7 @@ _ISO_DT_RE = re.compile(r"^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}")
 # Fields known to hold JSON arrays — uses @> containment in queries.
 _ARRAY_FIELDS = {
     "participant_ids", "deleted_by", "hashtags", "place_ids",
-    "pinned_post_ids", "auth_providers", "member_ids",
+    "pinned_post_ids", "auth_providers", "member_ids", "badge_ids",
     # Developer-webhook subscriptions: filtering by a single event must use
     # array containment, not text equality (otherwise no webhook ever matches).
     "events",
@@ -331,6 +331,14 @@ class Collection:
                             conditions.append(
                                 f"{self._sql_jsonb(key)} @> ${len(params)}::jsonb"
                             )
+                elif op == "$elemMatch":
+                    # Array has an element matching the given equality sub-fields:
+                    # field @> [op_val]. (Supports equality sub-conditions, which is
+                    # all the callers use, e.g. media: {$elemMatch: {type: "video"}}.)
+                    params.append(_to_json([op_val]))
+                    conditions.append(
+                        f"{self._sql_jsonb(key)} @> ${len(params)}::jsonb"
+                    )
                 elif op == "$nin":
                     if not op_val:
                         conditions.append("TRUE")

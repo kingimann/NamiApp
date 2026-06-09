@@ -15,6 +15,7 @@ from typing import Optional
 from fastapi import APIRouter, Header, HTTPException
 
 from core import db, get_current_user, is_admin, _norm_dt
+from db import DuplicateKeyError
 
 try:
     import stripe  # type: ignore
@@ -22,6 +23,24 @@ except Exception:
     stripe = None  # type: ignore
 
 router = APIRouter()
+
+# Serialize payout batches so the hourly loop, the admin "run", and the cron
+# trigger can't run concurrently and double-pay (single-process deployment).
+_payout_lock = asyncio.Lock()
+
+
+def _payout_period_key(uid: str, freq: str, now: datetime) -> str:
+    """A stable per-cadence-period key so a creator is paid at most once per
+    period, even across overlapping/retried runs."""
+    if freq == "monthly":
+        bucket = now.strftime("%Y-%m")
+    elif freq == "biweekly":
+        iso = now.isocalendar()
+        bucket = f"{iso[0]}-bw{iso[1] // 2}"
+    else:
+        iso = now.isocalendar()
+        bucket = f"{iso[0]}-w{iso[1]}"
+    return f"{uid}:{freq}:{bucket}"
 
 MIN_PAYOUT = float(os.environ.get("MIN_PAYOUT", "25") or 25)   # Google-style floor — no dust payouts
 CRON_SECRET = os.environ.get("CRON_SECRET", "")
@@ -60,7 +79,13 @@ async def _sums(collection, field="amount", *, extra=None, keep=None) -> dict:
 
 
 async def process_payouts(only_due: bool = True) -> dict:
-    """Create payouts for creators whose balance is due. Idempotent per cadence."""
+    """Create payouts for creators whose balance is due. Idempotent per cadence
+    and serialized so overlapping triggers can't double-pay."""
+    async with _payout_lock:
+        return await _process_payouts_impl(only_due)
+
+
+async def _process_payouts_impl(only_due: bool = True) -> dict:
     now = datetime.now(timezone.utc)
     # Scheduled-rail basis only: external (non-wallet) earnings minus scheduled
     # payouts. Wallet-backed earnings and instant cash-outs belong to the wallet
@@ -91,21 +116,37 @@ async def process_payouts(only_due: bool = True) -> dict:
                         continue
                 except Exception:
                     pass
+        # Single-winner guard: claim this cadence period BEFORE moving money so
+        # overlapping/retried runs can't pay twice. The same key is the Stripe
+        # idempotency key, so an SDK/network retry is deduped server-side too.
+        freq = user.get("payout_frequency", "weekly")
+        key = _payout_period_key(uid, freq, now)
+        ref = f"payout:{key}"
+        try:
+            await db.payments_fulfilled.insert_one(
+                {"ref_id": ref, "user_id": uid, "amount": balance, "created_at": now})
+        except DuplicateKeyError:
+            continue  # already paid (or being paid) this period
         # Try a real Stripe transfer; fall back to a simulated payout.
         status, transfer_id = "simulated", None
         acct = user.get("stripe_account_id")
         if stripe and STRIPE_SECRET_KEY and acct:
             try:
                 stripe.api_key = STRIPE_SECRET_KEY
-                tr = stripe.Transfer.create(amount=int(round(balance * 100)), currency="usd", destination=acct)
+                tr = stripe.Transfer.create(
+                    amount=int(round(balance * 100)), currency="usd", destination=acct,
+                    idempotency_key=f"payout-{key}")
                 status, transfer_id = "paid", tr["id"]
             except Exception:
                 status = "failed"
         if status == "failed":
+            # Keep the period guard so we never double-pay on a network timeout
+            # (where the transfer may actually have succeeded). The balance carries
+            # forward and is paid on the next period's run.
             continue
         await db.payouts.insert_one({
             "id": str(uuid.uuid4()), "user_id": uid, "amount": balance,
-            "status": status, "stripe_transfer_id": transfer_id,
+            "status": status, "stripe_transfer_id": transfer_id, "period_key": key,
             "frequency": user.get("payout_frequency", "weekly"), "created_at": now,
         })
         # Receipt: in-app notification (always) + best-effort email.

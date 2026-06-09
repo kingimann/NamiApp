@@ -677,6 +677,15 @@ async def pay_from_wallet(body: WalletPay, authorization: Optional[str] = Header
             raise HTTPException(status_code=400, detail="Choose a valid subscription tier")
         amount = round(float(tier["price"]), 2)
         fee = 0.0
+        # Don't let someone pay (and create) the same active subscription twice.
+        if await db.subscriptions.find_one(
+            {"subscriber_id": me["user_id"], "creator_id": body.creator_id, "status": "active"},
+            {"_id": 0, "id": 1},
+        ):
+            raise HTTPException(status_code=409, detail={
+                "code": "already_subscribed",
+                "message": "You're already subscribed to this creator.",
+            })
     else:
         amount = _money_amount(body.amount)
         fee = await _fee_dollars()

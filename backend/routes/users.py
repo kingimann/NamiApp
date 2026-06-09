@@ -1004,8 +1004,22 @@ async def tip_user(user_id: str, body: TipCreate, authorization: Optional[str] =
         "message": (body.message or "")[:200],
         "created_at": now,
     }
+    # Move real money: charge the sender's wallet (balance-checked) before
+    # crediting the recipient. Previously this credited a withdrawable earning
+    # without ever debiting the sender — free money creation in test mode.
+    from routes.money import _debit_wallet, _credit_wallet
+    if not await _debit_wallet(me["user_id"], amount):
+        raise HTTPException(status_code=400, detail={
+            "code": "insufficient_balance",
+            "message": "Not enough wallet balance to send this tip.",
+        })
     await db.tips.insert_one(tip.copy())
-    await _credit(user_id, amount, "tip", me, message=(body.message or ""))
+    await _credit_wallet(user_id, amount)
+    await db.earnings.insert_one({
+        "id": str(uuid.uuid4()), "user_id": user_id, "amount": amount, "kind": "tip",
+        "from_user_id": me["user_id"], "from_name": me.get("name", "Someone"),
+        "message": (body.message or "")[:200], "source": "wallet", "created_at": now,
+    })
     if emit_notification:
         try:
             await emit_notification(user_id=user_id, actor_id=me["user_id"], ntype="tip",
@@ -1052,6 +1066,15 @@ async def subscribe_user(user_id: str, body: SubscribeBody = SubscribeBody(), au
         return {"subscribed": True}
     price = round(float(tier["price"]), 2)
     now = datetime.now(timezone.utc)
+    # Charge the subscriber's wallet first (balance-checked) so a subscription
+    # can't mint free withdrawable earnings for the creator.
+    if price > 0:
+        from routes.money import _debit_wallet, _credit_wallet
+        if not await _debit_wallet(me["user_id"], price):
+            raise HTTPException(status_code=400, detail={
+                "code": "insufficient_balance",
+                "message": "Not enough wallet balance to subscribe.",
+            })
     await db.subscriptions.insert_one({
         "id": str(uuid.uuid4()),
         "subscriber_id": me["user_id"],
@@ -1064,7 +1087,12 @@ async def subscribe_user(user_id: str, body: SubscribeBody = SubscribeBody(), au
         "created_at": now,
     })
     if price > 0:
-        await _credit(user_id, price, "subscription", me)
+        await _credit_wallet(user_id, price)
+        await db.earnings.insert_one({
+            "id": str(uuid.uuid4()), "user_id": user_id, "amount": price, "kind": "subscription",
+            "from_user_id": me["user_id"], "from_name": me.get("name", "Someone"),
+            "source": "wallet", "created_at": now,
+        })
     if emit_notification:
         try:
             await emit_notification(user_id=user_id, actor_id=me["user_id"], ntype="subscribe",
