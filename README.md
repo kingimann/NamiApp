@@ -437,11 +437,11 @@ A successful response returns a `session_token` and your user object.
 
 ## Deployment
 
-- **Render (recommended):** `render.yaml` is a Render **Blueprint** that provisions a managed Postgres database (`okayspace-db`), deploys the FastAPI API from `backend/Dockerfile` (`okayspace`, with a `/health` check and `autoDeploy`), **and** deploys the Expo web build as a static site (`okayspace-web`). `DATABASE_URL` is injected automatically (`fromDatabase`); the static site gets `EXPO_PUBLIC_BACKEND_URL` + `EXPO_PUBLIC_MAPBOX_TOKEN` (and optional `EXPO_PUBLIC_CLOUDINARY_*`). Full backend step-by-step in **`DEPLOY.md`** (~15 minutes).
+- **Render (recommended):** `render.yaml` is a Render **Blueprint** that deploys the FastAPI API from `backend/Dockerfile` (`okayspace-v0vx`, with a `/health` check and `autoDeploy`) **and** the Expo web build as a static site (`okayspace-web`). The database is an **external Postgres you control** — e.g. a free [Neon](https://neon.com) or Supabase instance — so set `DATABASE_URL` yourself in the Render dashboard (`sync: false`, kept out of git). The static site gets `EXPO_PUBLIC_BACKEND_URL` + `EXPO_PUBLIC_MAPBOX_TOKEN` (and optional `EXPO_PUBLIC_CLOUDINARY_*`). Full backend step-by-step in **`DEPLOY.md`** (~15 minutes).
 - **Docker:** `backend/Dockerfile` produces a self-contained image running `uvicorn server:app` on `$PORT` (default `8080`). Run it anywhere that can reach Postgres via `DATABASE_URL`.
 - **AWS App Runner:** `backend/apprunner.yaml` is provided for source-based deploys.
 - **Mobile binaries:** built with **EAS** — see **`frontend/IOS_BUILD.md`** for the iOS/App Store flow (no Mac required) and `frontend/EAS_SETUP.md`.
-- **Other Postgres providers:** to bring your own (Neon, Supabase, local), drop the `databases:` block from `render.yaml` and set `DATABASE_URL` yourself.
+- **Database:** any Postgres works (Neon, Supabase, local, or a Render-managed instance) — just point `DATABASE_URL` at it. The Blueprint ships with a Render-managed `databases:` block commented out (Render's free Postgres expires after 30 days); uncomment it and switch `DATABASE_URL` back to `fromDatabase` if you'd rather Render host it.
 
 After the backend is live, set the frontend's `EXPO_PUBLIC_BACKEND_URL` to the deployed URL (no trailing slash, no `/api`) and rebuild/restart Expo.
 

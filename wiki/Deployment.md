@@ -1,12 +1,11 @@
 # Deployment
 
 ## Render (recommended)
-`render.yaml` is a Render **Blueprint** that provisions:
-- a managed **Postgres** database (`okayspace-db`),
-- the **FastAPI API** from `backend/Dockerfile` (`okayspace`, with a `/health` check and `autoDeploy`),
+`render.yaml` is a Render **Blueprint** that deploys:
+- the **FastAPI API** from `backend/Dockerfile` (`okayspace-v0vx`, with a `/health` check and `autoDeploy`),
 - the **Expo web build** as a static site (`okayspace-web`).
 
-`DATABASE_URL` is injected automatically (`fromDatabase`). The static site gets `EXPO_PUBLIC_BACKEND_URL` + `EXPO_PUBLIC_MAPBOX_TOKEN` (and optional `EXPO_PUBLIC_CLOUDINARY_*`). Add the secret env vars from **[[Configuration]]** in the Render dashboard (or manage them in-app via **[[Admin Tools]]** once `RENDER_API_KEY` is set).
+The database is an **external Postgres you control** (a free [Neon](https://neon.com) or Supabase instance), so set `DATABASE_URL` yourself in the dashboard (`sync: false`). The static site gets `EXPO_PUBLIC_BACKEND_URL` + `EXPO_PUBLIC_MAPBOX_TOKEN` (and optional `EXPO_PUBLIC_CLOUDINARY_*`). Add the secret env vars from **[[Configuration]]** in the Render dashboard (or manage them in-app via **[[Admin Tools]]** once `RENDER_API_KEY` is set).
 
 Step-by-step lives in **`DEPLOY.md`** (~15 minutes).
 
@@ -33,8 +32,8 @@ Set the frontend's `EXPO_PUBLIC_BACKEND_URL` to the deployed URL (no trailing sl
 ## Webhooks
 Point **Stripe** at `POST {backend}/api/payments/webhook` and set `STRIPE_WEBHOOK_SECRET`. This finalizes tips, subscriptions, top-ups, and **paid form submissions** (see **[[Payments and Money]]**).
 
-## Other Postgres providers
-To bring your own (Neon, Supabase, local), drop the `databases:` block from `render.yaml` and set `DATABASE_URL` yourself.
+## Letting Render manage the database
+The default is an external Postgres (above). To have Render host it instead, uncomment the `databases:` block in `render.yaml` and switch `DATABASE_URL` back to a `fromDatabase` reference — but its free Postgres expires after 30 days.
 
 ## PWA / web
 The web build is an installable PWA (`frontend/public/manifest.json` + meta in `app/+html.tsx`). After deploy, confirm `/manifest.json` and `/icon.png` return 200. See **[[Mobile and Web]]**.
