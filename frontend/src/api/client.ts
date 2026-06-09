@@ -924,6 +924,14 @@ export const api = {
     request<{ ok: boolean }>(`/listings/${id}/comments/${commentId}`, { method: "DELETE" }),
   getSellerProfile: (userId: string) =>
     request<SellerProfile>(`/marketplace/users/${userId}`),
+  // Business storefronts (a separate selling identity from the personal profile).
+  myBusiness: () => request<BusinessProfile | null>("/marketplace/business/me"),
+  getBusiness: (businessId: string) =>
+    request<BusinessProfile>(`/marketplace/business/${businessId}`),
+  saveBusiness: (body: BusinessProfilePatch) =>
+    request<BusinessProfile>("/marketplace/business", { method: "PUT", body: JSON.stringify(body) }),
+  deleteBusiness: () =>
+    request<{ ok: boolean }>("/marketplace/business", { method: "DELETE" }),
   listSellerReviews: (userId: string) =>
     request<MarketplaceReview[]>(`/marketplace/users/${userId}/reviews`),
   addSellerReview: (userId: string, ratings: Record<string, number>, text: string) =>
@@ -1045,6 +1053,8 @@ export type Listing = {
   delivery?: string | null;
   contact_email?: string | null;
   contact_phone?: string | null;
+  business_id?: string | null;
+  business?: BusinessBrand | null;
   distance_km?: number | null;
   status: string;
   flag_reasons?: string[] | null;
@@ -1069,6 +1079,25 @@ export type ListingCreate = {
   longitude?: number; latitude?: number; locality?: string;
   negotiable?: boolean; quantity?: number; brand?: string; delivery?: string;
   contact_email?: string; contact_phone?: string;
+  business_id?: string | null;
+};
+export type BusinessBrand = {
+  id: string; name: string; logo?: string | null; accent?: string | null; verified?: boolean;
+};
+export type BusinessProfile = {
+  id: string; owner_id: string; owner?: PostAuthor | null;
+  name: string; tagline?: string | null; bio?: string | null;
+  logo?: string | null; banner?: string | null; accent?: string | null;
+  category?: string | null; policies?: string | null; location?: string | null;
+  contact_email?: string | null; contact_phone?: string | null; website?: string | null;
+  listing_count?: number; rating?: number; review_count?: number;
+  is_owner?: boolean; listings?: Listing[]; created_at: string;
+};
+export type BusinessProfilePatch = {
+  name?: string; tagline?: string; bio?: string;
+  logo?: string; banner?: string; accent?: string;
+  category?: string; policies?: string; location?: string;
+  contact_email?: string; contact_phone?: string; website?: string;
 };
 export type MarketplaceReview = {
   id: string; subject_user_id: string;

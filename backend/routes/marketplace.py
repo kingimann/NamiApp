@@ -9,6 +9,9 @@ from fastapi import APIRouter, Header, HTTPException, Query
 
 from core import _conv_key, _public_user, db, get_current_user, _norm_dt, require_account_age, MARKETPLACE_MIN_AGE_DAYS, is_admin
 from models import (
+    BusinessBrand,
+    BusinessProfile,
+    BusinessProfilePatch,
     ConversationView,
     Listing,
     ListingComment,
@@ -79,6 +82,27 @@ def _doc_coords(doc: dict) -> Optional[Tuple[float, float]]:
         return None
 
 
+async def _business_brand(business_id: Optional[str]) -> Optional[BusinessBrand]:
+    """Resolve the storefront brand for listing cards. Returns None when the
+    business doesn't exist or its owner's personal account is banned — the ban
+    cascade hides the business everywhere it would otherwise surface."""
+    if not business_id:
+        return None
+    b = await db.business_profiles.find_one({"id": business_id}, {"_id": 0})
+    if not b:
+        return None
+    owner = await db.users.find_one(
+        {"user_id": b.get("owner_id")}, {"_id": 0, "banned": 1, "verified": 1}
+    )
+    if not owner or owner.get("banned"):
+        return None
+    return BusinessBrand(
+        id=b["id"], name=b.get("name", "Shop"),
+        logo=b.get("logo"), accent=b.get("accent"),
+        verified=bool(owner.get("verified", False)),
+    )
+
+
 async def _hydrate_listing(
     doc: dict, viewer_id: Optional[str] = None,
     saved_ids: Optional[set] = None, with_counts: bool = False,
@@ -113,6 +137,7 @@ async def _hydrate_listing(
         coords = _doc_coords(doc)
         if coords is not None:
             distance_km = round(_haversine_km(viewer_coords, coords), 1)
+    business = await _business_brand(doc.get("business_id"))
     return Listing(
         id=doc["id"], user_id=doc["user_id"], seller=seller,
         title=doc["title"], price=doc.get("price", 0),
@@ -130,6 +155,8 @@ async def _hydrate_listing(
         delivery=doc.get("delivery", "pickup"),
         contact_email=doc.get("contact_email"),
         contact_phone=doc.get("contact_phone"),
+        business_id=doc.get("business_id"),
+        business=business,
         distance_km=distance_km,
         status=doc.get("status", "active"),
         flag_reasons=doc.get("flag_reasons"),
@@ -219,6 +246,19 @@ async def create_listing(body: ListingCreate, authorization: Optional[str] = Hea
                 "message": "You already have an active listing with this title.",
             })
 
+    # If listing under a business storefront, verify the caller owns it.
+    business_id = None
+    if body.business_id:
+        biz = await db.business_profiles.find_one(
+            {"id": body.business_id, "owner_id": uid}, {"_id": 0, "id": 1}
+        )
+        if not biz:
+            raise HTTPException(status_code=403, detail={
+                "code": "not_your_business",
+                "message": "You can only list under a business storefront you own.",
+            })
+        business_id = body.business_id
+
     photos = _clean_photos(body)
     # AI + rule spam moderation. Reused photos across the seller's own listings
     # are a common spam signal, so check that here (DB-side) and pass it in.
@@ -251,6 +291,7 @@ async def create_listing(body: ListingCreate, authorization: Optional[str] = Hea
         "delivery": body.delivery if body.delivery in ("pickup", "shipping", "both") else "pickup",
         "contact_email": (body.contact_email or "").strip()[:120] or None,
         "contact_phone": (body.contact_phone or "").strip()[:40] or None,
+        "business_id": business_id,
         "status": "flagged" if mod["flagged"] else "active",
         "flag_reasons": mod["reasons"] if mod["flagged"] else None,
         "flagged_at": datetime.now(timezone.utc) if mod["flagged"] else None,
@@ -454,6 +495,19 @@ async def patch_listing(
         patch["contact_email"] = (body.contact_email or "").strip()[:120] or None
     if body.contact_phone is not None:
         patch["contact_phone"] = (body.contact_phone or "").strip()[:40] or None
+    if body.business_id is not None:
+        if body.business_id == "":
+            patch["business_id"] = None       # move back to the personal profile
+        else:
+            biz = await db.business_profiles.find_one(
+                {"id": body.business_id, "owner_id": user["user_id"]}, {"_id": 0, "id": 1}
+            )
+            if not biz:
+                raise HTTPException(status_code=403, detail={
+                    "code": "not_your_business",
+                    "message": "You can only list under a business storefront you own.",
+                })
+            patch["business_id"] = body.business_id
     # Re-moderate when the content (title/description/photos) changed — fixing a
     # flagged listing republishes it; editing one into spam re-flags it. Skip if
     # the caller is explicitly setting a status (e.g. marking sold).
@@ -573,6 +627,170 @@ async def list_seller_reviews(user_id: str, authorization: Optional[str] = Heade
         {"subject_user_id": user_id}, {"_id": 0}
     ).sort("created_at", -1).to_list(100)
     return [await _hydrate_review(d) for d in docs]
+
+
+# ---------- Business storefronts ----------
+# A business profile is a separate selling identity owned by a personal account.
+# It's kept apart from the social profile, but the ban cascade ties it to the
+# owner: a banned owner's storefront 404s and its brand is stripped from cards.
+_HEX_RE = re.compile(r"^#[0-9a-fA-F]{6}$")
+
+
+def _clean_biz_patch(body: BusinessProfilePatch) -> dict:
+    out: dict = {}
+    if body.name is not None:
+        out["name"] = body.name.strip()[:60]
+    if body.tagline is not None:
+        out["tagline"] = body.tagline.strip()[:120] or None
+    if body.bio is not None:
+        out["bio"] = body.bio.strip()[:1000] or None
+    if body.logo is not None:
+        out["logo"] = (body.logo or None) if len(body.logo or "") <= _MEDIA_LIMIT else None
+    if body.banner is not None:
+        out["banner"] = (body.banner or None) if len(body.banner or "") <= _MEDIA_LIMIT else None
+    if body.accent is not None:
+        out["accent"] = body.accent if (body.accent and _HEX_RE.match(body.accent)) else None
+    if body.category is not None:
+        out["category"] = body.category.strip()[:40] or None
+    if body.policies is not None:
+        out["policies"] = body.policies.strip()[:1000] or None
+    if body.location is not None:
+        out["location"] = body.location.strip()[:120] or None
+    if body.contact_email is not None:
+        out["contact_email"] = body.contact_email.strip()[:120] or None
+    if body.contact_phone is not None:
+        out["contact_phone"] = body.contact_phone.strip()[:40] or None
+    if body.website is not None:
+        out["website"] = body.website.strip()[:200] or None
+    return out
+
+
+async def _business_rating(owner_id: str) -> Tuple[float, int]:
+    """The storefront's reputation mirrors the owner's seller-side reviews."""
+    rows = await db.marketplace_reviews.find(
+        {"subject_user_id": owner_id}, {"_id": 0, "rating": 1, "role": 1}
+    ).to_list(2000)
+    seller_rows = [r for r in rows if r.get("role", "seller") == "seller"]
+    if not seller_rows:
+        return 0.0, 0
+    return round(sum(r.get("rating", 0) for r in seller_rows) / len(seller_rows), 1), len(seller_rows)
+
+
+async def _hydrate_business(
+    doc: dict, viewer_id: str, with_listings: bool = False,
+    saved_ids: Optional[set] = None,
+) -> BusinessProfile:
+    from core import _resolve_badges
+    owner_doc = await db.users.find_one({"user_id": doc["owner_id"]}, {"_id": 0}) or {}
+    owner = PostAuthor(
+        user_id=doc["owner_id"],
+        name=owner_doc.get("name", "Unknown") or "Unknown",
+        username=owner_doc.get("username"),
+        picture=owner_doc.get("picture"),
+        verified=bool(owner_doc.get("verified", False)),
+        badges=await _resolve_badges(owner_doc.get("badge_ids")),
+    )
+    listing_count = await db.listings.count_documents(
+        {"business_id": doc["id"], "status": {"$ne": "sold"}}
+    )
+    rating, review_count = await _business_rating(doc["owner_id"])
+    listings: List[Listing] = []
+    if with_listings:
+        ldocs = await db.listings.find(
+            {"business_id": doc["id"], "status": {"$ne": "sold"}}, {"_id": 0}
+        ).sort("created_at", -1).to_list(60)
+        ldocs = [d for d in ldocs if d.get("status") != "flagged"]
+        listings = [await _hydrate_listing(d, saved_ids=saved_ids) for d in ldocs]
+    return BusinessProfile(
+        id=doc["id"], owner_id=doc["owner_id"], owner=owner,
+        name=doc.get("name", "Shop"), tagline=doc.get("tagline"),
+        bio=doc.get("bio"), logo=doc.get("logo"), banner=doc.get("banner"),
+        accent=doc.get("accent"), category=doc.get("category"),
+        policies=doc.get("policies"), location=doc.get("location"),
+        contact_email=doc.get("contact_email"), contact_phone=doc.get("contact_phone"),
+        website=doc.get("website"),
+        listing_count=listing_count, rating=rating, review_count=review_count,
+        is_owner=(viewer_id == doc["owner_id"]),
+        listings=listings, created_at=doc["created_at"],
+    )
+
+
+@router.get("/marketplace/business/me", response_model=Optional[BusinessProfile])
+async def my_business(authorization: Optional[str] = Header(None)):
+    """The caller's own storefront, or null if they haven't created one."""
+    user = await get_current_user(authorization)
+    doc = await db.business_profiles.find_one({"owner_id": user["user_id"]}, {"_id": 0})
+    if not doc:
+        return None
+    return await _hydrate_business(doc, user["user_id"])
+
+
+@router.put("/marketplace/business", response_model=BusinessProfile)
+async def upsert_business(body: BusinessProfilePatch, authorization: Optional[str] = Header(None)):
+    """Create the caller's storefront (one per account) or update the existing one."""
+    user = await get_current_user(authorization)
+    if user.get("marketplace_disabled"):
+        raise HTTPException(status_code=403, detail={
+            "code": "marketplace_disabled",
+            "message": "Marketplace selling has been disabled on your account by an administrator.",
+        })
+    require_account_age(user, "open a business storefront", MARKETPLACE_MIN_AGE_DAYS)
+    patch = _clean_biz_patch(body)
+    existing = await db.business_profiles.find_one({"owner_id": user["user_id"]}, {"_id": 0})
+    if existing:
+        if "name" in patch and not patch["name"]:
+            raise HTTPException(status_code=400, detail="Business name can't be empty")
+        if patch:
+            await db.business_profiles.update_one({"id": existing["id"]}, {"$set": patch})
+        doc = await db.business_profiles.find_one({"id": existing["id"]}, {"_id": 0})
+        return await _hydrate_business(doc, user["user_id"])
+    name = (patch.get("name") or "").strip()
+    if not name:
+        raise HTTPException(status_code=400, detail="Business name is required")
+    doc = {
+        **patch,
+        "id": str(uuid.uuid4()),
+        "owner_id": user["user_id"],
+        "name": name,
+        "created_at": datetime.now(timezone.utc),
+    }
+    try:
+        await db.business_profiles.insert_one(doc.copy())
+    except Exception:
+        # Lost the create race (unique owner_id) — return the row that won.
+        existing = await db.business_profiles.find_one({"owner_id": user["user_id"]}, {"_id": 0})
+        if existing:
+            return await _hydrate_business(existing, user["user_id"])
+        raise
+    return await _hydrate_business(doc, user["user_id"])
+
+
+@router.delete("/marketplace/business")
+async def delete_business(authorization: Optional[str] = Header(None)):
+    """Close the storefront and move its listings back to the personal profile."""
+    user = await get_current_user(authorization)
+    doc = await db.business_profiles.find_one(
+        {"owner_id": user["user_id"]}, {"_id": 0, "id": 1})
+    if not doc:
+        raise HTTPException(status_code=404, detail="No business storefront")
+    await db.listings.update_many({"business_id": doc["id"]}, {"$set": {"business_id": None}})
+    await db.business_profiles.delete_one({"id": doc["id"]})
+    return {"ok": True}
+
+
+@router.get("/marketplace/business/{business_id}", response_model=BusinessProfile)
+async def get_business(business_id: str, authorization: Optional[str] = Header(None)):
+    me = await get_current_user(authorization)
+    doc = await db.business_profiles.find_one({"id": business_id}, {"_id": 0})
+    if not doc:
+        raise HTTPException(status_code=404, detail="Business not found")
+    # Ban cascade: a banned owner's storefront is hidden from everyone.
+    owner = await db.users.find_one(
+        {"user_id": doc["owner_id"]}, {"_id": 0, "banned": 1})
+    if owner and owner.get("banned"):
+        raise HTTPException(status_code=404, detail="Business not found")
+    saved_ids = await _saved_ids_for(me["user_id"])
+    return await _hydrate_business(doc, me["user_id"], with_listings=True, saved_ids=saved_ids)
 
 
 # ---------- Trade verification (shared code) ----------

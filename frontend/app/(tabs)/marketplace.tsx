@@ -10,7 +10,7 @@ import { useFocusEffect, useRouter, useLocalSearchParams } from "expo-router";
 import * as ImagePicker from "expo-image-picker";
 import { pickImages } from "@/src/utils/thumbnail";
 import * as Location from "expo-location";
-import { api, Listing } from "@/src/api/client";
+import { api, Listing, BusinessProfile } from "@/src/api/client";
 import { useAuth } from "@/src/context/AuthContext";
 import { theme } from "@/src/theme";
 import { GLASS } from "@/src/lib/glass";
@@ -79,7 +79,7 @@ const EMPTY_DRAFT = {
   title: "", price: "", category: "other", condition: "used", description: "",
   photos: [] as string[], brand: "", quantity: "1", negotiable: false,
   delivery: "pickup", lng: null as number | null, lat: null as number | null, locality: "",
-  contactEmail: "", contactPhone: "",
+  contactEmail: "", contactPhone: "", businessId: null as string | null,
 };
 
 // Shimmering placeholder grid shown while listings load — keeps the layout
@@ -138,6 +138,7 @@ export default function MarketplaceScreen() {
   // Location + radius (Facebook-Marketplace style).
   const [coords, setCoords] = useState<[number, number] | null>(null);
   const [locality, setLocality] = useState("");
+  const [myBiz, setMyBiz] = useState<BusinessProfile | null>(null);
   const [radius, setRadius] = useState(0); // km; 0 = any distance
   const [locating, setLocating] = useState(false);
 
@@ -242,6 +243,13 @@ export default function MarketplaceScreen() {
     else Alert.alert("Couldn't get your location", "Allow location access in your browser/device settings and try again.");
   };
 
+  // Load the caller's business storefront (if any) so they can list under it.
+  useEffect(() => {
+    let alive = true;
+    api.myBusiness().then((b) => { if (alive) setMyBiz(b); }).catch(() => {});
+    return () => { alive = false; };
+  }, []);
+
   const openCompose = () => {
     setEditingId(null);
     setDraft({ ...EMPTY_DRAFT });
@@ -270,6 +278,7 @@ export default function MarketplaceScreen() {
       locality: l.locality || "",
       contactEmail: l.contact_email || "",
       contactPhone: l.contact_phone || "",
+      businessId: l.business_id || null,
     });
     setComposeOpen(true);
   }, []);
@@ -304,6 +313,7 @@ export default function MarketplaceScreen() {
       locality: draft.locality || undefined,
       contact_email: draft.contactEmail.trim() || undefined,
       contact_phone: draft.contactPhone.trim() || undefined,
+      business_id: draft.businessId ?? "",   // "" lists under the personal profile
     };
     try {
       if (editingId) {
@@ -504,6 +514,17 @@ export default function MarketplaceScreen() {
                   {item.negotiable && <Text style={styles.oboTag}>OBO</Text>}
                 </View>
                 <Text style={styles.tileTitle} numberOfLines={2}>{item.title}</Text>
+                {!!item.business && (
+                  <View style={styles.bizRow}>
+                    {item.business.logo ? (
+                      <Image source={{ uri: item.business.logo }} style={styles.bizLogo} />
+                    ) : (
+                      <Ionicons name="business" size={11} color={item.business.accent || theme.primary} />
+                    )}
+                    <Text style={styles.bizName} numberOfLines={1}>{item.business.name}</Text>
+                    {item.business.verified && <Ionicons name="checkmark-circle" size={11} color={theme.primary} />}
+                  </View>
+                )}
                 {(item.distance_km != null || !!item.locality) && (
                   <View style={styles.tileLocRow}>
                     <Ionicons name="location-outline" size={11} color={theme.textMuted} />
@@ -531,6 +552,37 @@ export default function MarketplaceScreen() {
             <View style={styles.sheetHandle} />
             <Text style={styles.sheetTitle}>{editingId ? "Edit listing" : "New listing"}</Text>
             <ScrollView keyboardShouldPersistTaps="handled">
+              <Text style={styles.label}>List as</Text>
+              <View style={styles.listAsRow}>
+                <TouchableOpacity
+                  style={[styles.listAsChip, !draft.businessId && styles.listAsChipOn]}
+                  onPress={() => setDraft((d) => ({ ...d, businessId: null }))}
+                  testID="listing-as-personal"
+                >
+                  <Ionicons name="person-circle-outline" size={18} color={!draft.businessId ? theme.primary : theme.textMuted} />
+                  <Text style={[styles.listAsText, !draft.businessId && styles.listAsTextOn]} numberOfLines={1}>Personal</Text>
+                </TouchableOpacity>
+                {myBiz ? (
+                  <TouchableOpacity
+                    style={[styles.listAsChip, draft.businessId === myBiz.id && styles.listAsChipOn]}
+                    onPress={() => setDraft((d) => ({ ...d, businessId: myBiz.id }))}
+                    testID="listing-as-business"
+                  >
+                    <Ionicons name="business-outline" size={17} color={draft.businessId === myBiz.id ? theme.primary : theme.textMuted} />
+                    <Text style={[styles.listAsText, draft.businessId === myBiz.id && styles.listAsTextOn]} numberOfLines={1}>{myBiz.name}</Text>
+                  </TouchableOpacity>
+                ) : (
+                  <TouchableOpacity
+                    style={[styles.listAsChip, { borderStyle: "dashed" }]}
+                    onPress={() => { setComposeOpen(false); router.push("/business"); }}
+                    testID="listing-create-business"
+                  >
+                    <Ionicons name="add" size={17} color={theme.textMuted} />
+                    <Text style={styles.listAsText} numberOfLines={1}>New business</Text>
+                  </TouchableOpacity>
+                )}
+              </View>
+
               <Text style={styles.label}>Photos</Text>
               <ScrollView horizontal showsHorizontalScrollIndicator={false} style={{ marginBottom: 4 }}>
                 <View style={{ flexDirection: "row", gap: 8, paddingRight: 16 }}>
@@ -1020,6 +1072,14 @@ const styles = StyleSheet.create({
   },
   sheetTitle: { color: theme.textPrimary, fontSize: 20, fontWeight: "800", marginBottom: 12 },
   label: { color: theme.textSecondary, fontSize: 12, fontWeight: "700", marginTop: 12, marginBottom: 6 },
+  listAsRow: { flexDirection: "row", gap: 8 },
+  listAsChip: { flex: 1, flexDirection: "row", alignItems: "center", justifyContent: "center", gap: 6, paddingVertical: 11, borderRadius: 12, borderWidth: 1, borderColor: theme.border, backgroundColor: theme.surface },
+  listAsChipOn: { borderColor: theme.primary, backgroundColor: theme.surfaceAlt },
+  listAsText: { color: theme.textSecondary, fontSize: 13.5, fontWeight: "700", maxWidth: 110 },
+  listAsTextOn: { color: theme.primary },
+  bizRow: { flexDirection: "row", alignItems: "center", gap: 4, marginTop: 3 },
+  bizLogo: { width: 14, height: 14, borderRadius: 7, backgroundColor: theme.surfaceAlt },
+  bizName: { color: theme.textSecondary, fontSize: 11.5, fontWeight: "700", flexShrink: 1 },
   input: {
     ...GLASS, borderWidth: 1, borderColor: theme.border,
     borderRadius: 12, paddingHorizontal: 14, paddingVertical: 12,

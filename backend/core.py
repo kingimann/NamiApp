@@ -77,6 +77,9 @@ async def init_pool() -> None:
         ("custom_emojis", "uniq_custom_emoji_code", "((doc ->> 'shortcode'))"),
         ("communities", "uniq_community_name", "((doc ->> 'name'))"),
         ("community_members", "uniq_community_member", "((doc ->> 'community_id'), (doc ->> 'user_id'))"),
+        # One business storefront per user (owner). The create-or-update route
+        # relies on this for the "single business per personal account" model.
+        ("business_profiles", "uniq_business_owner", "((doc ->> 'owner_id'))"),
         # Payment fulfillment ledger — the idempotency guard relies on this
         # unique index so an event/session is fulfilled exactly once even under
         # concurrent webhook + inline-confirm delivery.

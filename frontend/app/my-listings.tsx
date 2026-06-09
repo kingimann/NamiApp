@@ -116,11 +116,18 @@ export default function MyListingsScreen() {
           contentContainerStyle={{ padding: 14, paddingBottom: insets.bottom + 24, gap: 12 }}
           refreshControl={<RefreshControl refreshing={refreshing} onRefresh={() => { setRefreshing(true); load(); }} tintColor={theme.primary} />}
           ListHeaderComponent={
-            <TouchableOpacity style={styles.storefrontBtn} onPress={() => router.push("/shop")} testID="customize-storefront">
-              <Ionicons name="storefront-outline" size={18} color={theme.primary} />
-              <Text style={styles.storefrontText}>Customize your storefront</Text>
-              <Ionicons name="chevron-forward" size={16} color={theme.textMuted} />
-            </TouchableOpacity>
+            <View style={{ gap: 10, marginBottom: 2 }}>
+              <TouchableOpacity style={styles.storefrontBtn} onPress={() => router.push("/shop")} testID="customize-storefront">
+                <Ionicons name="storefront-outline" size={18} color={theme.primary} />
+                <Text style={styles.storefrontText}>Customize your storefront</Text>
+                <Ionicons name="chevron-forward" size={16} color={theme.textMuted} />
+              </TouchableOpacity>
+              <TouchableOpacity style={styles.storefrontBtn} onPress={() => router.push("/business")} testID="manage-business">
+                <Ionicons name="business-outline" size={18} color={theme.primary} />
+                <Text style={styles.storefrontText}>Your business profile</Text>
+                <Ionicons name="chevron-forward" size={16} color={theme.textMuted} />
+              </TouchableOpacity>
+            </View>
           }
           ListEmptyComponent={
             <View style={styles.empty}>

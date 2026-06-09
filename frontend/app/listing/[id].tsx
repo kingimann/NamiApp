@@ -209,6 +209,30 @@ export default function ListingDetailScreen() {
               </>
             )}
 
+            {!!listing.business && (
+              <TouchableOpacity
+                style={[styles.bizCard, !!listing.business.accent && { borderColor: listing.business.accent + "66" }]}
+                onPress={() => router.push({ pathname: "/business/[id]", params: { id: listing.business!.id } })}
+                testID="listing-business"
+              >
+                <View style={[styles.bizLogoWrap, { backgroundColor: (listing.business.accent || theme.primary) }]}>
+                  {listing.business.logo ? (
+                    <Image source={{ uri: listing.business.logo }} style={{ width: "100%", height: "100%" }} />
+                  ) : (
+                    <Ionicons name="business" size={20} color="#fff" />
+                  )}
+                </View>
+                <View style={{ flex: 1 }}>
+                  <Text style={styles.bizCardLabel}>Sold by business</Text>
+                  <View style={styles.bizCardNameRow}>
+                    <Text style={styles.bizCardName} numberOfLines={1}>{listing.business.name}</Text>
+                    {listing.business.verified && <Ionicons name="checkmark-circle" size={14} color={theme.primary} />}
+                  </View>
+                </View>
+                <Ionicons name="chevron-forward" size={18} color={theme.textMuted} />
+              </TouchableOpacity>
+            )}
+
             <Text style={styles.sectionTitle}>Seller</Text>
             <TouchableOpacity
               style={styles.sellerRow}
@@ -440,6 +464,11 @@ const styles = StyleSheet.create({
   reportDoneText: { color: "#fff", fontWeight: "800" },
   sectionTitle: { color: theme.textPrimary, fontSize: 16, fontWeight: "800", marginTop: 22, marginBottom: 8 },
   description: { color: theme.textSecondary, fontSize: 15.5, lineHeight: 24 },
+  bizCard: { flexDirection: "row", alignItems: "center", gap: 12, marginTop: 16, backgroundColor: theme.surface, borderWidth: 1, borderColor: theme.border, borderRadius: 16, padding: 12 },
+  bizLogoWrap: { width: 40, height: 40, borderRadius: 12, overflow: "hidden", alignItems: "center", justifyContent: "center" },
+  bizCardLabel: { color: theme.textMuted, fontSize: 11, fontWeight: "800", textTransform: "uppercase", letterSpacing: 0.4 },
+  bizCardNameRow: { flexDirection: "row", alignItems: "center", gap: 5, marginTop: 1 },
+  bizCardName: { color: theme.textPrimary, fontSize: 15, fontWeight: "800", flexShrink: 1 },
   contactCard: { marginTop: 12, backgroundColor: theme.surface, borderWidth: 1, borderColor: theme.border, borderRadius: 14, padding: 12, gap: 4 },
   contactHeader: { color: theme.textMuted, fontSize: 12, fontWeight: "800", textTransform: "uppercase", letterSpacing: 0.5, marginBottom: 4 },
   contactRow: { flexDirection: "row", alignItems: "center", gap: 10, paddingVertical: 8 },

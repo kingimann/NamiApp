@@ -517,6 +517,7 @@ class ListingCreate(BaseModel):
     delivery: Optional[str] = "pickup"   # pickup | shipping | both
     contact_email: Optional[str] = None  # optional public contact shown on the listing
     contact_phone: Optional[str] = None
+    business_id: Optional[str] = None    # list under a business storefront ("" / None = personal)
 
 
 class ListingPatch(BaseModel):
@@ -538,6 +539,7 @@ class ListingPatch(BaseModel):
     delivery: Optional[str] = None
     contact_email: Optional[str] = None
     contact_phone: Optional[str] = None
+    business_id: Optional[str] = None    # move between personal / a business storefront
 
 
 class Listing(BaseModel):
@@ -561,6 +563,8 @@ class Listing(BaseModel):
     delivery: Optional[str] = "pickup"
     contact_email: Optional[str] = None
     contact_phone: Optional[str] = None
+    business_id: Optional[str] = None
+    business: Optional["BusinessBrand"] = None   # storefront brand, when sold by a business
     distance_km: Optional[float] = None   # set when the viewer shares a location
     status: str = "active"
     flag_reasons: Optional[List[str]] = None   # why an automated check unpublished it
@@ -618,6 +622,59 @@ class SellerProfile(BaseModel):
     listings: List[Listing] = []
     reviewed_by_me: bool = False
     can_review: bool = False   # viewer has a verified trade with this seller
+
+
+# ---------- Business storefronts ----------
+# A business profile is a separate selling identity owned by a user. It is kept
+# apart from the user's personal/social profile, but its lifecycle is tied to the
+# owner: if the owner's personal account is banned, the business is banned too
+# (the cascade is enforced on read — a banned owner's storefront is hidden).
+class BusinessBrand(BaseModel):
+    """Lightweight brand shown on listing cards sold by a business."""
+    id: str
+    name: str
+    logo: Optional[str] = None
+    accent: Optional[str] = None
+    verified: bool = False
+
+
+class BusinessProfilePatch(BaseModel):
+    name: Optional[str] = None
+    tagline: Optional[str] = None
+    bio: Optional[str] = None
+    logo: Optional[str] = None
+    banner: Optional[str] = None
+    accent: Optional[str] = None          # hex like #7C3AED; "" clears it
+    category: Optional[str] = None
+    policies: Optional[str] = None
+    location: Optional[str] = None
+    contact_email: Optional[str] = None
+    contact_phone: Optional[str] = None
+    website: Optional[str] = None
+
+
+class BusinessProfile(BaseModel):
+    id: str
+    owner_id: str
+    owner: Optional["PostAuthor"] = None  # the personal account behind the storefront
+    name: str
+    tagline: Optional[str] = None
+    bio: Optional[str] = None
+    logo: Optional[str] = None
+    banner: Optional[str] = None
+    accent: Optional[str] = None
+    category: Optional[str] = None
+    policies: Optional[str] = None
+    location: Optional[str] = None
+    contact_email: Optional[str] = None
+    contact_phone: Optional[str] = None
+    website: Optional[str] = None
+    listing_count: int = 0
+    rating: float = 0.0
+    review_count: int = 0
+    is_owner: bool = False                 # viewer owns this storefront
+    listings: List["Listing"] = []
+    created_at: datetime
 
 
 class TradeStart(BaseModel):
@@ -832,6 +889,7 @@ Listing.model_rebuild()
 ListingComment.model_rebuild()
 MarketplaceReview.model_rebuild()
 SellerProfile.model_rebuild()
+BusinessProfile.model_rebuild()
 Post.model_rebuild()
 
 
