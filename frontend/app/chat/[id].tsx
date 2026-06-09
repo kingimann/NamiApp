@@ -11,7 +11,7 @@ import { Ionicons } from "@expo/vector-icons";
 import * as ImagePicker from "expo-image-picker";
 import * as DocumentPicker from "expo-document-picker";
 import * as Location from "expo-location";
-import * as Clipboard from "expo-clipboard";
+import * as Clipboard from "@/src/platform/clipboard";
 import {
   useAudioRecorder,
   AudioModule,
