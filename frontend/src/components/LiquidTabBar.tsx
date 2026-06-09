@@ -1,8 +1,8 @@
 import React, { useEffect, useRef, useState } from "react";
 import { View, StyleSheet, Pressable, Animated, Easing, Platform } from "react-native";
-import { Ionicons } from "@expo/vector-icons";
+import { Ionicons } from "@/src/platform/icons";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
-import { usePathname, useRouter } from "expo-router";
+import { usePathname, useRouter } from "@/src/platform/navigation";
 import { useNavBar } from "@/src/context/NavBarContext";
 import { theme } from "@/src/theme";
 

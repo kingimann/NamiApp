@@ -7,7 +7,7 @@ import {
 // Chat media bubbles scale with the screen so photos/videos aren't tiny.
 const CHAT_MEDIA_W = Math.min(300, Math.round(Dimensions.get("window").width * 0.72));
 import { SafeAreaView, useSafeAreaInsets } from "react-native-safe-area-context";
-import { Ionicons } from "@expo/vector-icons";
+import { Ionicons } from "@/src/platform/icons";
 import * as ImagePicker from "@/src/platform/image-picker";
 import * as DocumentPicker from "@/src/platform/document-picker";
 import * as Location from "expo-location";
@@ -18,7 +18,7 @@ import {
   RecordingPresets,
   setAudioModeAsync,
 } from "@/src/platform/audio";
-import { useLocalSearchParams, useRouter, useFocusEffect } from "expo-router";
+import { useLocalSearchParams, useRouter, useFocusEffect } from "@/src/platform/navigation";
 import { safeBack } from "@/src/utils/nav";
 import { api, Message, Post, PublicUser, CustomEmoji, FormDef, ScheduledMessage, mediaUri } from "@/src/api/client";
 import MediaGrid from "@/src/components/MediaGrid";

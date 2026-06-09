@@ -3,8 +3,8 @@ import {
   View, Text, StyleSheet, ScrollView, TextInput, TouchableOpacity, ActivityIndicator, Alert, Image,
 } from "react-native";
 import { SafeAreaView, useSafeAreaInsets } from "react-native-safe-area-context";
-import { Ionicons } from "@expo/vector-icons";
-import { Stack, useFocusEffect, useRouter } from "expo-router";
+import { Ionicons } from "@/src/platform/icons";
+import { Stack, useFocusEffect, useRouter } from "@/src/platform/navigation";
 import { safeBack } from "@/src/utils/nav";
 import * as ImagePicker from "@/src/platform/image-picker";
 import { api } from "@/src/api/client";

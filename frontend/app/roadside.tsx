@@ -4,8 +4,8 @@ import {
   TextInput, RefreshControl, Image, Alert, Linking, Platform, Modal, Pressable, KeyboardAvoidingView, Animated,
 } from "react-native";
 import { SafeAreaView, useSafeAreaInsets } from "react-native-safe-area-context";
-import { Ionicons } from "@expo/vector-icons";
-import { Stack, useFocusEffect, useRouter } from "expo-router";
+import { Ionicons } from "@/src/platform/icons";
+import { Stack, useFocusEffect, useRouter } from "@/src/platform/navigation";
 import * as Location from "expo-location";
 import { safeBack } from "@/src/utils/nav";
 import { GLASS } from "@/src/lib/glass";

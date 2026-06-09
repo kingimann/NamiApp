@@ -30,8 +30,8 @@ library) becomes a **one-file change** instead of editing every call site.
    device, secure-store, speech, document-picker.
 3. ✅ Media: image-picker, camera, audio, video.
 4. ✅ Notifications, splash-screen, font.
-5. **Icons** (`@expo/vector-icons`, ~115 files) → `react-native-vector-icons`.
-6. **Routing** (`expo-router`, ~99 files) → React Navigation. The big one.
+5. ✅ **Icons** seam in place (`@expo/vector-icons`, 115 files routed through `icons.ts`; swap to `react-native-vector-icons` is the later one-file change).
+6. 🟡 **Routing** — imperative/hook API seam DONE (`useRouter`, params, focus, Stack/Tabs routed through `navigation.ts`, 99 files). The file-based `app/` routing rewrite → React Navigation still pending (build-system step).
 7. **Build system**: generate native `ios/`/`android/` projects, Metro/Babel
    config, drop `expo-router/entry`, re-wire the web target.
 

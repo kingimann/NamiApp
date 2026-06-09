@@ -4,8 +4,8 @@ import {
   Modal, TextInput, ScrollView, Platform, Alert,
 } from "react-native";
 import { SafeAreaView, useSafeAreaInsets } from "react-native-safe-area-context";
-import { Ionicons } from "@expo/vector-icons";
-import { Stack, useFocusEffect, useRouter } from "expo-router";
+import { Ionicons } from "@/src/platform/icons";
+import { Stack, useFocusEffect, useRouter } from "@/src/platform/navigation";
 import * as Clipboard from "@/src/platform/clipboard";
 import { safeBack } from "@/src/utils/nav";
 import { api, Game } from "@/src/api/client";

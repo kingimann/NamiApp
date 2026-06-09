@@ -4,8 +4,8 @@ import {
   ActivityIndicator, Dimensions, Alert, Platform, Modal, TextInput, Linking,
 } from "react-native";
 import { SafeAreaView, useSafeAreaInsets } from "react-native-safe-area-context";
-import { Ionicons } from "@expo/vector-icons";
-import { Stack, useFocusEffect, useLocalSearchParams, useRouter } from "expo-router";
+import { Ionicons } from "@/src/platform/icons";
+import { Stack, useFocusEffect, useLocalSearchParams, useRouter } from "@/src/platform/navigation";
 import { safeBack } from "@/src/utils/nav";
 import * as Clipboard from "@/src/platform/clipboard";
 import { api, Listing } from "@/src/api/client";

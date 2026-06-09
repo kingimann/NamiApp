@@ -1,5 +1,5 @@
 import React from "react";
-import { Tabs, Redirect } from "expo-router";
+import { Tabs, Redirect } from "@/src/platform/navigation";
 import { View } from "react-native";
 import { useAuth } from "@/src/context/AuthContext";
 import { theme } from "@/src/theme";

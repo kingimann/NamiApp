@@ -4,8 +4,8 @@ import {
   ActivityIndicator, Modal, TextInput, Alert, KeyboardAvoidingView, Platform, Linking,
 } from "react-native";
 import { SafeAreaView, useSafeAreaInsets } from "react-native-safe-area-context";
-import { Ionicons } from "@expo/vector-icons";
-import { Stack, useFocusEffect, useRouter, useLocalSearchParams } from "expo-router";
+import { Ionicons } from "@/src/platform/icons";
+import { Stack, useFocusEffect, useRouter, useLocalSearchParams } from "@/src/platform/navigation";
 import { safeBack } from "@/src/utils/nav";
 import * as ImagePicker from "@/src/platform/image-picker";
 import { api, Post, AdCampaign, AdAccount, LinkAd, ReelAd, mediaUri } from "@/src/api/client";

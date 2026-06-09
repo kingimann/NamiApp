@@ -4,8 +4,8 @@ import {
   ActivityIndicator, Platform, Alert, Linking,
 } from "react-native";
 import { SafeAreaView, useSafeAreaInsets } from "react-native-safe-area-context";
-import { Ionicons } from "@expo/vector-icons";
-import { Stack, useFocusEffect, useRouter } from "expo-router";
+import { Ionicons } from "@/src/platform/icons";
+import { Stack, useFocusEffect, useRouter } from "@/src/platform/navigation";
 import { safeBack } from "@/src/utils/nav";
 import * as Clipboard from "@/src/platform/clipboard";
 import { api, ApiKey, DevWebhook, OAuthApp, WebhookDelivery } from "@/src/api/client";

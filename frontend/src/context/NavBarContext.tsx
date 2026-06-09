@@ -1,6 +1,6 @@
 import React, { createContext, useCallback, useContext, useEffect, useMemo, useState } from "react";
 import AsyncStorage from "@react-native-async-storage/async-storage";
-import type { Ionicons } from "@expo/vector-icons";
+import type { Ionicons } from "@/src/platform/icons";
 
 /**
  * Facebook-style customizable nav bar.

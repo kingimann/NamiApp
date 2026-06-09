@@ -1,6 +1,6 @@
 import React from "react";
 import { View, Text, StyleSheet } from "react-native";
-import { Ionicons } from "@expo/vector-icons";
+import { Ionicons } from "@/src/platform/icons";
 import { theme } from "@/src/theme";
 
 type Flags = { id_verified?: boolean; phone_verified?: boolean; email_verified?: boolean };

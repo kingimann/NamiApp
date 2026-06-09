@@ -1,6 +1,6 @@
 import React, { useEffect } from "react";
 import { View, Text, StyleSheet, TouchableOpacity } from "react-native";
-import { Ionicons } from "@expo/vector-icons";
+import { Ionicons } from "@/src/platform/icons";
 import { useAudioPlayer, useAudioPlayerStatus } from "@/src/platform/audio";
 import { theme } from "@/src/theme";
 

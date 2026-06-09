@@ -4,7 +4,7 @@ import {
   ActivityIndicator, Image, Modal, KeyboardAvoidingView, Platform, Alert,
 } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
-import { Ionicons } from "@expo/vector-icons";
+import { Ionicons } from "@/src/platform/icons";
 import * as ImagePicker from "@/src/platform/image-picker";
 import { api, Post, PostMedia, Draft, mediaUri } from "@/src/api/client";
 import { cloudinaryEnabled, uploadToCloudinary } from "@/src/api/cloudinary";
