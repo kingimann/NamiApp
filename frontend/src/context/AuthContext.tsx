@@ -17,7 +17,7 @@ type AuthState = {
   loading: boolean;
   user: User | null;
   signOut: () => Promise<void>;
-  applySessionToken: (token: string) => Promise<boolean>;
+  applySessionToken: (token: string, verified?: boolean) => Promise<boolean>;
   refresh: () => Promise<void>;
   loginLocal: (identifier: string, password: string) => Promise<LoginResponse>;
   registerLocal: (email: string, password: string, name: string, username: string) => Promise<void>;
@@ -63,12 +63,14 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({
   }, []);
 
   const applySessionToken = useCallback(
-    async (token: string): Promise<boolean> => {
+    async (token: string, verified = true): Promise<boolean> => {
       try {
         await storage.secureSet(SESSION_TOKEN_KEY, token);
         const me = await api.me();
         setUser(me);
-        addSavedAccount({ user_id: me.user_id, name: me.name, username: me.username, picture: me.picture, token }).catch(() => {});
+        // `verified` = a real sign-in (OAuth/2FA/phone) resets the re-auth clock;
+        // a saved-profile quick login passes false to preserve it.
+        addSavedAccount({ user_id: me.user_id, name: me.name, username: me.username, picture: me.picture, token }, verified).catch(() => {});
         return true;
       } catch {
         await storage.secureRemove(SESSION_TOKEN_KEY);

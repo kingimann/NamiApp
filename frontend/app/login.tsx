@@ -11,7 +11,7 @@ import { GLASS } from "@/src/lib/glass";
 import { api } from "@/src/api/client";
 import { useAuth } from "@/src/context/AuthContext";
 import { useNavBar } from "@/src/context/NavBarContext";
-import { getSavedAccounts, removeSavedAccount, SavedAccount } from "@/src/lib/savedAccounts";
+import { getSavedAccounts, removeSavedAccount, needsReauth, SavedAccount } from "@/src/lib/savedAccounts";
 
 type Mode = "signin" | "signup";
 
@@ -50,18 +50,26 @@ export default function LoginScreen() {
 
   useEffect(() => { getSavedAccounts().then(setSaved).catch(() => {}); }, []);
 
+  const requirePassword = (acc: SavedAccount, msg: string) => {
+    setShowForm(true);
+    setMode("signin");
+    setIdentifier(acc.username || "");
+    setPassword("");
+    setError(msg);
+  };
+
   const loginWithSaved = async (acc: SavedAccount) => {
+    // Periodic security check: after a while, require the password again rather
+    // than letting the saved token sign in indefinitely.
+    if (needsReauth(acc)) {
+      requirePassword(acc, `For your security, please re-enter your password to continue as ${acc.name}.`);
+      return;
+    }
     setBusy(true); setError(null);
     try {
-      const ok = await applySessionToken(acc.token);
-      if (!ok) {
-        // Token expired — fall back to the password form, prefilled.
-        setShowForm(true);
-        setMode("signin");
-        setIdentifier(acc.username || "");
-        setPassword("");
-        setError(`Your session for ${acc.name} expired — enter your password to sign back in.`);
-      }
+      // verified=false: a quick login doesn't reset the re-auth clock.
+      const ok = await applySessionToken(acc.token, false);
+      if (!ok) requirePassword(acc, `Your session for ${acc.name} expired — enter your password to sign back in.`);
     } catch (e: any) {
       setError(e?.message || String(e));
     } finally { setBusy(false); }
@@ -302,7 +310,9 @@ export default function LoginScreen() {
                           <Text style={styles.savedName} numberOfLines={1}>{acc.name}</Text>
                           {!!acc.username && <Text style={styles.savedHandle} numberOfLines={1}>@{acc.username}</Text>}
                         </View>
-                        <Ionicons name="chevron-forward" size={18} color={theme.textMuted} />
+                        {needsReauth(acc)
+                          ? <Ionicons name="lock-closed" size={15} color={theme.textMuted} />
+                          : <Ionicons name="chevron-forward" size={18} color={theme.textMuted} />}
                       </TouchableOpacity>
                       <TouchableOpacity onPress={() => forgetSaved(acc)} hitSlop={8} style={styles.forgetBtn} testID={`forget-${acc.user_id}`}>
                         <Ionicons name="close" size={16} color={theme.textMuted} />

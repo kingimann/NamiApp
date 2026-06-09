@@ -9,10 +9,22 @@ export type SavedAccount = {
   username?: string | null;
   picture?: string | null;
   token: string;
+  verified_at?: string;  // ISO time of the last real password/strong-factor sign-in
 };
 
 const KEY = "saved_accounts_v1";
 const MAX = 6;
+
+// How long a saved profile can quick-login (tap to sign in) before we require
+// the password again, for security on a shared/lost device.
+export const REAUTH_DAYS = 7;
+
+export function needsReauth(acc: SavedAccount): boolean {
+  if (!acc.verified_at) return true;
+  const ts = new Date(acc.verified_at).getTime();
+  if (!ts) return true;
+  return Date.now() - ts > REAUTH_DAYS * 24 * 60 * 60 * 1000;
+}
 
 export async function getSavedAccounts(): Promise<SavedAccount[]> {
   try {
@@ -30,10 +42,17 @@ async function save(list: SavedAccount[]): Promise<void> {
 }
 
 // Add or refresh an account (most-recent first), keeping its token fresh.
-export async function addSavedAccount(a: SavedAccount): Promise<void> {
+// `verified` = the user just proved their identity (password / 2FA / phone),
+// which resets the re-auth clock; a silent token refresh preserves the prior
+// verification time so the periodic password prompt still fires on schedule.
+export async function addSavedAccount(a: SavedAccount, verified = true): Promise<void> {
   if (!a?.user_id || !a?.token) return;
   const list = await getSavedAccounts();
-  await save([a, ...list.filter((x) => x.user_id !== a.user_id)]);
+  const existing = list.find((x) => x.user_id === a.user_id);
+  const verified_at = verified
+    ? new Date().toISOString()
+    : (existing?.verified_at || new Date().toISOString());
+  await save([{ ...a, verified_at }, ...list.filter((x) => x.user_id !== a.user_id)]);
 }
 
 export async function removeSavedAccount(userId: string): Promise<void> {
