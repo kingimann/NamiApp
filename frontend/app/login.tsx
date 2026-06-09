@@ -11,7 +11,7 @@ import { GLASS } from "@/src/lib/glass";
 import { api } from "@/src/api/client";
 import { useAuth } from "@/src/context/AuthContext";
 import { useNavBar } from "@/src/context/NavBarContext";
-import { getSavedAccounts, removeSavedAccount, needsReauth, SavedAccount } from "@/src/lib/savedAccounts";
+import { getSavedAccounts, removeSavedAccount, needsReauth, getAlwaysAskPassword, SavedAccount } from "@/src/lib/savedAccounts";
 
 type Mode = "signin" | "signup";
 
@@ -47,8 +47,10 @@ export default function LoginScreen() {
   // Saved profiles (Facebook-style quick login)
   const [saved, setSaved] = useState<SavedAccount[]>([]);
   const [showForm, setShowForm] = useState(false);
+  const [alwaysAsk, setAlwaysAsk] = useState(false);
 
   useEffect(() => { getSavedAccounts().then(setSaved).catch(() => {}); }, []);
+  useEffect(() => { getAlwaysAskPassword().then(setAlwaysAsk).catch(() => {}); }, []);
 
   const requirePassword = (acc: SavedAccount, msg: string) => {
     setShowForm(true);
@@ -59,9 +61,9 @@ export default function LoginScreen() {
   };
 
   const loginWithSaved = async (acc: SavedAccount) => {
-    // Periodic security check: after a while, require the password again rather
-    // than letting the saved token sign in indefinitely.
-    if (needsReauth(acc)) {
+    // Security check: with "always ask" on, or after the re-auth window, require
+    // the password rather than letting the saved token sign in.
+    if (alwaysAsk || needsReauth(acc)) {
       requirePassword(acc, `For your security, please re-enter your password to continue as ${acc.name}.`);
       return;
     }
@@ -310,7 +312,7 @@ export default function LoginScreen() {
                           <Text style={styles.savedName} numberOfLines={1}>{acc.name}</Text>
                           {!!acc.username && <Text style={styles.savedHandle} numberOfLines={1}>@{acc.username}</Text>}
                         </View>
-                        {needsReauth(acc)
+                        {(alwaysAsk || needsReauth(acc))
                           ? <Ionicons name="lock-closed" size={15} color={theme.textMuted} />
                           : <Ionicons name="chevron-forward" size={18} color={theme.textMuted} />}
                       </TouchableOpacity>

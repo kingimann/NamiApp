@@ -11,6 +11,7 @@ import { useAuth } from "@/src/context/AuthContext";
 import { theme } from "@/src/theme";
 import { GLASS } from "@/src/lib/glass";
 import { requestEditProfile } from "@/src/lib/editProfileIntent";
+import { getAlwaysAskPassword, setAlwaysAskPassword } from "@/src/lib/savedAccounts";
 import FadeIn from "@/src/components/FadeIn";
 import PressableScale from "@/src/components/PressableScale";
 import ConfirmModal from "@/src/components/ConfirmModal";
@@ -31,6 +32,13 @@ export default function SettingsScreen() {
   const [confirmPurge, setConfirmPurge] = React.useState(false);
   const [purging, setPurging] = React.useState(false);
   const [banner, setBanner] = React.useState("");
+  const [alwaysAsk, setAlwaysAsk] = React.useState(false);
+  React.useEffect(() => { getAlwaysAskPassword().then(setAlwaysAsk).catch(() => {}); }, []);
+  const toggleAlwaysAsk = async () => {
+    const next = !alwaysAsk;
+    setAlwaysAsk(next);
+    try { await setAlwaysAskPassword(next); } catch {}
+  };
   useFocusEffect(React.useCallback(() => {
     api.supportUnreadCount().then((r) => setSupportUnread(r.count || 0)).catch(() => {});
   }, []));
@@ -119,6 +127,22 @@ export default function SettingsScreen() {
           <Row icon="lock-closed-outline" label="Privacy" color="#14B8A6" onPress={() => router.push("/privacy")} />
           <Row icon="notifications-outline" label="Notifications" color="#EF4444" onPress={() => router.push("/notifications")} />
           <Row icon="document-text-outline" label="Documents & verification" color="#F59E0B" onPress={() => router.push("/documents")} last />
+        </View>
+
+        <Text style={styles.groupTitle}>Security</Text>
+        <View style={styles.group}>
+          <TouchableOpacity style={[styles.row, { borderBottomWidth: 0 }]} activeOpacity={0.7} onPress={toggleAlwaysAsk} testID="toggle-always-ask">
+            <View style={[styles.rowIcon, { backgroundColor: "#6366F1" + "22" }]}>
+              <Ionicons name="key-outline" size={18} color="#6366F1" />
+            </View>
+            <View style={{ flex: 1 }}>
+              <Text style={{ color: theme.textPrimary, fontSize: 15, fontWeight: "700" }}>Always ask for password</Text>
+              <Text style={styles.rowSub}>Require your password each time you sign in from a saved profile on this device.</Text>
+            </View>
+            <View style={[styles.toggle, alwaysAsk && styles.toggleOn]}>
+              <View style={[styles.knob, alwaysAsk && styles.knobOn]} />
+            </View>
+          </TouchableOpacity>
         </View>
 
         <Text style={styles.groupTitle}>Your content</Text>
@@ -230,6 +254,11 @@ const styles = StyleSheet.create({
   },
   rowIcon: { width: 36, height: 36, borderRadius: 10, alignItems: "center", justifyContent: "center" },
   rowLabel: { flex: 1, color: theme.textPrimary, fontSize: 15.5, fontWeight: "600" },
+  rowSub: { color: theme.textMuted, fontSize: 12, lineHeight: 16, marginTop: 2 },
+  toggle: { width: 46, height: 28, borderRadius: 14, backgroundColor: theme.borderStrong, padding: 3, justifyContent: "center" },
+  toggleOn: { backgroundColor: theme.primary },
+  knob: { width: 22, height: 22, borderRadius: 11, backgroundColor: "#fff" },
+  knobOn: { alignSelf: "flex-end" },
   badge: { minWidth: 20, height: 20, borderRadius: 10, paddingHorizontal: 6, backgroundColor: theme.error, alignItems: "center", justifyContent: "center", marginRight: 8 },
   badgeText: { color: "#fff", fontSize: 11.5, fontWeight: "800" },
 

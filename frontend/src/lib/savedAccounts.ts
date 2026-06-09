@@ -13,7 +13,17 @@ export type SavedAccount = {
 };
 
 const KEY = "saved_accounts_v1";
+const ALWAYS_ASK_KEY = "login_always_ask_pw";
 const MAX = 6;
+
+// Device-level "extra security": when on, saved profiles never quick-login from a
+// stored token — the password is required every time.
+export async function getAlwaysAskPassword(): Promise<boolean> {
+  try { return (await storage.getItem<boolean>(ALWAYS_ASK_KEY, false)) === true; } catch { return false; }
+}
+export async function setAlwaysAskPassword(on: boolean): Promise<void> {
+  try { await storage.setItem(ALWAYS_ASK_KEY, on); } catch {}
+}
 
 // How long a saved profile can quick-login (tap to sign in) before we require
 // the password again, for security on a shared/lost device.
