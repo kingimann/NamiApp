@@ -463,6 +463,7 @@ def _user_doc_to_model(d: dict) -> dict:
         "bio": d.get("bio", ""),
         # Public-profile details + customization (must round-trip so the app
         # actually sees what was saved — otherwise edits appear not to persist).
+        "status": d.get("status"),
         "headline": d.get("headline"),
         "location": d.get("location"),
         "pronouns": d.get("pronouns"),
@@ -597,6 +598,7 @@ async def _public_user(user_id: str, viewer_id: Optional[str] = None):
         username=u.get("username"),
         picture=u.get("picture"),
         bio=u.get("bio", ""),
+        status=u.get("status"),
         headline=u.get("headline"),
         location=u.get("location"),
         pronouns=u.get("pronouns"),

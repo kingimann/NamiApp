@@ -247,6 +247,11 @@ export default function UserProfileScreen() {
               {!!user.role && user.role !== "user" && (
                 <Text style={styles.roleTag}>{user.role === "admin" ? "ADMIN" : "MODERATOR"}</Text>
               )}
+              {!!user.status && (
+                <View style={[styles.statusPillP, { borderColor: accent + "55" }]}>
+                  <Text style={styles.statusPillText} numberOfLines={1}>{user.status}</Text>
+                </View>
+              )}
               {!!user.headline && <Text style={styles.headline} numberOfLines={2}>{user.headline}</Text>}
               {!!user.bio && <Text style={styles.bio}>{user.bio}</Text>}
 
@@ -571,6 +576,8 @@ const styles = StyleSheet.create({
     marginTop: -18, marginHorizontal: -18, marginBottom: 0,
   },
   headline: { color: theme.textSecondary, fontSize: 13.5, fontWeight: "600", textAlign: "center", marginTop: 2, paddingHorizontal: 20 },
+  statusPillP: { marginTop: 8, borderWidth: 1, borderRadius: 16, paddingHorizontal: 12, paddingVertical: 6, backgroundColor: theme.surfaceAlt, maxWidth: "90%" },
+  statusPillText: { color: theme.textPrimary, fontSize: 13, fontWeight: "600" },
   interestWrap: { flexDirection: "row", flexWrap: "wrap", justifyContent: "center", gap: 7, marginTop: 10 },
   interestChip: { borderWidth: 1, borderRadius: 14, paddingHorizontal: 11, paddingVertical: 5 },
   interestText: { fontSize: 12.5, fontWeight: "700" },

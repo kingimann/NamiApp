@@ -6,15 +6,38 @@ export const ACCENT_COLORS = [
   "#7C3AED", // violet
   "#2563EB", // blue
   "#0EA5E9", // sky
+  "#06B6D4", // cyan
   "#14B8A6", // teal
+  "#10B981", // emerald
   "#22C55E", // green
+  "#84CC16", // lime
   "#EAB308", // amber
+  "#F59E0B", // gold
   "#F97316", // orange
   "#EF4444", // red
+  "#F43F5E", // rose
   "#EC4899", // pink
+  "#D946EF", // fuchsia
   "#8B5CF6", // purple
+  "#6366F1", // indigo
   "#64748B", // slate
   "#0F766E", // deep teal
+  "#B45309", // bronze
+];
+
+// One-tap theme bundles: apply a coordinated accent + background + frame.
+export type ThemePreset = {
+  key: string; label: string; accent: string; background: string; frame: string;
+};
+export const THEME_PRESETS: ThemePreset[] = [
+  { key: "default", label: "Default", accent: "", background: "default", frame: "none" },
+  { key: "midnight", label: "Midnight", accent: "#6366F1", background: "midnight", frame: "sapphire" },
+  { key: "sunset", label: "Sunset", accent: "#F97316", background: "sunset", frame: "molten" },
+  { key: "emerald", label: "Emerald", accent: "#10B981", background: "emerald", frame: "emerald" },
+  { key: "rose", label: "Rosé", accent: "#F43F5E", background: "rosewood", frame: "ruby" },
+  { key: "ocean", label: "Ocean", accent: "#06B6D4", background: "ocean", frame: "ocean" },
+  { key: "nebula", label: "Nebula", accent: "#A855F7", background: "nebula", frame: "amethyst" },
+  { key: "carbon", label: "Carbon", accent: "#A1A1AA", background: "carbon", frame: "mono" },
 ];
 
 const HEX_RE = /^#[0-9a-fA-F]{6}$/;
@@ -59,6 +82,11 @@ export const AVATAR_FRAMES: AvatarFrame[] = [
   { key: "frost", label: "Frost", colors: ["#E0F2FE", "#7DD3FC", "#38BDF8"] },
   { key: "molten", label: "Molten", colors: ["#FDBA74", "#F97316", "#DC2626"] },
   { key: "mono", label: "Mono", colors: ["#F4F4F5", "#A1A1AA", "#52525B"] },
+  { key: "ocean", label: "Ocean", colors: ["#67E8F9", "#22D3EE", "#0E7490"] },
+  { key: "rose", label: "Rose", colors: ["#FECDD3", "#FB7185", "#BE123C"] },
+  { key: "sunset", label: "Sunset", colors: ["#FDE68A", "#FB923C", "#DB2777"] },
+  { key: "lime", label: "Lime", colors: ["#D9F99D", "#84CC16", "#3F6212"] },
+  { key: "midnight", label: "Midnight", colors: ["#818CF8", "#4F46E5", "#1E1B4B"] },
 ];
 const FRAME_KEYS = new Set(AVATAR_FRAMES.map((f) => f.key));
 export function isValidFrame(key?: string | null): boolean {
@@ -81,6 +109,11 @@ export const PROFILE_BACKGROUNDS: ProfileBackground[] = [
   { key: "forest", label: "Forest", colors: ["#0A1F14", "#14342B", "#052E16"] },
   { key: "nebula", label: "Nebula", colors: ["#1A0B2E", "#3B0764", "#172554"] },
   { key: "carbon", label: "Carbon", colors: ["#09090B", "#18181B", "#27272A"] },
+  { key: "ocean", label: "Ocean", colors: ["#082F49", "#0C4A6E", "#155E75"] },
+  { key: "rosewood", label: "Rosewood", colors: ["#1F1115", "#4C0519", "#831843"] },
+  { key: "dusk", label: "Dusk", colors: ["#1E1B4B", "#4C1D95", "#831843"] },
+  { key: "slate", label: "Slate", colors: ["#0F172A", "#1E293B", "#334155"] },
+  { key: "emerald", label: "Emerald", colors: ["#022C22", "#064E3B", "#065F46"] },
 ];
 const BG_KEYS = new Set(PROFILE_BACKGROUNDS.map((b) => b.key));
 export function isValidBackground(key?: string | null): boolean {

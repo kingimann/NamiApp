@@ -21,6 +21,7 @@ class User(BaseModel):
     sms_notifications: bool = False    # mirror in-app notifications to SMS
     bio: Optional[str] = ""
     # Public profile details users fill in to display on their profile.
+    status: Optional[str] = None        # short status (emoji + text), e.g. "🎯 Focusing"
     headline: Optional[str] = None      # short tagline shown under the name
     location: Optional[str] = None      # city / country
     pronouns: Optional[str] = None      # e.g. she/her, they/them
@@ -80,6 +81,7 @@ class PublicUser(BaseModel):
     username: Optional[str] = None
     picture: Optional[str] = None
     bio: Optional[str] = ""
+    status: Optional[str] = None
     headline: Optional[str] = None
     location: Optional[str] = None
     pronouns: Optional[str] = None
@@ -123,6 +125,7 @@ class ProfilePatch(BaseModel):
     name: Optional[str] = None
     bio: Optional[str] = None
     picture: Optional[str] = None
+    status: Optional[str] = None
     headline: Optional[str] = None
     location: Optional[str] = None
     pronouns: Optional[str] = None

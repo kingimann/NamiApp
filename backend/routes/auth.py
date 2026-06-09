@@ -173,6 +173,8 @@ async def update_me(body: ProfilePatch, authorization: Optional[str] = Header(No
             if k in allowed and isinstance(v, str) and v.strip():
                 cleaned[k] = v.strip()[:120]
         patch["socials"] = cleaned
+    if body.status is not None:
+        patch["status"] = body.status.strip()[:50] or None
     if body.headline is not None:
         patch["headline"] = body.headline.strip()[:60] or None
     if body.cover_photo is not None:
@@ -211,12 +213,14 @@ async def update_me(body: ProfilePatch, authorization: Optional[str] = Header(No
         patch["featured_links"] = cleaned_links
     if body.avatar_frame is not None:
         # Steam-style decorative ring; must be a known preset (else clear).
-        frames = {"none", "gold", "emerald", "ruby", "sapphire", "amethyst", "rgb", "frost", "molten", "mono"}
+        frames = {"none", "gold", "emerald", "ruby", "sapphire", "amethyst", "rgb",
+                  "frost", "molten", "mono", "ocean", "rose", "sunset", "lime", "midnight"}
         f = (body.avatar_frame or "").strip()
         patch["avatar_frame"] = f if f in frames and f != "none" else None
     if body.profile_background is not None:
         # Full-profile themed background; must be a known preset (else clear).
-        bgs = {"default", "midnight", "sunset", "aurora", "crimson", "forest", "nebula", "carbon"}
+        bgs = {"default", "midnight", "sunset", "aurora", "crimson", "forest", "nebula",
+               "carbon", "ocean", "rosewood", "dusk", "slate", "emerald"}
         b = (body.profile_background or "").strip()
         patch["profile_background"] = b if b in bgs and b != "default" else None
     for k in ("home_name", "home_longitude", "home_latitude",
