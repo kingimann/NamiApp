@@ -772,12 +772,18 @@ async def get_post(post_id: str, authorization: Optional[str] = Header(None)):
         raise HTTPException(status_code=404, detail="Post not found")
     if not await _can_see_circle_post(user["user_id"], doc):
         raise HTTPException(status_code=404, detail="Post not found")
+    # Private account: only the owner/followers can fetch their posts directly.
+    if not await _user_posts_visible(user, doc.get("user_id")):
+        raise HTTPException(status_code=404, detail="Post not found")
     return await _hydrate_post(doc, user["user_id"])
 
 
 @router.get("/posts/{post_id}/replies", response_model=List[Post])
 async def list_replies(post_id: str, authorization: Optional[str] = Header(None)):
     user = await get_current_user(authorization)
+    root = await db.posts.find_one({"id": post_id}, {"_id": 0, "user_id": 1})
+    if root and not await _user_posts_visible(user, root.get("user_id")):
+        return []
     cursor = db.posts.find({"parent_id": post_id}, {"_id": 0}).sort("created_at", 1)
     docs = await cursor.to_list(200)
     docs.sort(key=lambda d: not d.get("pinned", False))  # pinned comments first
@@ -789,6 +795,9 @@ async def post_thread(post_id: str, authorization: Optional[str] = Header(None))
     """The full comment tree under a post (all descendants, flat). The client
     nests them by parent_id and shows 'replying to @user'."""
     user = await get_current_user(authorization)
+    root = await db.posts.find_one({"id": post_id}, {"_id": 0, "user_id": 1})
+    if root and not await _user_posts_visible(user, root.get("user_id")):
+        return []
     out_docs: list = []
     seen: set = set()
     frontier = [post_id]
@@ -1736,6 +1745,8 @@ async def user_posts_with_reposts(
 ):
     """User's profile feed: their original posts AND their reposts/quotes."""
     me = await get_current_user(authorization)
+    if not await _user_posts_visible(me, user_id):
+        return []
     cursor = (
         db.posts.find({"user_id": user_id, "parent_id": None}, {"_id": 0})
         .sort("created_at", -1).limit(100)

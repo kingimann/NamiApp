@@ -113,6 +113,14 @@ async def stories_tray(authorization: Optional[str] = Header(None)):
 @router.get("/stories/user/{user_id}", response_model=List[Story])
 async def list_user_stories(user_id: str, authorization: Optional[str] = Header(None)):
     user = await get_current_user(authorization)
+    # Private account: only the owner and approved followers see their stories.
+    if user_id != user["user_id"]:
+        owner = await db.users.find_one({"user_id": user_id}, {"_id": 0, "is_private": 1})
+        if owner and owner.get("is_private"):
+            follows = await db.follows.find_one(
+                {"follower_id": user["user_id"], "followee_id": user_id}, {"_id": 0, "follower_id": 1})
+            if not follows:
+                return []
     now = datetime.now(timezone.utc)
     cursor = db.stories.find(
         {"user_id": user_id, "expires_at": {"$gt": now}}, {"_id": 0},

@@ -682,9 +682,11 @@ async def search_users(
         {
             "user_id": {"$ne": me_user["user_id"]},
             "searchable": {"$ne": False},   # respect "appear in search" privacy setting
+            # Match name/username only — never email (avoids confirming accounts
+            # by email fragments).
             "$or": [
-                {"email": {"$regex": pattern, "$options": "i"}},
                 {"name": {"$regex": pattern, "$options": "i"}},
+                {"username": {"$regex": pattern, "$options": "i"}},
             ],
         },
         {"_id": 0},
