@@ -953,8 +953,16 @@ export const api = {
     request<Post>(`/groups/${id}/posts`, { method: "POST", body: JSON.stringify(body) }),
   listGroupMembers: (id: string) =>
     request<{ user_id: string; name: string; username?: string | null; picture?: string | null; role: string; joined_at: string }[]>(`/groups/${id}/members`),
-  updateGroup: (id: string, body: { name?: string; description?: string; color?: string; cover_image?: string | null; is_private?: boolean }) =>
+  updateGroup: (id: string, body: { name?: string; description?: string; color?: string; cover_image?: string | null; is_private?: boolean; rules?: string[] }) =>
     request<Group>(`/groups/${id}`, { method: "PATCH", body: JSON.stringify(body) }),
+  // Group events (Facebook-style)
+  groupEvents: (id: string) => request<GroupEvent[]>(`/groups/${id}/events`),
+  createGroupEvent: (id: string, body: { title: string; description?: string; location?: string; starts_at: string }) =>
+    request<GroupEvent>(`/groups/${id}/events`, { method: "POST", body: JSON.stringify(body) }),
+  rsvpGroupEvent: (id: string, eventId: string) =>
+    request<{ going: boolean; going_count: number }>(`/groups/${id}/events/${eventId}/rsvp`, { method: "POST" }),
+  deleteGroupEvent: (id: string, eventId: string) =>
+    request<{ ok: boolean }>(`/groups/${id}/events/${eventId}`, { method: "DELETE" }),
   listGroupPins: (id: string) => request<Post[]>(`/groups/${id}/pins`),
   pinGroupPost: (id: string, postId: string) =>
     request<Group>(`/groups/${id}/pins/${postId}`, { method: "POST" }),
@@ -1007,12 +1015,19 @@ export type Group = {
   id: string; name: string; description?: string; color: string;
   cover_image?: string | null;
   is_private?: boolean;
+  rules?: string[];
   owner_id: string; member_count: number; is_member: boolean;
   membership_pending?: boolean;
   my_role?: "owner" | "admin" | "member";
   pending_request_count?: number;
   pinned_post_ids?: string[];
   created_at: string;
+};
+export type GroupEvent = {
+  id: string; group_id: string; creator_id: string; creator_name?: string;
+  title: string; description?: string; location?: string | null;
+  starts_at: string; going_count: number; going: boolean;
+  can_manage?: boolean; created_at: string;
 };
 
 export type Listing = {

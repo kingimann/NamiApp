@@ -8,7 +8,7 @@ from pydantic import BaseModel
 from db import DuplicateKeyError
 
 from core import db, get_current_user
-from models import Group, GroupCreate, Post, PostCreate
+from models import Group, GroupCreate, GroupEvent, GroupEventCreate, Post, PostCreate
 from routes.posts import _hydrate_post, create_post as create_post_route
 try:
     from routes.notifications import emit_notification  # type: ignore
@@ -61,6 +61,7 @@ async def _hydrate_group(doc: dict, viewer_id: Optional[str]) -> Group:
         color=doc.get("color", "#3B82F6"),
         cover_image=doc.get("cover_image"),
         is_private=bool(doc.get("is_private", False)),
+        rules=list(doc.get("rules", [])),
         owner_id=doc["owner_id"],
         member_count=count,
         is_member=is_member,
@@ -134,6 +135,7 @@ class _GroupPatch(BaseModel):
     color: Optional[str] = None
     cover_image: Optional[str] = None
     is_private: Optional[bool] = None
+    rules: Optional[List[str]] = None
 
 
 @router.patch("/groups/{group_id}", response_model=Group)
@@ -167,6 +169,15 @@ async def update_group(
         updates["cover_image"] = cov or None
     if body.is_private is not None:
         updates["is_private"] = bool(body.is_private)
+    if body.rules is not None:
+        cleaned: list = []
+        for r in body.rules:
+            s = str(r or "").strip()[:200]
+            if s:
+                cleaned.append(s)
+            if len(cleaned) >= 15:
+                break
+        updates["rules"] = cleaned
     if updates:
         await db.groups.update_one({"id": group_id}, {"$set": updates})
     fresh = await db.groups.find_one({"id": group_id}, {"_id": 0})
@@ -510,3 +521,123 @@ async def list_group_members(group_id: str, authorization: Optional[str] = Heade
             "joined_at": r.get("joined_at"),
         })
     return out
+
+
+# ───────── Group events (Facebook-style) ─────────
+
+async def _member_or_404(group_id: str, user_id: str) -> dict:
+    doc = await db.groups.find_one({"id": group_id}, {"_id": 0})
+    if not doc:
+        raise HTTPException(status_code=404, detail="Group not found")
+    mem = await db.group_members.find_one(
+        {"group_id": group_id, "user_id": user_id}, {"_id": 0, "role": 1}
+    )
+    if not mem:
+        raise HTTPException(status_code=403, detail="Join the group first")
+    return mem
+
+
+async def _hydrate_event(e: dict, viewer_id: str, my_role: str = "member") -> GroupEvent:
+    going_count = await db.group_event_rsvps.count_documents({"event_id": e["id"]})
+    going = bool(await db.group_event_rsvps.find_one(
+        {"event_id": e["id"], "user_id": viewer_id}, {"_id": 0, "id": 1}
+    ))
+    creator = await db.users.find_one({"user_id": e["creator_id"]}, {"_id": 0, "name": 1})
+    return GroupEvent(
+        id=e["id"], group_id=e["group_id"], creator_id=e["creator_id"],
+        creator_name=(creator or {}).get("name", "Someone"),
+        title=e.get("title", ""), description=e.get("description", "") or "",
+        location=e.get("location"), starts_at=e.get("starts_at", ""),
+        going_count=going_count, going=going,
+        can_manage=(e["creator_id"] == viewer_id or my_role in ("owner", "admin")),
+        created_at=e["created_at"],
+    )
+
+
+@router.get("/groups/{group_id}/events", response_model=List[GroupEvent])
+async def list_group_events(group_id: str, authorization: Optional[str] = Header(None)):
+    user = await get_current_user(authorization)
+    mem = await _member_or_404(group_id, user["user_id"])
+    rows = await db.group_events.find({"group_id": group_id}, {"_id": 0}).to_list(200)
+    # Soonest first; events without a parseable time sort last.
+    def _key(e: dict) -> str:
+        return str(e.get("starts_at") or "~")
+    rows.sort(key=_key)
+    return [await _hydrate_event(e, user["user_id"], mem.get("role", "member")) for e in rows]
+
+
+@router.post("/groups/{group_id}/events", response_model=GroupEvent)
+async def create_group_event(
+    group_id: str, body: GroupEventCreate, authorization: Optional[str] = Header(None)
+):
+    user = await get_current_user(authorization)
+    mem = await _member_or_404(group_id, user["user_id"])
+    title = (body.title or "").strip()[:140]
+    if not title:
+        raise HTTPException(status_code=400, detail="Event title required")
+    if not (body.starts_at or "").strip():
+        raise HTTPException(status_code=400, detail="Event start time required")
+    doc = {
+        "id": str(uuid.uuid4()), "group_id": group_id, "creator_id": user["user_id"],
+        "title": title, "description": (body.description or "").strip()[:1000],
+        "location": (body.location or "").strip()[:200] or None,
+        "starts_at": body.starts_at.strip()[:40],
+        "created_at": datetime.now(timezone.utc),
+    }
+    await db.group_events.insert_one(doc.copy())
+    # The creator is going by default.
+    try:
+        await db.group_event_rsvps.insert_one({
+            "id": str(uuid.uuid4()), "event_id": doc["id"], "user_id": user["user_id"],
+            "created_at": datetime.now(timezone.utc),
+        })
+    except DuplicateKeyError:
+        pass
+    return await _hydrate_event(doc, user["user_id"], mem.get("role", "member"))
+
+
+@router.post("/groups/{group_id}/events/{event_id}/rsvp")
+async def rsvp_group_event(
+    group_id: str, event_id: str, authorization: Optional[str] = Header(None)
+):
+    user = await get_current_user(authorization)
+    await _member_or_404(group_id, user["user_id"])
+    ev = await db.group_events.find_one({"id": event_id, "group_id": group_id}, {"_id": 0, "id": 1})
+    if not ev:
+        raise HTTPException(status_code=404, detail="Event not found")
+    existing = await db.group_event_rsvps.find_one(
+        {"event_id": event_id, "user_id": user["user_id"]}, {"_id": 0, "id": 1}
+    )
+    if existing:
+        await db.group_event_rsvps.delete_one({"event_id": event_id, "user_id": user["user_id"]})
+        going = False
+    else:
+        try:
+            await db.group_event_rsvps.insert_one({
+                "id": str(uuid.uuid4()), "event_id": event_id, "user_id": user["user_id"],
+                "created_at": datetime.now(timezone.utc),
+            })
+        except DuplicateKeyError:
+            pass
+        going = True
+    count = await db.group_event_rsvps.count_documents({"event_id": event_id})
+    return {"going": going, "going_count": count}
+
+
+@router.delete("/groups/{group_id}/events/{event_id}")
+async def delete_group_event(
+    group_id: str, event_id: str, authorization: Optional[str] = Header(None)
+):
+    user = await get_current_user(authorization)
+    ev = await db.group_events.find_one({"id": event_id, "group_id": group_id}, {"_id": 0})
+    if not ev:
+        raise HTTPException(status_code=404, detail="Event not found")
+    mem = await db.group_members.find_one(
+        {"group_id": group_id, "user_id": user["user_id"]}, {"_id": 0, "role": 1}
+    )
+    role = (mem or {}).get("role")
+    if ev["creator_id"] != user["user_id"] and role not in ("owner", "admin"):
+        raise HTTPException(status_code=403, detail="Only the creator or an admin can delete this event")
+    await db.group_events.delete_one({"id": event_id})
+    await db.group_event_rsvps.delete_many({"event_id": event_id})
+    return {"ok": True}

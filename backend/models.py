@@ -880,6 +880,7 @@ class Group(BaseModel):
     color: str = "#3B82F6"
     cover_image: Optional[str] = None
     is_private: bool = False
+    rules: List[str] = []
     owner_id: str
     member_count: int = 1
     is_member: bool = False
@@ -892,6 +893,28 @@ class Group(BaseModel):
 
 class GroupPostCreate(BaseModel):
     text: str
+
+
+class GroupEventCreate(BaseModel):
+    title: str
+    description: Optional[str] = ""
+    location: Optional[str] = None
+    starts_at: str                      # ISO 8601 start time
+
+
+class GroupEvent(BaseModel):
+    id: str
+    group_id: str
+    creator_id: str
+    creator_name: str = ""
+    title: str
+    description: str = ""
+    location: Optional[str] = None
+    starts_at: str
+    going_count: int = 0
+    going: bool = False                  # is the viewer attending?
+    can_manage: bool = False             # viewer is the creator or a group admin/owner
+    created_at: datetime
 
 
 class FsqProfile(BaseModel):

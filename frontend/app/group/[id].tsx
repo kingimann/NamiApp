@@ -1,7 +1,7 @@
 import React, { useCallback, useState } from "react";
 import {
   View, Text, StyleSheet, FlatList, TouchableOpacity, ActivityIndicator,
-  RefreshControl, Image, Alert, Modal,
+  RefreshControl, Image, Alert, Modal, TextInput, KeyboardAvoidingView, Platform, ScrollView,
 } from "react-native";
 import { SafeAreaView, useSafeAreaInsets } from "react-native-safe-area-context";
 import { Ionicons } from "@expo/vector-icons";
@@ -9,7 +9,7 @@ import { Stack, useFocusEffect, useLocalSearchParams, useRouter } from "expo-rou
 import { safeBack } from "@/src/utils/nav";
 import * as ImagePicker from "expo-image-picker";
 import { assetToUri } from "@/src/utils/thumbnail";
-import { api, Group, Post } from "@/src/api/client";
+import { api, Group, GroupEvent, Post, mediaUri } from "@/src/api/client";
 import { useAuth } from "@/src/context/AuthContext";
 import { useConfirm } from "@/src/context/ConfirmContext";
 import { theme } from "@/src/theme";
@@ -17,6 +17,12 @@ import AdSlot from "@/src/components/AdSlot";
 import { interleaveAds, isAd } from "@/src/lib/ads";
 import PostCard from "@/src/components/PostCard";
 import PostComposer from "@/src/components/PostComposer";
+
+function fmtEventDate(iso: string): string {
+  try {
+    return new Date(iso).toLocaleString([], { weekday: "short", month: "short", day: "numeric", hour: "numeric", minute: "2-digit" });
+  } catch { return iso; }
+}
 
 export default function GroupDetailScreen() {
   const { id } = useLocalSearchParams<{ id: string }>();
@@ -34,8 +40,17 @@ export default function GroupDetailScreen() {
   const [replyTo, setReplyTo] = useState<Post | null>(null);
   const [editing, setEditing] = useState<Post | null>(null);
   const [coverUploading, setCoverUploading] = useState(false);
+  const [tab, setTab] = useState<"discussion" | "events" | "media" | "about">("discussion");
+  const [events, setEvents] = useState<GroupEvent[]>([]);
+  const [eventOpen, setEventOpen] = useState(false);
+  const [eventDraft, setEventDraft] = useState({ title: "", description: "", location: "", starts_at: "" });
+  const [creatingEvent, setCreatingEvent] = useState(false);
+  const [rulesOpen, setRulesOpen] = useState(false);
+  const [rulesDraft, setRulesDraft] = useState("");
+  const [savingRules, setSavingRules] = useState(false);
 
   const isOwner = !!group && group.owner_id === user?.user_id;
+  const isAdmin = !!group && (isOwner || group.my_role === "admin");
 
   const load = useCallback(async () => {
     if (!id) return;
@@ -46,12 +61,48 @@ export default function GroupDetailScreen() {
       ]);
       setGroup(g);
       setPosts(p);
-      // pins require membership; if not member, will 403 — ignore.
+      // pins + events require membership; if not member, will 403 — ignore.
       if (g.is_member) {
         api.listGroupPins(id).then(setPins).catch(() => setPins([]));
+        api.groupEvents(id).then(setEvents).catch(() => setEvents([]));
       }
     } catch {} finally { setLoading(false); setRefreshing(false); }
   }, [id]);
+
+  const createEvent = async () => {
+    if (!group) return;
+    const title = eventDraft.title.trim();
+    const starts = eventDraft.starts_at.trim();
+    if (!title || !starts) return;
+    setCreatingEvent(true);
+    try {
+      const ev = await api.createGroupEvent(group.id, {
+        title, description: eventDraft.description.trim(), location: eventDraft.location.trim() || undefined, starts_at: starts,
+      });
+      setEvents((arr) => [ev, ...arr]);
+      setEventDraft({ title: "", description: "", location: "", starts_at: "" });
+      setEventOpen(false);
+    } catch {} finally { setCreatingEvent(false); }
+  };
+  const rsvp = async (ev: GroupEvent) => {
+    setEvents((arr) => arr.map((e) => e.id === ev.id ? { ...e, going: !e.going, going_count: e.going_count + (e.going ? -1 : 1) } : e));
+    try { await api.rsvpGroupEvent(group!.id, ev.id); } catch { load(); }
+  };
+  const deleteEvent = async (ev: GroupEvent) => {
+    if (!(await confirm({ title: "Delete event?", message: ev.title, confirmLabel: "Delete", destructive: true }))) return;
+    setEvents((arr) => arr.filter((e) => e.id !== ev.id));
+    try { await api.deleteGroupEvent(group!.id, ev.id); } catch { load(); }
+  };
+  const openRules = () => { setRulesDraft((group?.rules || []).join("\n")); setRulesOpen(true); };
+  const saveRules = async () => {
+    if (!group) return;
+    setSavingRules(true);
+    try {
+      const rules = rulesDraft.split("\n").map((s) => s.trim()).filter(Boolean).slice(0, 15);
+      const g = await api.updateGroup(group.id, { rules });
+      setGroup(g); setRulesOpen(false);
+    } catch {} finally { setSavingRules(false); }
+  };
 
   useFocusEffect(useCallback(() => { load(); }, [load]));
 
@@ -199,7 +250,7 @@ export default function GroupDetailScreen() {
       </View>
 
       <FlatList
-        data={interleaveAds(posts)}
+        data={tab === "discussion" ? interleaveAds(posts) : []}
         keyExtractor={(i) => (isAd(i) ? `ad-${i.__ad}` : i.id)}
         contentContainerStyle={{ paddingBottom: insets.bottom + 100 }}
         refreshControl={
@@ -317,8 +368,18 @@ export default function GroupDetailScreen() {
               )}
             </View>
 
-            {/* Pinned posts */}
-            {pins.length > 0 && (
+            {/* Section tabs (Facebook-style) */}
+            <View style={styles.tabRow}>
+              {([
+                ["discussion", "Discussion"], ["events", "Events"], ["media", "Media"], ["about", "About"],
+              ] as const).map(([k, lbl]) => (
+                <TouchableOpacity key={k} style={[styles.tabBtn, tab === k && styles.tabBtnOn]} onPress={() => setTab(k)} testID={`group-tab-${k}`}>
+                  <Text style={[styles.tabText, tab === k && { color: theme.primary }]}>{lbl}</Text>
+                </TouchableOpacity>
+              ))}
+            </View>
+
+            {tab === "discussion" && pins.length > 0 && (
               <View style={styles.pinSection} testID="pinned-section">
                 <View style={styles.pinHeader}>
                   <Ionicons name="pin" size={14} color={theme.primary} />
@@ -327,29 +388,91 @@ export default function GroupDetailScreen() {
                 <View style={{ gap: 10, paddingHorizontal: 12 }}>
                   {pins.map((p) => (
                     <View key={`pin_${p.id}`} style={styles.pinnedCard}>
-                      <PostCard
-                        post={p}
-                        viewerId={user?.user_id}
-                        onLike={onLike}
-                        onRepost={onRepost}
-                        onReply={onReply}
-                        onBookmark={onBookmark}
-                        onMore={onMore}
-                      />
+                      <PostCard post={p} viewerId={user?.user_id} onLike={onLike} onRepost={onRepost} onReply={onReply} onBookmark={onBookmark} onMore={onMore} />
                     </View>
                   ))}
                 </View>
               </View>
             )}
+            {tab === "discussion" && posts.length > 0 && (
+              <View style={styles.feedHeader}><Text style={styles.feedHeaderText}>Group feed</Text></View>
+            )}
 
-            {posts.length > 0 && (
-              <View style={styles.feedHeader}>
-                <Text style={styles.feedHeaderText}>Group feed</Text>
+            {/* Events tab */}
+            {tab === "events" && (
+              <View style={{ paddingHorizontal: 12, paddingTop: 6, gap: 10 }}>
+                {group.is_member && (
+                  <TouchableOpacity style={styles.newEventBtn} onPress={() => setEventOpen(true)} testID="group-new-event">
+                    <Ionicons name="calendar" size={16} color="#fff" />
+                    <Text style={styles.newEventText}>Create event</Text>
+                  </TouchableOpacity>
+                )}
+                {events.length === 0 ? (
+                  <Text style={styles.tabEmpty}>No events yet.</Text>
+                ) : events.map((ev) => (
+                  <View key={ev.id} style={styles.eventCard}>
+                    <View style={{ flex: 1 }}>
+                      <Text style={styles.eventTitle}>{ev.title}</Text>
+                      <Text style={styles.eventMeta}>{fmtEventDate(ev.starts_at)}{ev.location ? ` · ${ev.location}` : ""}</Text>
+                      {!!ev.description && <Text style={styles.eventDesc} numberOfLines={3}>{ev.description}</Text>}
+                      <Text style={styles.eventGoing}>{ev.going_count} going · by {ev.creator_name}</Text>
+                    </View>
+                    <View style={{ alignItems: "flex-end", gap: 8 }}>
+                      <TouchableOpacity style={[styles.goingBtn, ev.going && styles.goingBtnOn]} onPress={() => rsvp(ev)} testID={`event-rsvp-${ev.id}`}>
+                        <Text style={[styles.goingText, ev.going && { color: "#fff" }]}>{ev.going ? "Going" : "RSVP"}</Text>
+                      </TouchableOpacity>
+                      {ev.can_manage && (
+                        <TouchableOpacity onPress={() => deleteEvent(ev)} hitSlop={8} testID={`event-del-${ev.id}`}>
+                          <Ionicons name="trash-outline" size={16} color={theme.error} />
+                        </TouchableOpacity>
+                      )}
+                    </View>
+                  </View>
+                ))}
+              </View>
+            )}
+
+            {/* Media tab */}
+            {tab === "media" && (() => {
+              const media = posts.flatMap((p) => (p.media || []).map((m) => ({ m, postId: p.id })));
+              if (media.length === 0) return <Text style={styles.tabEmpty}>No photos or videos yet.</Text>;
+              return (
+                <View style={styles.mediaGrid}>
+                  {media.map(({ m, postId }, i) => (
+                    <TouchableOpacity key={`${postId}-${i}`} style={styles.mediaTile} activeOpacity={0.85} onPress={() => router.push({ pathname: "/post/[id]", params: { id: postId } })}>
+                      <Image source={{ uri: mediaUri(m) }} style={StyleSheet.absoluteFill as any} resizeMode="cover" />
+                      {m.type === "video" && <View style={styles.mediaVideo}><Ionicons name="play" size={20} color="#fff" /></View>}
+                    </TouchableOpacity>
+                  ))}
+                </View>
+              );
+            })()}
+
+            {/* About tab */}
+            {tab === "about" && (
+              <View style={{ paddingHorizontal: 16, paddingTop: 8, gap: 12 }}>
+                {!!group.description && <Text style={styles.aboutText}>{group.description}</Text>}
+                <View style={styles.aboutRow}>
+                  <Ionicons name="people-outline" size={16} color={theme.textMuted} />
+                  <Text style={styles.aboutMeta}>{memberCountText} · {group.is_private ? "Private group" : "Public group"}</Text>
+                </View>
+                <View style={styles.rulesHeadRow}>
+                  <Text style={styles.aboutSection}>Rules</Text>
+                  {isAdmin && (
+                    <TouchableOpacity onPress={openRules} testID="group-edit-rules"><Text style={styles.editLink}>Edit</Text></TouchableOpacity>
+                  )}
+                </View>
+                {(group.rules || []).length === 0 ? (
+                  <Text style={styles.tabEmpty}>No rules set.</Text>
+                ) : (group.rules || []).map((r, i) => (
+                  <Text key={i} style={styles.ruleItem}>{i + 1}. {r}</Text>
+                ))}
               </View>
             )}
           </View>
         }
         ListEmptyComponent={
+          tab !== "discussion" ? null : (
           <View style={styles.empty}>
             <Ionicons name={group.is_member ? "newspaper-outline" : "lock-closed-outline"} size={36} color={theme.textMuted} />
             <Text style={styles.emptyTitle}>
@@ -359,6 +482,7 @@ export default function GroupDetailScreen() {
               {group.is_member ? "Be the first to post in this group!" : "Members can read and post in this group."}
             </Text>
           </View>
+          )
         }
         renderItem={({ item }) => {
           if (isAd(item)) return (
@@ -420,12 +544,72 @@ export default function GroupDetailScreen() {
           </View>
         </TouchableOpacity>
       </Modal>
+
+      {/* Create event */}
+      <Modal visible={eventOpen} transparent animationType="slide" onRequestClose={() => setEventOpen(false)}>
+        <KeyboardAvoidingView behavior={Platform.OS === "ios" ? "padding" : undefined} style={styles.sheetBackdrop}>
+          <TouchableOpacity style={StyleSheet.absoluteFill} activeOpacity={1} onPress={() => setEventOpen(false)} />
+          <View style={[styles.optSheet, { paddingBottom: insets.bottom + 20 }]}>
+            <ScrollView keyboardShouldPersistTaps="handled">
+              <Text style={styles.optSheetTitle}>Create event</Text>
+              <TextInput style={styles.evInput} placeholder="Event title" placeholderTextColor={theme.textMuted} value={eventDraft.title} onChangeText={(t) => setEventDraft((e) => ({ ...e, title: t }))} maxLength={140} testID="event-title" />
+              <TextInput style={styles.evInput} placeholder="When (e.g. 2026-06-20 18:00)" placeholderTextColor={theme.textMuted} value={eventDraft.starts_at} onChangeText={(t) => setEventDraft((e) => ({ ...e, starts_at: t }))} autoCapitalize="none" testID="event-when" />
+              <TextInput style={styles.evInput} placeholder="Location (optional)" placeholderTextColor={theme.textMuted} value={eventDraft.location} onChangeText={(t) => setEventDraft((e) => ({ ...e, location: t }))} maxLength={200} testID="event-location" />
+              <TextInput style={[styles.evInput, { minHeight: 80, textAlignVertical: "top" }]} placeholder="Description (optional)" placeholderTextColor={theme.textMuted} value={eventDraft.description} onChangeText={(t) => setEventDraft((e) => ({ ...e, description: t }))} multiline maxLength={1000} testID="event-desc" />
+              <TouchableOpacity style={[styles.newEventBtn, (!eventDraft.title.trim() || !eventDraft.starts_at.trim() || creatingEvent) && { opacity: 0.5 }]} onPress={createEvent} disabled={!eventDraft.title.trim() || !eventDraft.starts_at.trim() || creatingEvent} testID="event-submit">
+                {creatingEvent ? <ActivityIndicator color="#fff" /> : <Text style={styles.newEventText}>Create event</Text>}
+              </TouchableOpacity>
+            </ScrollView>
+          </View>
+        </KeyboardAvoidingView>
+      </Modal>
+
+      {/* Edit rules */}
+      <Modal visible={rulesOpen} transparent animationType="slide" onRequestClose={() => setRulesOpen(false)}>
+        <KeyboardAvoidingView behavior={Platform.OS === "ios" ? "padding" : undefined} style={styles.sheetBackdrop}>
+          <TouchableOpacity style={StyleSheet.absoluteFill} activeOpacity={1} onPress={() => setRulesOpen(false)} />
+          <View style={[styles.optSheet, { paddingBottom: insets.bottom + 20 }]}>
+            <Text style={styles.optSheetTitle}>Group rules</Text>
+            <Text style={styles.tabEmpty}>One rule per line.</Text>
+            <TextInput style={[styles.evInput, { minHeight: 140, textAlignVertical: "top" }]} placeholder={"Be kind\nNo spam"} placeholderTextColor={theme.textMuted} value={rulesDraft} onChangeText={setRulesDraft} multiline testID="rules-input" />
+            <TouchableOpacity style={[styles.newEventBtn, savingRules && { opacity: 0.5 }]} onPress={saveRules} disabled={savingRules} testID="rules-save">
+              {savingRules ? <ActivityIndicator color="#fff" /> : <Text style={styles.newEventText}>Save rules</Text>}
+            </TouchableOpacity>
+          </View>
+        </KeyboardAvoidingView>
+      </Modal>
     </SafeAreaView>
   );
 }
 
 const styles = StyleSheet.create({
   root: { flex: 1, backgroundColor: theme.bg },
+  tabRow: { flexDirection: "row", gap: 4, paddingHorizontal: 12, paddingTop: 6, paddingBottom: 8, borderBottomWidth: StyleSheet.hairlineWidth, borderBottomColor: theme.border },
+  tabBtn: { flex: 1, alignItems: "center", paddingVertical: 9, borderRadius: 10 },
+  tabBtnOn: { backgroundColor: theme.surfaceAlt },
+  tabText: { color: theme.textMuted, fontSize: 13, fontWeight: "800" },
+  tabEmpty: { color: theme.textMuted, fontSize: 13, textAlign: "center", paddingVertical: 24 },
+  newEventBtn: { flexDirection: "row", alignItems: "center", justifyContent: "center", gap: 8, backgroundColor: theme.primary, borderRadius: 14, paddingVertical: 13, marginTop: 10 },
+  newEventText: { color: "#fff", fontWeight: "800", fontSize: 14 },
+  eventCard: { flexDirection: "row", gap: 12, backgroundColor: theme.surface, borderRadius: 14, borderWidth: 1, borderColor: theme.border, padding: 14 },
+  eventTitle: { color: theme.textPrimary, fontSize: 15.5, fontWeight: "800" },
+  eventMeta: { color: theme.primary, fontSize: 12.5, fontWeight: "700", marginTop: 3 },
+  eventDesc: { color: theme.textSecondary, fontSize: 13, marginTop: 6, lineHeight: 18 },
+  eventGoing: { color: theme.textMuted, fontSize: 12, marginTop: 8 },
+  goingBtn: { borderWidth: 1, borderColor: theme.border, borderRadius: 18, paddingHorizontal: 16, paddingVertical: 7, backgroundColor: theme.surface },
+  goingBtnOn: { backgroundColor: theme.primary, borderColor: theme.primary },
+  goingText: { color: theme.textPrimary, fontSize: 13, fontWeight: "800" },
+  mediaGrid: { flexDirection: "row", flexWrap: "wrap", gap: 4, paddingHorizontal: 12, paddingTop: 6 },
+  mediaTile: { width: "32%", aspectRatio: 1, borderRadius: 8, overflow: "hidden", backgroundColor: theme.surfaceAlt },
+  mediaVideo: { ...StyleSheet.absoluteFillObject, alignItems: "center", justifyContent: "center", backgroundColor: "rgba(0,0,0,0.25)" },
+  aboutText: { color: theme.textSecondary, fontSize: 14, lineHeight: 20 },
+  aboutRow: { flexDirection: "row", alignItems: "center", gap: 8 },
+  aboutMeta: { color: theme.textMuted, fontSize: 13, fontWeight: "600" },
+  aboutSection: { color: theme.textPrimary, fontSize: 15, fontWeight: "800" },
+  rulesHeadRow: { flexDirection: "row", alignItems: "center", justifyContent: "space-between", marginTop: 4 },
+  editLink: { color: theme.primary, fontSize: 13, fontWeight: "800" },
+  ruleItem: { color: theme.textSecondary, fontSize: 13.5, lineHeight: 19 },
+  evInput: { backgroundColor: theme.surface, borderWidth: 1, borderColor: theme.border, borderRadius: 12, paddingHorizontal: 14, paddingVertical: 12, color: theme.textPrimary, fontSize: 14, marginTop: 10, ...(Platform.OS === "web" ? ({ outlineStyle: "none" } as object) : {}) },
   sheetBackdrop: { flex: 1, backgroundColor: "rgba(0,0,0,0.5)", justifyContent: "flex-end" },
   optSheet: { backgroundColor: "#0E0E10", borderTopLeftRadius: 24, borderTopRightRadius: 24, padding: 16, borderTopWidth: 1, borderColor: theme.border },
   optSheetTitle: { color: theme.textMuted, fontSize: 12, fontWeight: "800", textTransform: "uppercase", letterSpacing: 0.5, marginBottom: 10, marginLeft: 4 },
