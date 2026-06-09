@@ -8,7 +8,7 @@ import {
 const CHAT_MEDIA_W = Math.min(300, Math.round(Dimensions.get("window").width * 0.72));
 import { SafeAreaView, useSafeAreaInsets } from "react-native-safe-area-context";
 import { Ionicons } from "@expo/vector-icons";
-import * as ImagePicker from "expo-image-picker";
+import * as ImagePicker from "@/src/platform/image-picker";
 import * as DocumentPicker from "@/src/platform/document-picker";
 import * as Location from "expo-location";
 import * as Clipboard from "@/src/platform/clipboard";
@@ -17,7 +17,7 @@ import {
   AudioModule,
   RecordingPresets,
   setAudioModeAsync,
-} from "expo-audio";
+} from "@/src/platform/audio";
 import { useLocalSearchParams, useRouter, useFocusEffect } from "expo-router";
 import { safeBack } from "@/src/utils/nav";
 import { api, Message, Post, PublicUser, CustomEmoji, FormDef, ScheduledMessage, mediaUri } from "@/src/api/client";
