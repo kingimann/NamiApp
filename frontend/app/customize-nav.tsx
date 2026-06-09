@@ -11,7 +11,7 @@ import { theme } from "@/src/theme";
 
 export default function CustomizeNavScreen() {
   const router = useRouter();
-  const { ids, shortcuts, add, remove, move, reset, canAdd, canRemove } = useNavBar();
+  const { ids, shortcuts, add, remove, move, reset, canAdd, canRemove, lockedIds } = useNavBar();
 
   const inBar = new Set(ids);
   const others: NavShortcut[] = NAV_CATALOG.filter((s) => !inBar.has(s.id));
@@ -59,14 +59,20 @@ export default function CustomizeNavScreen() {
               >
                 <Ionicons name="chevron-down" size={18} color={theme.textPrimary} />
               </TouchableOpacity>
-              <TouchableOpacity
-                onPress={() => remove(s.id)}
-                style={[styles.removeBtn, !canRemove && { opacity: 0.3 }]}
-                disabled={!canRemove}
-                testID={`remove-${s.id}`}
-              >
-                <Ionicons name="remove" size={18} color={theme.error} />
-              </TouchableOpacity>
+              {lockedIds.includes(s.id) ? (
+                <View style={[styles.removeBtn, { opacity: 0.5 }]} testID={`locked-${s.id}`}>
+                  <Ionicons name="lock-closed" size={16} color={theme.textMuted} />
+                </View>
+              ) : (
+                <TouchableOpacity
+                  onPress={() => remove(s.id)}
+                  style={[styles.removeBtn, !canRemove && { opacity: 0.3 }]}
+                  disabled={!canRemove}
+                  testID={`remove-${s.id}`}
+                >
+                  <Ionicons name="remove" size={18} color={theme.error} />
+                </TouchableOpacity>
+              )}
             </View>
           ))}
         </View>

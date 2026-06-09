@@ -64,7 +64,9 @@ export const NAV_CATALOG: NavShortcut[] = [
   },
 ];
 
-export const DEFAULT_NAV_IDS = ["feed", "map", "groups", "marketplace"];
+export const DEFAULT_NAV_IDS = ["feed", "map", "groups", "profile"];
+// Tabs that are always present in the bottom bar and can't be removed.
+export const LOCKED_NAV_IDS = ["profile"];
 const MIN_TABS = 3;
 const MAX_TABS = 4;
 const STORAGE_KEY = "nav_bar_tabs_v1";
@@ -78,6 +80,7 @@ type Ctx = {
   remove: (id: string) => Promise<void>;
   move: (id: string, direction: -1 | 1) => Promise<void>;
   reset: () => Promise<void>;
+  lockedIds: string[];
   canAdd: boolean;
   canRemove: boolean;
   // External request to hide the bottom tab bar (e.g. while panning the map).
@@ -104,13 +107,23 @@ function clamp(ids: string[]): string[] {
     if (!NAV_CATALOG.find((s) => s.id === id)) continue;
     seen.add(id); valid.push(id);
   }
+  // Always include locked tabs (e.g. Profile), even if a saved layout dropped them.
+  for (const id of LOCKED_NAV_IDS) {
+    if (!seen.has(id) && NAV_CATALOG.find((s) => s.id === id)) { valid.push(id); seen.add(id); }
+  }
   if (valid.length < MIN_TABS) {
     for (const id of DEFAULT_NAV_IDS) {
       if (valid.length >= MIN_TABS) break;
       if (!seen.has(id)) { valid.push(id); seen.add(id); }
     }
   }
-  return valid.slice(0, MAX_TABS);
+  // Trim to MAX without ever dropping a locked tab.
+  while (valid.length > MAX_TABS) {
+    const fromEnd = [...valid].reverse().findIndex((id) => !LOCKED_NAV_IDS.includes(id));
+    if (fromEnd < 0) break;
+    valid.splice(valid.length - 1 - fromEnd, 1);
+  }
+  return valid;
 }
 
 export function NavBarProvider({ children }: { children: React.ReactNode }) {
@@ -151,6 +164,7 @@ export function NavBarProvider({ children }: { children: React.ReactNode }) {
       await persist([...ids, id]);
     },
     remove: async (id) => {
+      if (LOCKED_NAV_IDS.includes(id)) return;  // permanent tab (e.g. Profile)
       if (ids.length <= MIN_TABS) return;
       await persist(ids.filter((x) => x !== id));
     },
@@ -164,6 +178,7 @@ export function NavBarProvider({ children }: { children: React.ReactNode }) {
       await persist(next);
     },
     reset: () => persist(DEFAULT_NAV_IDS),
+    lockedIds: LOCKED_NAV_IDS,
     canAdd: ids.length < MAX_TABS,
     canRemove: ids.length > MIN_TABS,
     tabBarHidden,
@@ -190,6 +205,7 @@ export function useNavBar(): Ctx {
       remove: async () => {},
       move: async () => {},
       reset: async () => {},
+      lockedIds: LOCKED_NAV_IDS,
       canAdd: false,
       canRemove: false,
       tabBarHidden: false,
