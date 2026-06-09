@@ -4,7 +4,7 @@ import {
   ActivityIndicator, Platform, KeyboardAvoidingView, ScrollView, Share, PanResponder,
 } from "react-native";
 import { SafeAreaView, useSafeAreaInsets } from "react-native-safe-area-context";
-import { Ionicons } from "@expo/vector-icons";
+import { Ionicons } from "@/src/platform/icons";
 import { useLocalSearchParams, useRouter } from "expo-router";
 import { safeBack } from "@/src/utils/nav";
 import * as Location from "expo-location";

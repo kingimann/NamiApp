@@ -2,7 +2,7 @@ import React, { useState } from "react";
 import {
   View, Text, StyleSheet, TouchableOpacity, Image, Modal, Pressable, ActivityIndicator, Share, ScrollView, Animated, Platform,
 } from "react-native";
-import { Ionicons } from "@expo/vector-icons";
+import { Ionicons } from "@/src/platform/icons";
 import { useRouter } from "expo-router";
 import { api, Post, PostAnalytics } from "@/src/api/client";
 import { theme } from "@/src/theme";

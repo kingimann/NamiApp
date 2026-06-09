@@ -4,7 +4,7 @@ import {
   Image, ActivityIndicator, Platform,
 } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
-import { Ionicons } from "@expo/vector-icons";
+import { Ionicons } from "@/src/platform/icons";
 import { searchGifs, GIFS_ENABLED, Gif } from "@/src/api/gifs";
 import { theme } from "@/src/theme";
 

@@ -1,6 +1,6 @@
 import React, { useMemo, useState } from "react";
 import { View, Text, StyleSheet, TouchableOpacity, Modal, ScrollView } from "react-native";
-import { Ionicons } from "@expo/vector-icons";
+import { Ionicons } from "@/src/platform/icons";
 import { theme } from "@/src/theme";
 import { MONTHS, fmtBirthday } from "@/src/lib/socials";
 

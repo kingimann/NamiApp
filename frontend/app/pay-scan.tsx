@@ -3,7 +3,7 @@ import {
   View, Text, StyleSheet, TouchableOpacity, TextInput, Platform,
 } from "react-native";
 import { SafeAreaView, useSafeAreaInsets } from "react-native-safe-area-context";
-import { Ionicons } from "@expo/vector-icons";
+import { Ionicons } from "@/src/platform/icons";
 import { CameraView, useCameraPermissions } from "@/src/platform/camera";
 import { Stack, useRouter } from "expo-router";
 import { safeBack } from "@/src/utils/nav";

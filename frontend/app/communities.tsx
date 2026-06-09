@@ -4,7 +4,7 @@ import {
   ActivityIndicator, RefreshControl, Modal, KeyboardAvoidingView, Platform, ScrollView, Animated,
 } from "react-native";
 import { SafeAreaView, useSafeAreaInsets } from "react-native-safe-area-context";
-import { Ionicons } from "@expo/vector-icons";
+import { Ionicons } from "@/src/platform/icons";
 import { Stack, useFocusEffect, useRouter } from "expo-router";
 import { api, Community } from "@/src/api/client";
 import { theme } from "@/src/theme";

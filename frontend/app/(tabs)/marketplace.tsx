@@ -5,7 +5,7 @@ import {
   Platform, Image, ScrollView, Animated, Easing, Alert,
 } from "react-native";
 import { SafeAreaView, useSafeAreaInsets } from "react-native-safe-area-context";
-import { Ionicons } from "@expo/vector-icons";
+import { Ionicons } from "@/src/platform/icons";
 import { useFocusEffect, useRouter, useLocalSearchParams } from "expo-router";
 import * as ImagePicker from "@/src/platform/image-picker";
 import { pickImages } from "@/src/utils/thumbnail";

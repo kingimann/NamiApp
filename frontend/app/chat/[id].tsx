@@ -7,7 +7,7 @@ import {
 // Chat media bubbles scale with the screen so photos/videos aren't tiny.
 const CHAT_MEDIA_W = Math.min(300, Math.round(Dimensions.get("window").width * 0.72));
 import { SafeAreaView, useSafeAreaInsets } from "react-native-safe-area-context";
-import { Ionicons } from "@expo/vector-icons";
+import { Ionicons } from "@/src/platform/icons";
 import * as ImagePicker from "@/src/platform/image-picker";
 import * as DocumentPicker from "@/src/platform/document-picker";
 import * as Location from "expo-location";

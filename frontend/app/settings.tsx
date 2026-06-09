@@ -3,7 +3,7 @@ import {
   View, Text, StyleSheet, TouchableOpacity, ScrollView, Image, Alert,
 } from "react-native";
 import { SafeAreaView, useSafeAreaInsets } from "react-native-safe-area-context";
-import { Ionicons } from "@expo/vector-icons";
+import { Ionicons } from "@/src/platform/icons";
 import { Stack, useRouter, useFocusEffect } from "expo-router";
 import { safeBack } from "@/src/utils/nav";
 import { api } from "@/src/api/client";

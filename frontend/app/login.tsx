@@ -4,7 +4,7 @@ import {
   Platform, TextInput, ScrollView, KeyboardAvoidingView,
 } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
-import { Ionicons } from "@expo/vector-icons";
+import { Ionicons } from "@/src/platform/icons";
 import { useRouter } from "expo-router";
 import { theme } from "@/src/theme";
 import { GLASS } from "@/src/lib/glass";

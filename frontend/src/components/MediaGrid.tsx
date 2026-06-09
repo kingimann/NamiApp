@@ -3,7 +3,7 @@ import {
   View, TouchableOpacity, StyleSheet, Image, Modal, Pressable, Dimensions,
   ActivityIndicator,
 } from "react-native";
-import { Ionicons } from "@expo/vector-icons";
+import { Ionicons } from "@/src/platform/icons";
 import { useVideoPlayer, VideoView } from "@/src/platform/video";
 import { PostMedia, mediaUri } from "@/src/api/client";
 import ReelPoster from "@/src/components/ReelPoster";

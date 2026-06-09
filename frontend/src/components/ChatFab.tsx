@@ -1,6 +1,6 @@
 import React, { useCallback, useState } from "react";
 import { StyleSheet } from "react-native";
-import { Ionicons } from "@expo/vector-icons";
+import { Ionicons } from "@/src/platform/icons";
 import { useFocusEffect, useRouter } from "expo-router";
 import { theme } from "@/src/theme";
 import { storage } from "@/src/utils/storage";

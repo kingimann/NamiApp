@@ -2,7 +2,7 @@ import React, { useCallback, useState } from "react";
 import {
   View, Text, StyleSheet, ScrollView, TouchableOpacity, Image, Alert, ActivityIndicator,
 } from "react-native";
-import { Ionicons } from "@expo/vector-icons";
+import { Ionicons } from "@/src/platform/icons";
 import { useFocusEffect, useRouter } from "expo-router";
 import * as ImagePicker from "@/src/platform/image-picker";
 import { cloudinaryEnabled, uploadToCloudinary } from "@/src/api/cloudinary";

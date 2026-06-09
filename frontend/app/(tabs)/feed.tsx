@@ -5,7 +5,7 @@ import {
 } from "react-native";
 import { SafeAreaView, useSafeAreaInsets } from "react-native-safe-area-context";
 import { SidebarMenuButton } from "@/src/components/LeftSidebar";
-import { Ionicons } from "@expo/vector-icons";
+import { Ionicons } from "@/src/platform/icons";
 import { useFocusEffect, useRouter, useLocalSearchParams } from "expo-router";
 import { api, Post } from "@/src/api/client";
 import { useAuth } from "@/src/context/AuthContext";

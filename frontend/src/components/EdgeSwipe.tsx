@@ -15,7 +15,7 @@ import Animated, {
   useSharedValue,
   withSpring,
 } from "react-native-reanimated";
-import { Ionicons } from "@expo/vector-icons";
+import { Ionicons } from "@/src/platform/icons";
 import { useNavHistory } from "@/src/context/NavHistoryContext";
 import { theme } from "@/src/theme";
 

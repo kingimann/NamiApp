@@ -1,6 +1,6 @@
 import React from "react";
 import { View, Text, StyleSheet, TouchableOpacity, Image } from "react-native";
-import { Ionicons } from "@expo/vector-icons";
+import { Ionicons } from "@/src/platform/icons";
 import { useRouter } from "expo-router";
 import { Post, mediaUri } from "@/src/api/client";
 import { theme } from "@/src/theme";

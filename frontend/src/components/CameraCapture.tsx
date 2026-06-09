@@ -3,7 +3,7 @@ import {
   Modal, View, Text, TouchableOpacity, StyleSheet, ActivityIndicator,
 } from "react-native";
 import { CameraView, useCameraPermissions } from "@/src/platform/camera";
-import { Ionicons } from "@expo/vector-icons";
+import { Ionicons } from "@/src/platform/icons";
 import { cloudinaryEnabled, uploadToCloudinary } from "@/src/api/cloudinary";
 
 /**

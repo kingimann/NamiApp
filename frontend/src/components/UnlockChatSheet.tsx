@@ -3,7 +3,7 @@ import {
   View, Text, StyleSheet, Modal, TextInput, TouchableOpacity, ActivityIndicator, Platform,
 } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
-import { Ionicons } from "@expo/vector-icons";
+import { Ionicons } from "@/src/platform/icons";
 import { useRouter } from "expo-router";
 import { restoreKey, hasBackup } from "@/src/utils/e2e";
 import { theme } from "@/src/theme";

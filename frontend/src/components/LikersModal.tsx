@@ -4,7 +4,7 @@ import {
   ActivityIndicator, Pressable,
 } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
-import { Ionicons } from "@expo/vector-icons";
+import { Ionicons } from "@/src/platform/icons";
 import { useRouter } from "expo-router";
 import { api, PublicUser } from "@/src/api/client";
 import { theme } from "@/src/theme";
