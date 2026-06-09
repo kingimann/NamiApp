@@ -144,6 +144,8 @@ export default function ChatScreen() {
   const [scheduledOpen, setScheduledOpen] = useState(false);
   const [transcripts, setTranscripts] = useState<Record<string, string>>({});
   const [transcribingId, setTranscribingId] = useState<string | null>(null);
+  const [scamResults, setScamResults] = useState<Record<string, { risk: "low" | "medium" | "high"; reason: string }>>({});
+  const [scamCheckingId, setScamCheckingId] = useState<string | null>(null);
   const [unlockOpen, setUnlockOpen] = useState(false);
   const [tipOpen, setTipOpen] = useState(false);
   const [optionsOpen, setOptionsOpen] = useState(false);
@@ -156,6 +158,7 @@ export default function ChatScreen() {
   const [convTheme, setConvTheme] = useState<string>("default");
   const [disappearSecs, setDisappearSecs] = useState<number>(0);
   const [ownerId, setOwnerId] = useState<string | null>(null);
+  const [receiptsOn, setReceiptsOn] = useState<boolean>(true);
   const [convName, setConvName] = useState<string>(typeof name === "string" ? name : "");
   const [themeOpen, setThemeOpen] = useState(false);
   const [disappearOpen, setDisappearOpen] = useState(false);
@@ -180,6 +183,7 @@ export default function ChatScreen() {
         if (conv && !cancelled) {
           setConvTheme(conv.theme || "default");
           setDisappearSecs(conv.disappearing_seconds || 0);
+          setReceiptsOn(conv.receipts_enabled !== false);
           setOwnerId(conv.owner_id || null);
           if (conv.kind === "group" && conv.name) setConvName(conv.name);
         }
@@ -827,6 +831,31 @@ export default function ChatScreen() {
     }
   };
 
+  const toggleReceipts = async () => {
+    if (!id) return;
+    const next = !receiptsOn;
+    setReceiptsOn(next);            // optimistic
+    setOptionsOpen(false);
+    try { await api.setReadReceipts(id, next); } catch { setReceiptsOn(!next); }
+  };
+
+  const runScamCheck = async (item: Message) => {
+    if (!id || scamCheckingId) return;
+    if (scamResults[item.id]) return;
+    setScamCheckingId(item.id);
+    try {
+      // E2E messages are opaque to the server — pass the decrypted text we already have.
+      const plain = (decrypted[item.id] ?? (isE2E(item.text || "") ? "" : (item.text || ""))).trim();
+      const res = await api.scamCheckMessage(id, item.id, plain || undefined);
+      setScamResults((s) => ({ ...s, [item.id]: res }));
+    } catch (e: any) {
+      const raw = (e?.message || "Couldn't analyze").replace(/^\d+:\s*/, "");
+      setScamResults((s) => ({ ...s, [item.id]: { risk: "low", reason: `⚠️ ${raw}` } }));
+    } finally {
+      setScamCheckingId(null);
+    }
+  };
+
   const send = async () => {
     if (editingMsg) { await saveEdit(); return; }
     if (!text.trim() || !id) return;
@@ -1137,6 +1166,11 @@ export default function ChatScreen() {
               <Ionicons name="timer-outline" size={20} color={theme.textPrimary} />
               <Text style={styles.optText}>Disappearing messages</Text>
               <Text style={styles.optValue}>{disappearLabel(disappearSecs)}</Text>
+            </TouchableOpacity>
+            <TouchableOpacity style={styles.optRow} onPress={toggleReceipts} testID="chat-receipts">
+              <Ionicons name={receiptsOn ? "checkmark-done-outline" : "eye-off-outline"} size={20} color={theme.textPrimary} />
+              <Text style={styles.optText}>Read receipts</Text>
+              <Text style={styles.optValue}>{receiptsOn ? "On" : "Off"}</Text>
             </TouchableOpacity>
             <TouchableOpacity style={styles.optRow} onPress={clearConvo} testID="chat-clear">
               <Ionicons name="trash-outline" size={20} color={theme.error} />
@@ -1598,6 +1632,32 @@ export default function ChatScreen() {
                         {!encrypted && !!item.link_preview && (
                           <LinkPreviewCard preview={item.link_preview as any} />
                         )}
+                        {scamCheckingId === item.id && (
+                          <View style={styles.scamChecking}>
+                            <ActivityIndicator size="small" color={mine ? "#fff" : theme.primary} />
+                            <Text style={[styles.scamCheckingText, mine && { color: "rgba(255,255,255,0.9)" }]}>Checking…</Text>
+                          </View>
+                        )}
+                        {scamResults[item.id] && (() => {
+                          const r = scamResults[item.id];
+                          const high = r.risk === "high", med = r.risk === "medium";
+                          if (!high && !med) {
+                            return (
+                              <View style={[styles.scamBanner, { backgroundColor: "rgba(34,197,94,0.14)", borderColor: "rgba(34,197,94,0.4)" }]}>
+                                <Ionicons name="shield-checkmark" size={14} color="#16A34A" />
+                                <Text style={styles.scamSafeText}>Looks safe{r.reason ? ` — ${r.reason}` : ""}</Text>
+                              </View>
+                            );
+                          }
+                          return (
+                            <View style={[styles.scamBanner, { backgroundColor: high ? "rgba(239,68,68,0.16)" : "rgba(245,158,11,0.16)", borderColor: high ? "rgba(239,68,68,0.5)" : "rgba(245,158,11,0.5)" }]}>
+                              <Ionicons name="warning" size={14} color={high ? "#DC2626" : "#D97706"} />
+                              <Text style={[styles.scamWarnText, { color: high ? "#DC2626" : "#B45309" }]}>
+                                {high ? "Likely scam" : "Possibly suspicious"}{r.reason ? ` — ${r.reason}` : ""}
+                              </Text>
+                            </View>
+                          );
+                        })()}
                       </View>
                     )}
                   </TouchableOpacity>
@@ -2047,6 +2107,16 @@ export default function ChatScreen() {
                 <Text style={styles.actionRowText}>Copy</Text>
               </TouchableOpacity>
             )}
+            {actionMsg && actionMsg.sender_id !== user?.user_id && actionMsg.type === "text" && plainOf(actionMsg).length > 0 && (
+              <TouchableOpacity
+                style={styles.actionRow}
+                onPress={() => { const m = actionMsg; setActionMsg(null); runScamCheck(m); }}
+                testID="msg-action-scamcheck"
+              >
+                <Ionicons name="shield-checkmark-outline" size={18} color={theme.primary} />
+                <Text style={styles.actionRowText}>Check for scam (AI)</Text>
+              </TouchableOpacity>
+            )}
             {actionMsg && actionMsg.sender_id === user?.user_id && actionMsg.type === "text" && (
               <TouchableOpacity style={styles.actionRow} onPress={() => beginEdit(actionMsg)} testID="msg-action-edit">
                 <Ionicons name="create-outline" size={18} color={theme.textPrimary} />
@@ -2241,6 +2311,12 @@ const styles = StyleSheet.create({
   transcribeBtn: { flexDirection: "row", alignItems: "center", gap: 5, marginTop: 6, alignSelf: "flex-start", paddingVertical: 3, paddingHorizontal: 8, borderRadius: 12, backgroundColor: "rgba(127,127,127,0.14)" },
   transcribeText: { color: theme.primary, fontSize: 12, fontWeight: "700" },
   transcriptText: { marginTop: 7, paddingTop: 7, borderTopWidth: 1, borderTopColor: theme.border, color: theme.textPrimary, fontSize: 13, lineHeight: 18, fontStyle: "italic" },
+  // Scam check
+  scamChecking: { flexDirection: "row", alignItems: "center", gap: 6, marginTop: 7 },
+  scamCheckingText: { color: theme.textMuted, fontSize: 12, fontWeight: "600" },
+  scamBanner: { flexDirection: "row", alignItems: "flex-start", gap: 6, marginTop: 8, paddingVertical: 6, paddingHorizontal: 9, borderRadius: 10, borderWidth: 1 },
+  scamWarnText: { flex: 1, fontSize: 12, fontWeight: "700", lineHeight: 16 },
+  scamSafeText: { flex: 1, color: "#15803D", fontSize: 12, fontWeight: "700", lineHeight: 16 },
   // Poll bubble
   pollCard: { width: 240, gap: 7 },
   pollHead: { flexDirection: "row", alignItems: "flex-start", gap: 6, marginBottom: 2 },

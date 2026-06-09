@@ -389,6 +389,7 @@ class ConversationView(BaseModel):
     avatar: Optional[str] = None  # group avatar (None for DM)
     theme: Optional[str] = None  # conversation color theme key (Messenger-style)
     disappearing_seconds: int = 0  # 0 = off; otherwise messages auto-vanish after N seconds
+    receipts_enabled: bool = True   # whether the viewer sends/sees read receipts here
     other_user: Optional[PublicUser] = None  # only for DM
     members: List[PublicUser] = []           # group members (empty for DM)
     owner_id: Optional[str] = None           # group owner

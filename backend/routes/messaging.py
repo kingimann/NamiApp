@@ -124,6 +124,7 @@ async def _hydrate_conv(conv: dict, viewer_id: str) -> ConversationView:
             avatar=conv.get("avatar"),
             theme=conv.get("theme"),
             disappearing_seconds=int(conv.get("disappearing_seconds") or 0),
+            receipts_enabled=viewer_id not in (conv.get("receipts_off") or []),
             members=members,
             owner_id=conv.get("owner_id"),
             last_message=Message(**last) if last else None,
@@ -146,6 +147,7 @@ async def _hydrate_conv(conv: dict, viewer_id: str) -> ConversationView:
         id=conv["id"], kind="dm",
         theme=conv.get("theme"),
         disappearing_seconds=int(conv.get("disappearing_seconds") or 0),
+        receipts_enabled=viewer_id not in (conv.get("receipts_off") or []),
         other_user=other,
         listing_id=conv.get("listing_id"),
         listing_title=conv.get("listing_title"),
@@ -450,6 +452,11 @@ async def list_messages(
     last_read = conv.get("last_read") or {}
     last_delivered = conv.get("last_delivered") or {}
     last_delivered[user["user_id"]] = now  # reflect this fetch immediately
+    # Read receipts are mutual: someone who turned them off for this conversation
+    # neither broadcasts their own "read" nor sees anyone else's. Delivered ticks
+    # are unaffected (WhatsApp-style). The viewer opting out hides all read state.
+    receipts_off = set(conv.get("receipts_off") or [])
+    viewer_sees_reads = user["user_id"] not in receipts_off
     out: List[Message] = []
     for d in docs:
         plain = _decrypt_msg(d)
@@ -457,7 +464,11 @@ async def list_messages(
         others = [p for p in conv["participant_ids"] if p != sender_id]
         if others:
             created = plain["created_at"]
-            read_by = [p for p in others if (last_read.get(p) is not None and last_read[p] >= created)]
+            read_by = [
+                p for p in others
+                if viewer_sees_reads and p not in receipts_off
+                and last_read.get(p) is not None and last_read[p] >= created
+            ]
             delivered_by = [p for p in others if (last_delivered.get(p) is not None and last_delivered[p] >= created)]
             plain["read_by"] = read_by
             plain["delivered_by"] = delivered_by
@@ -772,6 +783,23 @@ async def mark_read(conv_id: str, authorization: Optional[str] = Header(None)):
     return {"ok": True}
 
 
+class ReceiptsBody(BaseModel):
+    enabled: bool
+
+
+@router.post("/conversations/{conv_id}/receipts")
+async def set_read_receipts(conv_id: str, body: ReceiptsBody, authorization: Optional[str] = Header(None)):
+    """Turn read receipts on/off for just this conversation. When off you don't
+    send your read receipts here and you don't see the other side's either."""
+    user = await get_current_user(authorization)
+    conv = await db.conversations.find_one({"id": conv_id}, {"_id": 0, "participant_ids": 1})
+    if not conv or user["user_id"] not in conv["participant_ids"]:
+        raise HTTPException(status_code=404, detail="Conversation not found")
+    op = {"$pull": {"receipts_off": user["user_id"]}} if body.enabled else {"$addToSet": {"receipts_off": user["user_id"]}}
+    await db.conversations.update_one({"id": conv_id}, op)
+    return {"ok": True, "receipts_enabled": body.enabled}
+
+
 @router.patch("/conversations/{conv_id}/messages/{msg_id}", response_model=Message)
 async def edit_message(
     conv_id: str, msg_id: str, body: MessageEdit, authorization: Optional[str] = Header(None)
@@ -876,15 +904,15 @@ async def summarize_conversation_route(
     conv_id: str, body: SummarizeBody, authorization: Optional[str] = Header(None)
 ):
     """AI-summarize a conversation. The client sends the plaintext transcript
-    (so it works for end-to-end-encrypted chats too); the server runs Claude on
-    it and returns a short summary. The transcript is not stored."""
+    (so it works for end-to-end-encrypted chats too); the server runs the local
+    Ollama model on it and returns a short summary. The transcript is not stored."""
     user = await get_current_user(authorization)
     conv = await db.conversations.find_one({"id": conv_id}, {"_id": 0})
     if not conv or user["user_id"] not in conv["participant_ids"]:
         raise HTTPException(status_code=404, detail="Conversation not found")
-    from services.claude_ai import summarize_conversation, claude_ai_enabled
-    if not claude_ai_enabled():
-        raise HTTPException(status_code=503, detail={"code": "ai_unavailable", "message": "AI summaries aren't configured on this server."})
+    from services.ollama import summarize_conversation, ollama_enabled
+    if not ollama_enabled():
+        raise HTTPException(status_code=503, detail={"code": "ai_unavailable", "message": "AI summaries aren't configured on this server (set OLLAMA_HOST)."})
     transcript = (body.transcript or "").strip()
     if not transcript:
         raise HTTPException(status_code=400, detail="Nothing to summarize yet")
@@ -962,6 +990,40 @@ async def transcribe_voice(conv_id: str, msg_id: str, body: TranscribeBody, auth
     if not is_e2e:
         await db.messages.update_one({"id": msg_id, "conversation_id": conv_id}, {"$set": {"transcript": text}})
     return {"text": text, "cached": False}
+
+
+class ScamCheckBody(BaseModel):
+    # End-to-end encrypted text is opaque to the server, so the client passes the
+    # decrypted plaintext here. Omit for plain messages (server reads its copy).
+    text: Optional[str] = None
+
+
+@router.post("/conversations/{conv_id}/messages/{msg_id}/scam-check")
+async def scam_check(conv_id: str, msg_id: str, body: ScamCheckBody, authorization: Optional[str] = Header(None)):
+    """Ask the AI whether a message looks like spam/scam/phishing. Returns
+    {risk, reason}. The plaintext is used only for this call and never stored."""
+    from services.ollama import assess_scam, ollama_enabled
+    user = await get_current_user(authorization)
+    conv = await db.conversations.find_one({"id": conv_id}, {"_id": 0, "participant_ids": 1})
+    if not conv or user["user_id"] not in conv["participant_ids"]:
+        raise HTTPException(status_code=404, detail="Conversation not found")
+    if not ollama_enabled():
+        raise HTTPException(status_code=503, detail={"code": "ai_unavailable", "message": "Scam detection isn't set up on this server yet (set OLLAMA_HOST)."})
+    text = (body.text or "").strip()
+    if not text:
+        m = await db.messages.find_one({"id": msg_id, "conversation_id": conv_id}, {"_id": 0})
+        if not m:
+            raise HTTPException(status_code=404, detail="Message not found")
+        stored = _decrypt_msg(m).get("text") or ""
+        if stored.startswith("e2e:v1:"):
+            raise HTTPException(status_code=400, detail={"code": "need_decrypted_text", "message": "This message is end-to-end encrypted — pass the decrypted text."})
+        text = stored.strip()
+    if not text:
+        raise HTTPException(status_code=400, detail="Nothing to check")
+    result = await assess_scam(text)
+    if result is None:
+        raise HTTPException(status_code=502, detail="Couldn't analyze this message")
+    return result
 
 
 # ── Scheduled messages ──────────────────────────────────────────────────────

@@ -586,6 +586,14 @@ export const api = {
     request<{ text: string; cached: boolean }>(`/conversations/${conv_id}/messages/${msg_id}/transcribe`, {
       method: "POST", body: JSON.stringify({ audio_base64: audio_base64 || null }),
     }),
+  setReadReceipts: (conv_id: string, enabled: boolean) =>
+    request<{ ok: boolean; receipts_enabled: boolean }>(`/conversations/${conv_id}/receipts`, {
+      method: "POST", body: JSON.stringify({ enabled }),
+    }),
+  scamCheckMessage: (conv_id: string, msg_id: string, text?: string) =>
+    request<{ risk: "low" | "medium" | "high"; reason: string }>(`/conversations/${conv_id}/messages/${msg_id}/scam-check`, {
+      method: "POST", body: JSON.stringify({ text: text || null }),
+    }),
   // Custom emojis (global registry, used as :shortcode: in chat).
   listCustomEmojis: () => request<CustomEmoji[]>("/emojis"),
   createCustomEmoji: (shortcode: string, image_base64: string) =>
@@ -1387,6 +1395,7 @@ export type ConversationView = {
   avatar?: string | null;
   theme?: string | null;
   disappearing_seconds?: number;
+  receipts_enabled?: boolean;
   other_user?: PublicUser | null;
   members?: PublicUser[];
   owner_id?: string | null;
