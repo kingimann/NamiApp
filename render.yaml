@@ -175,6 +175,14 @@ services:
       - path: /index.html
         name: Cache-Control
         value: "no-cache, must-revalidate"
+      # The self-destroying service workers must always revalidate so a stale
+      # cached copy can't keep an old rogue worker alive (see public/sw.js).
+      - path: /service-worker.js
+        name: Cache-Control
+        value: "no-cache, must-revalidate"
+      - path: /sw.js
+        name: Cache-Control
+        value: "no-cache, must-revalidate"
     routes:
       # SPA fallback — the app exports a single index.html (web.output: single).
       - type: rewrite
