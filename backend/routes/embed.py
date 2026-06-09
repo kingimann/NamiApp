@@ -82,10 +82,13 @@ def _embed_cfg(theme: str, accent: Optional[str], radius: Optional[str]) -> dict
 
 def _author_ok(u: Optional[dict]) -> bool:
     """A user whose content may be shown publicly: exists, not banned, not
-    currently suspended."""
+    currently suspended, and not a private account (private posts/profiles must
+    never be served through the unauthenticated embed/oEmbed endpoints)."""
     if not u:
         return False
     if u.get("banned"):
+        return False
+    if u.get("is_private"):
         return False
     su = u.get("suspended_until")
     if su:

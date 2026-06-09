@@ -33,6 +33,14 @@ def _public_base(request: Request) -> str:
     return f"{proto}://{host}"
 
 
+def _client_ip(request: Request) -> str:
+    """Best-effort visitor IP for fraud dedup on the unauthenticated ad slots."""
+    xff = request.headers.get("x-forwarded-for")
+    if xff:
+        return xff.split(",")[0].strip()
+    return (request.client.host if request.client else "") or "unknown"
+
+
 def _hex(s: Optional[str]) -> Optional[str]:
     """Accept a 3- or 6-digit hex colour (with or without '#'); else None."""
     s = (s or "").strip().lstrip("#")
@@ -133,12 +141,16 @@ async def serve_ad(request: Request, site: str = Query(...)):
     ad = await _pick_link_ad(s["owner_id"])
     if not ad:
         return {"ok": True, "ad": None}
-    # Bill the impression; `credited` is what the publisher actually earned
-    # (0 for invalid traffic / unestablished publisher / over the daily cap).
-    credited = await bill_link_ad(ad, None, "impression", host_user_id=s["owner_id"])
-    await db.ad_sites.update_one(
-        {"id": s["id"]}, {"$inc": {"impressions": 1, "earned": credited}}
-    )
+    # Fraud guard: bill at most one impression per visitor IP per ad per day, so
+    # a publisher can't loop this endpoint to drain advertisers / self-credit.
+    dup = await _seen_recently(ad["id"], _client_ip(request), "pub_impression", 24)
+    if not dup:
+        # `credited` is what the publisher actually earned (0 for invalid traffic
+        # / unestablished publisher / over the daily cap).
+        credited = await bill_link_ad(ad, None, "impression", host_user_id=s["owner_id"])
+        await db.ad_sites.update_one(
+            {"id": s["id"]}, {"$inc": {"impressions": 1, "earned": credited}}
+        )
     base = _public_base(request)
     domain = ad.get("url", "")
     try:
@@ -155,17 +167,20 @@ async def serve_ad(request: Request, site: str = Query(...)):
 
 
 @router.get("/pub/click")
-async def click_ad(site: str = Query(...), ad: str = Query(...)):
+async def click_ad(request: Request, site: str = Query(...), ad: str = Query(...)):
     """Record a billed click and redirect the visitor to the advertiser's site."""
     s = await db.ad_sites.find_one({"site_key": site}, {"_id": 0})
     doc = await db.link_ads.find_one({"id": ad}, {"_id": 0})
     if not doc:
         raise HTTPException(status_code=404, detail="Ad not found")
     if s:
-        credited = await bill_link_ad(doc, None, "click", host_user_id=s["owner_id"])
-        await db.ad_sites.update_one(
-            {"id": s["id"]}, {"$inc": {"clicks": 1, "earned": credited}}
-        )
+        # One billable click per visitor IP per ad per day (anti-fraud).
+        dup = await _seen_recently(ad, _client_ip(request), "pub_click", 24)
+        if not dup:
+            credited = await bill_link_ad(doc, None, "click", host_user_id=s["owner_id"])
+            await db.ad_sites.update_one(
+                {"id": s["id"]}, {"$inc": {"clicks": 1, "earned": credited}}
+            )
     return RedirectResponse(url=doc.get("url", "/"), status_code=302)
 
 
