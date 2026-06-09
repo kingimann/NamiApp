@@ -1,7 +1,7 @@
 import React, { useEffect, useState } from "react";
 import {
   View, Text, StyleSheet, TouchableOpacity, ActivityIndicator,
-  Platform, TextInput, ScrollView, KeyboardAvoidingView,
+  Platform, TextInput, ScrollView, KeyboardAvoidingView, Image,
 } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
 import { Ionicons } from "@expo/vector-icons";
@@ -11,6 +11,7 @@ import { GLASS } from "@/src/lib/glass";
 import { api } from "@/src/api/client";
 import { useAuth } from "@/src/context/AuthContext";
 import { useNavBar } from "@/src/context/NavBarContext";
+import { getSavedAccounts, removeSavedAccount, SavedAccount } from "@/src/lib/savedAccounts";
 
 type Mode = "signin" | "signup";
 
@@ -43,6 +44,33 @@ export default function LoginScreen() {
   const [loginPhone, setLoginPhone] = useState("");
   const [phoneStage, setPhoneStage] = useState<"request" | "code">("request");
   const [phoneCode, setPhoneCode] = useState("");
+  // Saved profiles (Facebook-style quick login)
+  const [saved, setSaved] = useState<SavedAccount[]>([]);
+  const [showForm, setShowForm] = useState(false);
+
+  useEffect(() => { getSavedAccounts().then(setSaved).catch(() => {}); }, []);
+
+  const loginWithSaved = async (acc: SavedAccount) => {
+    setBusy(true); setError(null);
+    try {
+      const ok = await applySessionToken(acc.token);
+      if (!ok) {
+        // Token expired — fall back to the password form, prefilled.
+        setShowForm(true);
+        setMode("signin");
+        setIdentifier(acc.username || "");
+        setPassword("");
+        setError(`Your session for ${acc.name} expired — enter your password to sign back in.`);
+      }
+    } catch (e: any) {
+      setError(e?.message || String(e));
+    } finally { setBusy(false); }
+  };
+
+  const forgetSaved = async (acc: SavedAccount) => {
+    await removeSavedAccount(acc.user_id);
+    setSaved((arr) => arr.filter((a) => a.user_id !== acc.user_id));
+  };
 
   const sendResetCode = async () => {
     setBusy(true); setError(null); setInfo(null);
@@ -253,6 +281,40 @@ export default function LoginScreen() {
                     <Text style={styles.forgotLink}>← Back to sign in</Text>
                   </TouchableOpacity>
                 </>
+              ) : saved.length > 0 && !showForm ? (
+                <>
+                  <Text style={styles.resetTitle}>Choose a profile</Text>
+                  {!!error && (
+                    <View style={styles.errorBox} testID="auth-error">
+                      <Ionicons name="alert-circle" size={16} color="#FCA5A5" />
+                      <Text style={styles.errorText}>{error}</Text>
+                    </View>
+                  )}
+                  {saved.map((acc) => (
+                    <View key={acc.user_id} style={styles.savedRow}>
+                      <TouchableOpacity style={styles.savedMain} onPress={() => loginWithSaved(acc)} disabled={busy} testID={`saved-${acc.user_id}`}>
+                        <View style={styles.savedAvatar}>
+                          {acc.picture
+                            ? <Image source={{ uri: acc.picture }} style={{ width: "100%", height: "100%" }} />
+                            : <Text style={styles.savedInit}>{(acc.name?.[0] || "?").toUpperCase()}</Text>}
+                        </View>
+                        <View style={{ flex: 1 }}>
+                          <Text style={styles.savedName} numberOfLines={1}>{acc.name}</Text>
+                          {!!acc.username && <Text style={styles.savedHandle} numberOfLines={1}>@{acc.username}</Text>}
+                        </View>
+                        <Ionicons name="chevron-forward" size={18} color={theme.textMuted} />
+                      </TouchableOpacity>
+                      <TouchableOpacity onPress={() => forgetSaved(acc)} hitSlop={8} style={styles.forgetBtn} testID={`forget-${acc.user_id}`}>
+                        <Ionicons name="close" size={16} color={theme.textMuted} />
+                      </TouchableOpacity>
+                    </View>
+                  ))}
+                  {busy && <ActivityIndicator color={theme.primary} style={{ marginTop: 4 }} />}
+                  <TouchableOpacity style={styles.anotherBtn} onPress={() => { setShowForm(true); setError(null); }} testID="use-another">
+                    <Ionicons name="add-circle-outline" size={18} color={theme.primary} />
+                    <Text style={styles.anotherText}>Use another account</Text>
+                  </TouchableOpacity>
+                </>
               ) : (
               <>
               <View style={styles.tabsRow}>
@@ -360,5 +422,14 @@ const styles = StyleSheet.create({
   seg: { flex: 1, paddingVertical: 8, borderRadius: 9, alignItems: "center" },
   segActive: { backgroundColor: theme.primary },
   segText: { color: theme.textSecondary, fontWeight: "700", fontSize: 12.5 },
+  savedRow: { flexDirection: "row", alignItems: "center", gap: 6 },
+  savedMain: { flex: 1, flexDirection: "row", alignItems: "center", gap: 12, backgroundColor: theme.surfaceAlt, borderWidth: 1, borderColor: theme.border, borderRadius: 14, paddingHorizontal: 12, paddingVertical: 10 },
+  savedAvatar: { width: 44, height: 44, borderRadius: 22, overflow: "hidden", backgroundColor: theme.primary, alignItems: "center", justifyContent: "center" },
+  savedInit: { color: "#fff", fontSize: 18, fontWeight: "800" },
+  savedName: { color: "#fff", fontSize: 15, fontWeight: "800" },
+  savedHandle: { color: theme.textMuted, fontSize: 12.5, marginTop: 1 },
+  forgetBtn: { width: 30, height: 30, borderRadius: 15, alignItems: "center", justifyContent: "center" },
+  anotherBtn: { flexDirection: "row", alignItems: "center", justifyContent: "center", gap: 8, paddingVertical: 12, borderRadius: 12, borderWidth: 1, borderColor: theme.border, borderStyle: "dashed", marginTop: 4 },
+  anotherText: { color: theme.primary, fontSize: 14, fontWeight: "800" },
 });
 

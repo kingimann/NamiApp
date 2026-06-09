@@ -11,6 +11,7 @@ import * as Linking from "expo-linking";
 import { api, SESSION_TOKEN_KEY, PUSH_TOKEN_KEY, User, LoginResponse } from "@/src/api/client";
 import { storage } from "@/src/utils/storage";
 import { ensureKeyPair } from "@/src/utils/e2e";
+import { addSavedAccount } from "@/src/lib/savedAccounts";
 
 type AuthState = {
   loading: boolean;
@@ -67,6 +68,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({
         await storage.secureSet(SESSION_TOKEN_KEY, token);
         const me = await api.me();
         setUser(me);
+        addSavedAccount({ user_id: me.user_id, name: me.name, username: me.username, picture: me.picture, token }).catch(() => {});
         return true;
       } catch {
         await storage.secureRemove(SESSION_TOKEN_KEY);
@@ -103,6 +105,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({
     if ("twofa_required" in res) return res;
     await storage.secureSet(SESSION_TOKEN_KEY, res.session_token);
     setUser(res.user);
+    addSavedAccount({ user_id: res.user.user_id, name: res.user.name, username: res.user.username, picture: res.user.picture, token: res.session_token }).catch(() => {});
     return res;
   }, []);
 
@@ -110,6 +113,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({
     const { session_token, user: u } = await api.registerLocal({ email, password, name, username });
     await storage.secureSet(SESSION_TOKEN_KEY, session_token);
     setUser(u);
+    addSavedAccount({ user_id: u.user_id, name: u.name, username: u.username, picture: u.picture, token: session_token }).catch(() => {});
   }, []);
 
   // Parse session_token from URL (web) or deep link (mobile) after Google OAuth
