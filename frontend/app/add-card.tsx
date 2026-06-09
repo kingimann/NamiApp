@@ -10,7 +10,7 @@ import { api } from "@/src/api/client";
 import { mountDebitCardField } from "@/src/lib/stripeEmbed";
 import { theme } from "@/src/theme";
 
-const FIELD_ID = "nami-card-field";
+const FIELD_ID = "okayspace-card-field";
 
 export default function AddCardScreen() {
   const router = useRouter();

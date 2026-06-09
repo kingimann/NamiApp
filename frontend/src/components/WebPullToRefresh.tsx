@@ -82,7 +82,7 @@ export default function WebPullToRefresh() {
     };
     const onEnd = () => {
       if (active.current && pullRef.current >= threshRef.current) {
-        try { sessionStorage.setItem("nami_refreshed", "1"); } catch {}
+        try { sessionStorage.setItem("okayspace_refreshed", "1"); } catch {}
         window.location.reload();
         return;
       }

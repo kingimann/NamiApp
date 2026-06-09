@@ -179,7 +179,7 @@ async def test_webhook(webhook_id: str, authorization: Optional[str] = Header(No
             r = await client.post(
                 hook["url"], content=body,
                 headers={"Content-Type": "application/json",
-                         "X-Nami-Signature": f"sha256={sig}", "X-Nami-Event": "ping"},
+                         "X-OkaySpace-Signature": f"sha256={sig}", "X-OkaySpace-Event": "ping"},
             )
         return {"ok": 200 <= r.status_code < 300, "status": r.status_code}
     except Exception as e:
@@ -229,8 +229,8 @@ async def _post(hook: dict, payload: dict) -> dict:
     sig = hmac.new(secret.encode("utf-8"), body, hashlib.sha256).hexdigest()
     headers = {
         "Content-Type": "application/json",
-        "X-Nami-Signature": f"sha256={sig}",
-        "X-Nami-Event": payload.get("event", ""),
+        "X-OkaySpace-Signature": f"sha256={sig}",
+        "X-OkaySpace-Event": payload.get("event", ""),
     }
     if not _webhook_url_ok(url):
         # Refuse SSRF targets (the host may now resolve to a private address).

@@ -1221,4 +1221,4 @@ async def export_wallet(authorization: Optional[str] = Header(None)):
             esc(p.get("created_at")), "payout", esc(p.get("frequency", "")),
             f'-{float(p.get("amount", 0) or 0):.2f}', "", esc(p.get("status", "")),
         ]))
-    return {"filename": f"nami-earnings-{uid}.csv", "csv": "\n".join(lines)}
+    return {"filename": f"okayspace-earnings-{uid}.csv", "csv": "\n".join(lines)}

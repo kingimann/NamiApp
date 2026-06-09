@@ -56,11 +56,11 @@ for App Store review.
 
 ## Notes
 
-- Bundle ID is `com.namiapp.mobile` (set in `app.json` → `ios.bundleIdentifier`).
+- Bundle ID is `com.okayspace.mobile` (set in `app.json` → `ios.bundleIdentifier`).
   Change it before your first build if you want a different identifier — it's
   permanent once an app is created in App Store Connect.
 - The native build talks to the production backend at
-  `https://nampo-backend.onrender.com` (baked in via `eas.json`).
+  `https://okayspace.onrender.com` (baked in via `eas.json`).
 - Native builds use true GPS, so the map "follow me" / location accuracy is far
   better than the web build.
 - Bump the user-facing version in `app.json` (`expo.version`) for each App Store

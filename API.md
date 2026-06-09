@@ -1,8 +1,8 @@
 # OkaySpace REST API
 
-Base URL: `https://nampo-backend.onrender.com/api`
-Interactive docs (Swagger): `https://nampo-backend.onrender.com/docs`
-OpenAPI schema: `https://nampo-backend.onrender.com/openapi.json`
+Base URL: `https://okayspace.onrender.com/api`
+Interactive docs (Swagger): `https://okayspace.onrender.com/docs`
+OpenAPI schema: `https://okayspace.onrender.com/openapi.json`
 
 All requests and responses are JSON over HTTPS.
 
@@ -13,7 +13,7 @@ All requests and responses are JSON over HTTPS.
 [Authentication](#authentication) ·
 [Plans & access](#plans--access-paid) ·
 [Webhooks](#webhooks-pro) ·
-[Login with OkaySpace (OAuth2)](#login-with-nami-oauth2) ·
+[Login with OkaySpace (OAuth2)](#login-with-okayspace-oauth2) ·
 [Conventions](#conventions) ·
 [Quick examples](#quick-examples) ·
 [Flutter & Dart integration](#flutter--dart-integration)
@@ -36,9 +36,9 @@ All requests and responses are JSON over HTTPS.
 [Payments](#payments-when-stripe-is-configured) ·
 [Money & wallet](#money-peer-to-peer--wallet) ·
 [Ads](#ads--advertising) ·
-[Publisher network](#publisher-network-display-nami-ads-on-your-site--earn) ·
+[Publisher network](#publisher-network-display-okayspace-ads-on-your-site--earn) ·
 [Payouts](#payouts) ·
-[OAuth / connected apps](#login-with-nami-oauth2--connected-apps) ·
+[OAuth / connected apps](#login-with-okayspace-oauth2--connected-apps) ·
 [Admin & moderation](#admin--moderation-adminmod-only) ·
 [Developer & E2E keys](#developer-api-keys--e2e-keys) ·
 [Webhooks endpoints](#webhooks-pro-1)
@@ -59,7 +59,7 @@ no platform-specific API. The same routes, auth, and payloads work from:
   the Bearer token to run against your plan's quota.
 
 Realtime features (messaging presence, calls, ETA) use WebSockets at
-`wss://nampo-backend.onrender.com`; everything else is plain JSON over HTTPS and
+`wss://okayspace.onrender.com`; everything else is plain JSON over HTTPS and
 behaves identically on every platform.
 
 ## Authentication
@@ -75,13 +75,13 @@ Generate API keys in the app: **Settings → Developer API → Generate**. Keys 
 shown once; store them securely. Revoke anytime from the same screen.
 
 ```bash
-curl https://nampo-backend.onrender.com/api/posts/feed \
-  -H "Authorization: Bearer $NAMI_KEY"
+curl https://okayspace.onrender.com/api/posts/feed \
+  -H "Authorization: Bearer $OKAYSPACE_KEY"
 ```
 
 ```js
-const res = await fetch("https://nampo-backend.onrender.com/api/posts/feed", {
-  headers: { Authorization: `Bearer ${process.env.NAMI_KEY}` },
+const res = await fetch("https://okayspace.onrender.com/api/posts/feed", {
+  headers: { Authorization: `Bearer ${process.env.OKAYSPACE_KEY}` },
 });
 const feed = await res.json();
 ```
@@ -89,8 +89,8 @@ const feed = await res.json();
 ```python
 import requests
 r = requests.get(
-    "https://nampo-backend.onrender.com/api/posts/feed",
-    headers={"Authorization": f"Bearer {NAMI_KEY}"},
+    "https://okayspace.onrender.com/api/posts/feed",
+    headers={"Authorization": f"Bearer {OKAYSPACE_KEY}"},
 )
 feed = r.json()
 ```
@@ -128,7 +128,7 @@ Write scope requires Pro or higher.
 ## Webhooks (Pro+)
 
 Register endpoints to receive events. We `POST` a JSON body
-`{event, data, created_at}` and sign it: header `X-Nami-Signature: sha256=<hmac>`
+`{event, data, created_at}` and sign it: header `X-OkaySpace-Signature: sha256=<hmac>`
 (HMAC-SHA256 of the raw body with your signing secret). Verify it before trusting.
 
 | Method | Path | Description |
@@ -156,14 +156,14 @@ Let users sign in to your site with their OkaySpace account (authorization-code 
    On approval we redirect to `redirect_uri?code=...&state=xyz`.
 3. **Exchange the code** (server-side):
    ```bash
-   curl -X POST https://nampo-backend.onrender.com/api/oauth/token \
+   curl -X POST https://okayspace.onrender.com/api/oauth/token \
      -H "Content-Type: application/json" \
      -d '{"grant_type":"authorization_code","code":"...","client_id":"...","client_secret":"...","redirect_uri":"..."}'
    # → { access_token, token_type: "Bearer", expires_in, scope }
    ```
 4. **Get the profile**:
    ```bash
-   curl https://nampo-backend.onrender.com/api/oauth/userinfo \
+   curl https://okayspace.onrender.com/api/oauth/userinfo \
      -H "Authorization: Bearer <access_token>"
    # → { sub, name, preferred_username, picture, verified, email? }
    ```
@@ -217,7 +217,7 @@ curl -X POST $API/money/send -H "Authorization: Bearer $TOKEN" \
   -d '{"to_user_id":"u_123","amount":10,"note":"lunch","answer":"fluffy"}'
 ```
 
-`$API` = `https://nampo-backend.onrender.com/api`. Get `$TOKEN` from login, or use a
+`$API` = `https://okayspace.onrender.com/api`. Get `$TOKEN` from login, or use a
 Developer API key (Settings → Developer API).
 
 ## Flutter & Dart integration
@@ -230,7 +230,7 @@ because CORS is open, the same code runs on Flutter mobile **and** Flutter Web.
 import 'dart:convert';
 import 'package:http/http.dart' as http;
 
-const api = 'https://nampo-backend.onrender.com/api';
+const api = 'https://okayspace.onrender.com/api';
 
 class OkaySpace {
   String? token; // a session token from login, or a Developer API key
@@ -268,7 +268,7 @@ OpenAPI schema instead of writing calls by hand:
 ```bash
 dart pub global activate openapi_generator_cli
 openapi-generator generate \
-  -i https://nampo-backend.onrender.com/openapi.json \
+  -i https://okayspace.onrender.com/openapi.json \
   -g dart-dio -o ./okayspace_client
 ```
 
@@ -278,7 +278,7 @@ openapi-generator generate \
 // pubspec.yaml → web_socket_channel: ^2.4.0
 import 'package:web_socket_channel/web_socket_channel.dart';
 final ch = WebSocketChannel.connect(
-  Uri.parse('wss://nampo-backend.onrender.com/ws/conversations/<id>?token=<token>'),
+  Uri.parse('wss://okayspace.onrender.com/ws/conversations/<id>?token=<token>'),
 );
 ch.stream.listen((msg) => print(msg));
 ```

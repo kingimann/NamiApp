@@ -140,7 +140,7 @@ async def _resolve_video_url(url: str) -> Optional[dict]:
     from services.link_preview import _is_safe_host
     if not parsed.hostname or not _is_safe_host(parsed.hostname):
         return None
-    headers = {"User-Agent": "Mozilla/5.0 (compatible; NamiBot/1.0)"}
+    headers = {"User-Agent": "Mozilla/5.0 (compatible; OkaySpaceBot/1.0)"}
     async with httpx.AsyncClient(timeout=10, follow_redirects=True, headers=headers) as client:
         if "imgur.com" in host:
             m = re.search(r"/([a-zA-Z0-9]{5,8})(?:\.|/|$)", path)

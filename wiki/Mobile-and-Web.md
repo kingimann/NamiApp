@@ -1,12 +1,12 @@
 # Mobile and Web
 
-Nami is mobile-first and runs on iOS, Android, and the web. The web build is engineered to **feel like a native app**.
+OkaySpace is mobile-first and runs on iOS, Android, and the web. The web build is engineered to **feel like a native app**.
 
 ## Phone-width frame (web)
 On screens wider than ~600px, `src/components/MobileFrame.tsx` pins the whole app to a centered **480px phone-width column** — a floating, rounded "device" with a soft shadow, a subtle **faux status bar** (live clock + signal/wifi/battery), and clipped overflow — so the mobile layout never stretches or breaks. On phones and all native it's a transparent passthrough.
 
 ## Installable PWA
-`frontend/public/manifest.json` (standalone, portrait, theme color, icon) + apple-mobile-web-app / theme-color / apple-touch-icon meta in `app/+html.tsx`. Users can **Add to Home Screen** and launch fullscreen. A branded **launch splash** (`#nami-splash`) shows on load / cold start and is removed when the app mounts.
+`frontend/public/manifest.json` (standalone, portrait, theme color, icon) + apple-mobile-web-app / theme-color / apple-touch-icon meta in `app/+html.tsx`. Users can **Add to Home Screen** and launch fullscreen. A branded **launch splash** (`#okayspace-splash`) shows on load / cold start and is removed when the app mounts.
 
 ## App-feel
 `app/+html.tsx` disables text selection (inputs/selectable text still work), tap-highlight, long-press callouts, image drag, and focus rings; hides scrollbars (screens scroll internally); enables momentum scroll; and avoids white flashes. Orientation is locked to **portrait** (`app.json`).

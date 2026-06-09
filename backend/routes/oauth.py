@@ -61,8 +61,8 @@ async def create_app(body: AppCreate, authorization: Optional[str] = Header(None
     uris = [u.strip() for u in (body.redirect_uris or []) if u.strip().startswith("http")]
     if not name or not uris:
         raise HTTPException(status_code=400, detail="App name and at least one https redirect URI are required")
-    client_id = f"nami_cid_{secrets.token_urlsafe(12)}"
-    client_secret = f"nami_csec_{secrets.token_urlsafe(24)}"
+    client_id = f"okayspace_cid_{secrets.token_urlsafe(12)}"
+    client_secret = f"okayspace_csec_{secrets.token_urlsafe(24)}"
     await db.oauth_apps.insert_one({
         "client_id": client_id, "client_secret": client_secret,
         "name": name, "redirect_uris": uris[:5], "owner_id": user["user_id"],
@@ -113,7 +113,7 @@ async def authorize(body: AuthorizeBody, authorization: Optional[str] = Header(N
         if body.state:
             q["state"] = body.state
         return {"redirect_url": f"{body.redirect_uri}?{urlencode(q)}"}
-    code = f"nami_code_{secrets.token_urlsafe(24)}"
+    code = f"okayspace_code_{secrets.token_urlsafe(24)}"
     await db.oauth_codes.insert_one({
         "code": code, "client_id": body.client_id, "user_id": user["user_id"],
         "redirect_uri": body.redirect_uri, "scope": _clean_scopes(body.scope),
@@ -139,7 +139,7 @@ async def token(body: TokenBody):
     await db.oauth_codes.delete_one({"code": body.code})   # one-time use
     if _norm_dt(rec["expires_at"]) < datetime.now(timezone.utc):
         raise HTTPException(status_code=400, detail="invalid_grant (expired)")
-    access_token = f"nami_at_{secrets.token_urlsafe(32)}"
+    access_token = f"okayspace_at_{secrets.token_urlsafe(32)}"
     await db.oauth_tokens.insert_one({
         "access_token": access_token, "client_id": body.client_id, "user_id": rec["user_id"],
         "scope": rec.get("scope", "profile"),

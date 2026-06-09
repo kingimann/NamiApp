@@ -14,7 +14,7 @@ export async function searchGifs(query: string): Promise<Gif[]> {
   const path = query.trim()
     ? `search?q=${encodeURIComponent(query.trim())}&`
     : "featured?";
-  const url = `${base}${path}key=${TENOR_KEY}&client_key=nampo&limit=24&media_filter=gif,tinygif`;
+  const url = `${base}${path}key=${TENOR_KEY}&client_key=okayspace&limit=24&media_filter=gif,tinygif`;
   try {
     const res = await fetch(url);
     if (!res.ok) return [];

@@ -93,7 +93,7 @@ async def fetch_link_preview(url: str) -> Optional[dict]:
         async with httpx.AsyncClient(
             timeout=TIMEOUT,
             follow_redirects=False,
-            headers={"User-Agent": "NamiBot/1.0 (link preview)"},
+            headers={"User-Agent": "OkaySpaceBot/1.0 (link preview)"},
         ) as client:
             cur = url
             body = None
