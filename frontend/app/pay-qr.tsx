@@ -4,7 +4,7 @@ import {
 } from "react-native";
 import { SafeAreaView, useSafeAreaInsets } from "react-native-safe-area-context";
 import { Ionicons } from "@expo/vector-icons";
-import { LinearGradient } from "expo-linear-gradient";
+import { LinearGradient } from "@/src/platform/linear-gradient";
 import * as Clipboard from "@/src/platform/clipboard";
 import { Stack, useRouter } from "expo-router";
 import { safeBack } from "@/src/utils/nav";

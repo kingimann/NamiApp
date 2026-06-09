@@ -9,7 +9,7 @@ const CHAT_MEDIA_W = Math.min(300, Math.round(Dimensions.get("window").width * 0
 import { SafeAreaView, useSafeAreaInsets } from "react-native-safe-area-context";
 import { Ionicons } from "@expo/vector-icons";
 import * as ImagePicker from "expo-image-picker";
-import * as DocumentPicker from "expo-document-picker";
+import * as DocumentPicker from "@/src/platform/document-picker";
 import * as Location from "expo-location";
 import * as Clipboard from "@/src/platform/clipboard";
 import {
