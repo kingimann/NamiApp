@@ -142,8 +142,9 @@ export default function NotificationsScreen() {
   };
 
   const onDelete = async (n: Notification) => {
-    setItems((arr) => arr.filter((x) => x.id !== n.id));
-    try { await api.deleteNotification(n.id); } catch {}
+    let restored: Notification[] = [];
+    setItems((arr) => { restored = arr; return arr.filter((x) => x.id !== n.id); });
+    try { await api.deleteNotification(n.id); } catch { setItems(restored); }
   };
 
   const markAll = async () => {

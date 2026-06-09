@@ -410,6 +410,7 @@ async def community_posts(
     name: str,
     sort: str = Query("hot"),
     flair: Optional[str] = Query(None),
+    search: Optional[str] = Query(None),
     authorization: Optional[str] = Header(None),
 ):
     user = await get_current_user(authorization)
@@ -419,6 +420,12 @@ async def community_posts(
     q: dict = {"community_id": doc["id"], "parent_id": None}
     if flair and flair.strip():
         q["flair"] = flair.strip()[:24]
+    if search and search.strip():
+        pat = re.escape(search.strip()[:80])
+        q["$or"] = [
+            {"title": {"$regex": pat, "$options": "i"}},
+            {"text": {"$regex": pat, "$options": "i"}},
+        ]
     docs = await db.posts.find(q, {"_id": 0}).sort("created_at", -1).limit(400).to_list(400)
 
     def votes(d: dict) -> int:

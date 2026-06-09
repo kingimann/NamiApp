@@ -1,4 +1,4 @@
-import React, { useCallback, useState } from "react";
+import React, { useCallback, useEffect, useRef, useState } from "react";
 import {
   View, Text, StyleSheet, FlatList, TouchableOpacity, TextInput,
   ActivityIndicator, RefreshControl, Modal, KeyboardAvoidingView, Platform, ScrollView, Animated, Image,
@@ -40,6 +40,8 @@ export default function CommunityScreen() {
   const [refreshing, setRefreshing] = useState(false);
   const [sort, setSort] = useState("hot");
   const [flairFilter, setFlairFilter] = useState<string>("");
+  const [search, setSearch] = useState("");
+  const searchRef = useRef("");
   const [commentsPost, setCommentsPost] = useState<Post | null>(null);
   const [composeOpen, setComposeOpen] = useState(false);
   const [draft, setDraft] = useState<{ title: string; body: string; flair: string }>({ title: "", body: "", flair: "" });
@@ -53,11 +55,19 @@ export default function CommunityScreen() {
   const load = useCallback(async () => {
     if (!name) return;
     try {
-      const [c, p] = await Promise.all([api.getCommunity(name), api.communityPosts(name, sort, flairFilter || undefined)]);
+      const [c, p] = await Promise.all([api.getCommunity(name), api.communityPosts(name, sort, flairFilter || undefined, searchRef.current || undefined)]);
       setCommunity(c); setPosts(p);
     } catch {} finally { setLoading(false); setRefreshing(false); }
   }, [name, sort, flairFilter]);
   useFocusEffect(useCallback(() => { load(); }, [load]));
+  // Debounced search — reload posts ~300ms after typing stops (searchRef keeps
+  // `load` stable so sort/flair taps stay instant).
+  useEffect(() => {
+    searchRef.current = search;
+    const t = setTimeout(() => { load(); }, 300);
+    return () => clearTimeout(t);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [search]);
 
   const toggleJoin = async () => {
     if (!community) return;
@@ -208,6 +218,23 @@ export default function CommunityScreen() {
                     ))}
                   </View>
                 )}
+                <View style={styles.searchPill}>
+                  <Ionicons name="search" size={16} color={theme.textMuted} />
+                  <TextInput
+                    style={styles.searchInput}
+                    placeholder={`Search /${community.name}`}
+                    placeholderTextColor={theme.textMuted}
+                    value={search}
+                    onChangeText={setSearch}
+                    autoCapitalize="none"
+                    testID="community-post-search"
+                  />
+                  {!!search && (
+                    <TouchableOpacity onPress={() => setSearch("")} hitSlop={8}>
+                      <Ionicons name="close-circle" size={16} color={theme.textMuted} />
+                    </TouchableOpacity>
+                  )}
+                </View>
                 <View style={styles.sortRow}>
                   {SORTS.map((s) => (
                     <TouchableOpacity key={s.key} onPress={() => setSort(s.key)} style={[styles.sortChip, sort === s.key && styles.sortChipOn]} testID={`sort-${s.key}`}>
@@ -360,6 +387,8 @@ const styles = StyleSheet.create({
   joinBtnGhost: { backgroundColor: theme.surface, borderWidth: 1, borderColor: theme.border },
   joinText: { color: "#fff", fontWeight: "800", fontSize: 13 },
   cDesc: { color: theme.textSecondary, fontSize: 14, paddingHorizontal: 16, marginBottom: 8, lineHeight: 19 },
+  searchPill: { flexDirection: "row", alignItems: "center", gap: 8, marginHorizontal: 16, marginBottom: 4, height: 40, backgroundColor: theme.surface, borderRadius: 12, paddingHorizontal: 12, borderWidth: 1, borderColor: theme.border },
+  searchInput: { flex: 1, color: theme.textPrimary, fontSize: 14, ...(Platform.OS === "web" ? ({ outlineStyle: "none" } as object) : {}) },
   sortRow: { flexDirection: "row", gap: 8, paddingHorizontal: 16, paddingVertical: 8, borderBottomWidth: StyleSheet.hairlineWidth, borderBottomColor: theme.border },
   sortChip: { paddingHorizontal: 14, paddingVertical: 7, borderRadius: 16, backgroundColor: theme.surface, borderWidth: 1, borderColor: theme.border },
   sortChipOn: { borderColor: theme.primary, backgroundColor: theme.surfaceAlt },

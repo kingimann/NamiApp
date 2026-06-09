@@ -203,8 +203,11 @@ export default function CommentsSheet({ visible, post, onClose, onCommented }: P
     } catch {}
   };
   const removeComment = async (c: Post) => {
-    setReplies((arr) => arr.filter((r) => r.id !== c.id));
-    try { await api.deletePost(c.id); } catch {}
+    // Optimistic remove, restored if the delete fails so the UI doesn't claim a
+    // comment is gone while the server still has it.
+    let restored: Post[] = [];
+    setReplies((arr) => { restored = arr; return arr.filter((r) => r.id !== c.id); });
+    try { await api.deletePost(c.id); } catch { setReplies(restored); }
   };
 
   const applyEngagement = (u: Post) => setReplies((arr) => arr.map((r) =>

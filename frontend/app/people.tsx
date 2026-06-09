@@ -52,13 +52,14 @@ export default function PeopleScreen() {
     const term = q.trim();
     if (!term) { setResults([]); setSearching(false); return; }
     setSearching(true);
+    let cancelled = false;
     debounce.current = setTimeout(async () => {
       try {
         const r = await api.searchUsers(term);
-        setResults(r);
-      } catch {} finally { setSearching(false); }
+        if (!cancelled) setResults(r);  // ignore a slow response for a stale query
+      } catch {} finally { if (!cancelled) setSearching(false); }
     }, 300);
-    return () => { if (debounce.current) clearTimeout(debounce.current); };
+    return () => { cancelled = true; if (debounce.current) clearTimeout(debounce.current); };
   }, [q]);
 
   const sections: Section[] = q.trim()

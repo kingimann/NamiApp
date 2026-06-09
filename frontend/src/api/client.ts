@@ -743,8 +743,8 @@ export const api = {
     request<{ pinned: boolean }>(`/communities/${name}/posts/${postId}/pin`, { method: "POST" }),
   joinCommunity: (name: string) => request<{ joined: boolean }>(`/communities/${name}/join`, { method: "POST" }),
   leaveCommunity: (name: string) => request<{ joined: boolean }>(`/communities/${name}/join`, { method: "DELETE" }),
-  communityPosts: (name: string, sort = "hot", flair?: string) =>
-    request<Post[]>(`/communities/${name}/posts?sort=${sort}${flair ? `&flair=${encodeURIComponent(flair)}` : ""}`),
+  communityPosts: (name: string, sort = "hot", flair?: string, search?: string) =>
+    request<Post[]>(`/communities/${name}/posts?sort=${sort}${flair ? `&flair=${encodeURIComponent(flair)}` : ""}${search ? `&search=${encodeURIComponent(search)}` : ""}`),
   communitiesFeed: () => request<Post[]>("/communities/feed"),
   listUserPosts: (uid: string) => request<Post[]>(`/posts/user/${uid}`),
   homeFeed: () => request<Post[]>("/feed/home"),
