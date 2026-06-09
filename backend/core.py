@@ -115,6 +115,15 @@ async def init_pool() -> None:
         ("community_karma_totals", "uniq_community_karma_totals", "((doc ->> 'community_id'), (doc ->> 'user_id'))", ["community_id", "user_id"]),
         ("community_favorites", "uniq_community_favorites", "((doc ->> 'community_id'), (doc ->> 'user_id'))", ["community_id", "user_id"]),
         ("group_event_rsvps", "uniq_group_event_rsvps", "((doc ->> 'event_id'), (doc ->> 'user_id'))", ["event_id", "user_id"]),
+        # One review per reviewer per subject — separate partial indexes for
+        # personal-seller reviews and business-storefront reviews so a concurrent
+        # double-submit can't create duplicate (rating-inflating) rows.
+        ("marketplace_reviews", "uniq_mreview_user",
+         "((doc ->> 'subject_user_id'), (doc ->> 'reviewer_id')) WHERE (doc ->> 'subject_user_id') IS NOT NULL",
+         ["subject_user_id", "reviewer_id"]),
+        ("marketplace_reviews", "uniq_mreview_business",
+         "((doc ->> 'subject_business_id'), (doc ->> 'reviewer_id')) WHERE (doc ->> 'subject_business_id') IS NOT NULL",
+         ["subject_business_id", "reviewer_id"]),
     ]
     async with _real_db._pool.acquire() as conn:
         for table, idx, cols, keys in _DEDUP_UNIQUE_INDEXES:

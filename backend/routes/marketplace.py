@@ -8,6 +8,7 @@ import uuid
 from fastapi import APIRouter, Header, HTTPException, Query
 
 from core import _conv_key, _public_user, db, get_current_user, _norm_dt, require_account_age, MARKETPLACE_MIN_AGE_DAYS, is_admin
+from db import DuplicateKeyError
 from models import (
     BusinessBrand,
     BusinessProfile,
@@ -867,11 +868,19 @@ async def add_business_review(
         rid = existing["id"]
     else:
         rid = str(uuid.uuid4())
-        await db.marketplace_reviews.insert_one({
-            "id": rid, "subject_business_id": business_id, "subject_user_id": None,
-            "reviewer_id": me["user_id"], "rating": rating, "ratings": cats,
-            "text": text, "role": "seller", "created_at": now,
-        })
+        try:
+            await db.marketplace_reviews.insert_one({
+                "id": rid, "subject_business_id": business_id, "subject_user_id": None,
+                "reviewer_id": me["user_id"], "rating": rating, "ratings": cats,
+                "text": text, "role": "seller", "created_at": now,
+            })
+        except DuplicateKeyError:
+            dup = await db.marketplace_reviews.find_one(
+                {"subject_business_id": business_id, "reviewer_id": me["user_id"]}, {"_id": 0, "id": 1})
+            rid = (dup or {}).get("id", rid)
+            await db.marketplace_reviews.update_one(
+                {"id": rid},
+                {"$set": {"rating": rating, "ratings": cats, "text": text, "role": "seller", "created_at": now}})
     doc = await db.marketplace_reviews.find_one({"id": rid}, {"_id": 0})
     return await _hydrate_review(doc)
 
@@ -998,10 +1007,19 @@ async def add_seller_review(
         rid = existing["id"]
     else:
         rid = str(uuid.uuid4())
-        await db.marketplace_reviews.insert_one({
-            "id": rid, "subject_user_id": user_id, "reviewer_id": me["user_id"],
-            "rating": rating, "ratings": cats, "text": text, "role": role, "created_at": now,
-        })
+        try:
+            await db.marketplace_reviews.insert_one({
+                "id": rid, "subject_user_id": user_id, "reviewer_id": me["user_id"],
+                "rating": rating, "ratings": cats, "text": text, "role": role, "created_at": now,
+            })
+        except DuplicateKeyError:
+            # Lost a concurrent submit — update the row that won instead.
+            dup = await db.marketplace_reviews.find_one(
+                {"subject_user_id": user_id, "reviewer_id": me["user_id"]}, {"_id": 0, "id": 1})
+            rid = (dup or {}).get("id", rid)
+            await db.marketplace_reviews.update_one(
+                {"id": rid},
+                {"$set": {"rating": rating, "ratings": cats, "text": text, "role": role, "created_at": now}})
     doc = await db.marketplace_reviews.find_one({"id": rid}, {"_id": 0})
     return await _hydrate_review(doc)
 

@@ -71,6 +71,10 @@ over REST + WebSockets to a **FastAPI** server (`backend/`) backed by
 - Listings with price, currency, category, condition, photos, brand, quantity, negotiable, and delivery
 - **Location + radius search** (set your location, filter by distance, "N km away", "Nearest first")
 - Search + category filters, **seller profiles** (avatar, rating, listing grid), and **buyer/seller reviews** (1–5★)
+- **Personal + business profiles**: run a **business storefront** that's a separate selling identity from your personal/social profile — its own name, logo, banner, accent, tagline, bio, category, contact details, and policies. **Switch between Personal and Business** right in My Marketplace and on your profile; a **"List as Personal / Business"** picker in the composer attributes each listing, and listing cards show the business brand.
+  - **Completely separate reviews**: a business earns its own reviews/rating from trades made *with the business*; personal trades earn personal reviews — the two reputations never mix.
+  - **Ban cascade**: if the owner's personal account is banned, the business storefront is hidden too.
+- Brand-your-storefront editor (shop name/logo/banner/accent/policies) for the personal seller profile, separate from the business entity
 - A personal **My Marketplace** hub gathering your listings, saved/bookmarked items, and your marketplace reviews in one place
 - AI spam/moderation gate on new listings; "Contact seller" opens a DM
 
@@ -100,7 +104,9 @@ over REST + WebSockets to a **FastAPI** server (`backend/`) backed by
   - **About**: a short **status** (emoji + text), a **headline** tagline, pronouns, location, birthday, and **interest tags**
   - **Links**: social links + a **link-in-bio** list of featured links
   - **Privacy tab**: private account, appear-in-search, show active status, show points, and who-can **message / comment / tag / see-connections**, all in one place
-- **Activity points (Snapscore-style)** — earn points for being active and creating content (posting, stories, messages, gaining followers), shown as a flame **points + level** card with progress; **level tiers** (Newcomer → Mythic) and a **global leaderboard** (`/leaderboard`)
+  - **Custom profile link**: pick your `@username` and it becomes your shareable vanity URL `okayspace.ca/<username>`, with a live availability check (Available / Taken) as you type
+- **Share anything**: a Share / Copy-link action on profiles, posts, photos, videos, reels, marketplace listings, and business storefronts builds a clean `okayspace.ca` link and opens the native share sheet (or copies on desktop web)
+- **Activity points (Snapscore-style)** — earn points for real activity: posting, stories, messages, gaining followers, and community upvotes (**not** just for being online), shown as a flame **points + level** card with progress; **level tiers** (Newcomer → Mythic) and a **global leaderboard** (`/leaderboard`)
 - **Verified blue checkmark** across posts, comments, and profiles
 - **Per-post privacy**: who can comment (everyone/followers/friends/nobody), likes off, and viewer list
 - **Privacy controls**: default comment policy, disable likes, hide the stories row, chat-button position, **activity status** (green "active now" dot), and **read receipts** toggles

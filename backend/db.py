@@ -321,6 +321,16 @@ class Collection:
                         conditions.append(
                             f"({' OR '.join(parts)})" if parts else "FALSE"
                         )
+                elif op == "$all":
+                    # Array contains ALL given elements (JSONB containment per item).
+                    if not op_val:
+                        conditions.append("TRUE")
+                    else:
+                        for item in op_val:
+                            params.append(_to_json([item]))
+                            conditions.append(
+                                f"{self._sql_jsonb(key)} @> ${len(params)}::jsonb"
+                            )
                 elif op == "$nin":
                     if not op_val:
                         conditions.append("TRUE")

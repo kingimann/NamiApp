@@ -369,7 +369,7 @@ export default function ProfileScreen() {
   useEffect(() => {
     if (!editOpen) return;
     const u = editUsername.trim().toLowerCase();
-    if (!u || u === (user?.username || "")) {
+    if (!u || u === (user?.username || "").toLowerCase()) {
       setUsernameCheck({ checking: false, available: true });
       return;
     }
@@ -392,13 +392,13 @@ export default function ProfileScreen() {
     setSaveError("");
     try {
       const u = editUsername.trim().toLowerCase();
-      const usernameChanged = !!u && u !== (user?.username || "");
+      const usernameChanged = !!u && u !== (user?.username || "").toLowerCase();
       if (usernameChanged) {
         if (!/^[a-z0-9_]{3,20}$/.test(u)) {
           throw new Error("Username must be 3-20 chars, a-z, 0-9, _");
         }
-        if (usernameCheck.available === false) {
-          throw new Error("That username is taken");
+        if (usernameCheck.available !== true) {
+          throw new Error(usernameCheck.checking ? "Checking that link is still available — try again in a moment." : "That username is taken");
         }
       }
       // Keep only links that have a real URL; normalize the scheme.
