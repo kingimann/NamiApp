@@ -341,7 +341,7 @@ export default function FeedScreen() {
           viewabilityConfig={{ itemVisiblePercentThreshold: 60, minimumViewTime: 600 }}
           onScroll={onScroll}
           scrollEventThrottle={16}
-          contentContainerStyle={{ paddingTop: topBarH + 6, paddingBottom: insets.bottom + 100 }}
+          contentContainerStyle={{ paddingHorizontal: 12, paddingTop: topBarH + 6, paddingBottom: insets.bottom + 100, gap: 9 }}
           ItemSeparatorComponent={null}
           refreshControl={
             <RefreshControl
