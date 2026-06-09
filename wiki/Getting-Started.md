@@ -25,7 +25,7 @@ uvicorn server:app --reload --port 8080      # auto-reload on :8080
 
 Health checks:
 - `GET /health` → `{"status":"ok"}`
-- `GET /` → `{"status":"ok","app":"Nami App API"}`
+- `GET /` → `{"status":"ok","app":"OkaySpace API"}`
 - `GET /api/v1/info` → machine-readable API overview & capabilities
 
 ## 2. Frontend (Expo)

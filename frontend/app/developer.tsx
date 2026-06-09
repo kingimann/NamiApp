@@ -250,7 +250,7 @@ const GROUPS: Group[] = [
       { method: "DELETE", path: "/games/{id}", desc: "Delete a game (owner or staff).", auth: true },
       { method: "POST", path: "/games/{id}/score", desc: "Submit a score (host-mediated; best is kept).", auth: true, body: `{"score":100}` },
       { method: "GET", path: "/games/{id}/leaderboard", desc: "Top scores for a game.", auth: true },
-      { method: "GET", path: "/pub/games/sdk.js", desc: "Public: the OkaySpace Games SDK (NamiGames.ready/submitScore/getPlayer/exit + create3D).", auth: false },
+      { method: "GET", path: "/pub/games/sdk.js", desc: "Public: the OkaySpace Games SDK (OkaySpaceGames.ready/submitScore/getPlayer/exit + create3D).", auth: false },
       { method: "GET", path: "/pub/game/{id}", desc: "Public: the playable game frame (SDK injected for inline games).", auth: false },
     ],
   },
@@ -265,10 +265,10 @@ const GROUPS: Group[] = [
 
 type Lang = "curl" | "js" | "python" | "dart";
 const SAMPLE: Record<Lang, (base: string) => string> = {
-  curl: (b) => `curl ${b}/posts/feed \\\n  -H "Authorization: Bearer $NAMI_KEY"`,
-  js: (b) => `const res = await fetch("${b}/posts/feed", {\n  headers: { Authorization: \`Bearer \${process.env.NAMI_KEY}\` },\n});\nconst feed = await res.json();`,
-  python: (b) => `import requests\nr = requests.get(\n  "${b}/posts/feed",\n  headers={"Authorization": f"Bearer {NAMI_KEY}"},\n)\nfeed = r.json()`,
-  dart: (b) => `import 'package:http/http.dart' as http;\nimport 'dart:convert';\n\nfinal res = await http.get(\n  Uri.parse("${b}/posts/feed"),\n  headers: {"Authorization": "Bearer $NAMI_KEY"},\n);\nfinal feed = jsonDecode(res.body);`,
+  curl: (b) => `curl ${b}/posts/feed \\\n  -H "Authorization: Bearer $OKAYSPACE_KEY"`,
+  js: (b) => `const res = await fetch("${b}/posts/feed", {\n  headers: { Authorization: \`Bearer \${process.env.OKAYSPACE_KEY}\` },\n});\nconst feed = await res.json();`,
+  python: (b) => `import requests\nr = requests.get(\n  "${b}/posts/feed",\n  headers={"Authorization": f"Bearer {OKAYSPACE_KEY}"},\n)\nfeed = r.json()`,
+  dart: (b) => `import 'package:http/http.dart' as http;\nimport 'dart:convert';\n\nfinal res = await http.get(\n  Uri.parse("${b}/posts/feed"),\n  headers: {"Authorization": "Bearer $OKAYSPACE_KEY"},\n);\nfinal feed = jsonDecode(res.body);`,
 };
 const LANG_LABEL: Record<Lang, string> = { curl: "cURL", js: "JavaScript", python: "Python", dart: "Dart / Flutter" };
 
@@ -299,13 +299,13 @@ const CONTENT_SNIPPET = `<!-- Embed a OkaySpace post, profile, listing, guide, o
 <!-- swap data-post for data-profile / data-listing / data-guide / data-community -->
 <script async src="${BASE}/api/pub/content-embed.js"
   data-post="POST_ID" data-theme="dark" data-accent="7C3AED"></script>`;
-const WEBHOOK_VERIFY = `// Verify the X-Nami-Signature header (Node / Express)
+const WEBHOOK_VERIFY = `// Verify the X-OkaySpace-Signature header (Node / Express)
 import crypto from "crypto";
 
 app.post("/hook", express.raw({ type: "*/*" }), (req, res) => {
-  const sig = req.header("X-Nami-Signature") || "";           // "sha256=<hex>"
+  const sig = req.header("X-OkaySpace-Signature") || "";           // "sha256=<hex>"
   const expected = "sha256=" + crypto
-    .createHmac("sha256", process.env.NAMI_WEBHOOK_SECRET)
+    .createHmac("sha256", process.env.OKAYSPACE_WEBHOOK_SECRET)
     .update(req.body)                                          // the RAW body
     .digest("hex");
   if (!crypto.timingSafeEqual(Buffer.from(sig), Buffer.from(expected)))
@@ -710,7 +710,7 @@ export default function DeveloperScreen() {
           </Text>
         ) : (
           <>
-            <Text style={styles.body}>We POST signed events (follows, messages, tips, form submissions, …) to your URL with up to 3 retries, and keep a delivery log. Always verify the `X-Nami-Signature` header — it's `sha256=` followed by the HMAC-SHA256 (hex) of the raw request body, keyed with your signing secret:</Text>
+            <Text style={styles.body}>We POST signed events (follows, messages, tips, form submissions, …) to your URL with up to 3 retries, and keep a delivery log. Always verify the `X-OkaySpace-Signature` header — it's `sha256=` followed by the HMAC-SHA256 (hex) of the raw request body, keyed with your signing secret:</Text>
             <TouchableOpacity style={styles.codeBlock} onPress={() => copy(WEBHOOK_VERIFY, "Verification")} activeOpacity={0.7}>
               <Text style={styles.codeBlockText} selectable>{WEBHOOK_VERIFY}</Text>
             </TouchableOpacity>
@@ -879,15 +879,15 @@ export default function DeveloperScreen() {
           <Text style={styles.codeBlockText} selectable>{CONTENT_SNIPPET}</Text>
         </TouchableOpacity>
         <Text style={[styles.body, { marginTop: 8 }]}>
-          oEmbed endpoint: <Text style={styles.codeInline}>{`${BASE}/api/pub/oembed?url=<nami link>`}</Text> — only public content is served (no subscriber-only posts, no banned users).
+          oEmbed endpoint: <Text style={styles.codeInline}>{`${BASE}/api/pub/oembed?url=<okayspace link>`}</Text> — only public content is served (no subscriber-only posts, no banned users).
         </Text>
 
         <Text style={[styles.groupTitle, { marginTop: 22 }]}>SDKs & client generation</Text>
         <Text style={styles.body}>
           OkaySpace is a plain JSON+HTTPS API, so it works from any language — Dart/Flutter, Swift, Kotlin, Go, Rust and more. For a fully-typed client, generate one from the OpenAPI schema:
         </Text>
-        <TouchableOpacity style={styles.codeBlock} onPress={() => copy(`# Dart/Flutter client from the OpenAPI schema\ndart pub global activate openapi_generator_cli\nopenapi-generator generate \\\n  -i ${BASE}/openapi.json \\\n  -g dart-dio -o ./nami_client`, "Codegen")} activeOpacity={0.7}>
-          <Text style={styles.codeBlockText} selectable>{`# Dart/Flutter client from the OpenAPI schema\ndart pub global activate openapi_generator_cli\nopenapi-generator generate \\\n  -i ${BASE}/openapi.json \\\n  -g dart-dio -o ./nami_client`}</Text>
+        <TouchableOpacity style={styles.codeBlock} onPress={() => copy(`# Dart/Flutter client from the OpenAPI schema\ndart pub global activate openapi_generator_cli\nopenapi-generator generate \\\n  -i ${BASE}/openapi.json \\\n  -g dart-dio -o ./okayspace_client`, "Codegen")} activeOpacity={0.7}>
+          <Text style={styles.codeBlockText} selectable>{`# Dart/Flutter client from the OpenAPI schema\ndart pub global activate openapi_generator_cli\nopenapi-generator generate \\\n  -i ${BASE}/openapi.json \\\n  -g dart-dio -o ./okayspace_client`}</Text>
         </TouchableOpacity>
         <Text style={[styles.body, { marginTop: 8 }]}>
           Swap <Text style={styles.codeInline}>-g dart-dio</Text> for <Text style={styles.codeInline}>swift5</Text>, <Text style={styles.codeInline}>kotlin</Text>, <Text style={styles.codeInline}>go</Text>, <Text style={styles.codeInline}>typescript-fetch</Text>, etc. CORS is open, so browser and mobile apps can call the API directly.

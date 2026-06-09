@@ -9,9 +9,9 @@ These pages live in the repo under `wiki/` (so they're version-controlled and re
 ## Publish (copy these pages in and push)
 ```bash
 # from anywhere outside the main repo
-git clone https://github.com/kingimann/NamiApp.wiki.git
-cp /path/to/NamiApp/wiki/*.md NamiApp.wiki/
-cd NamiApp.wiki
+git clone https://github.com/kingimann/OkaySpace.wiki.git
+cp /path/to/OkaySpace/wiki/*.md OkaySpace.wiki/
+cd OkaySpace.wiki
 git add .
 git commit -m "Populate wiki from repo /wiki"
 git push

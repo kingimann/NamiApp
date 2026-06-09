@@ -8,7 +8,7 @@ export type GameWebViewHandle = { sendPlayer: (player: { name: string }) => void
 
 /**
  * Hosts an uploaded game (loaded from /api/pub/game/{id}) and bridges the OkaySpace
- * Games SDK: the game posts {namiGame:true,type} messages (ready/score/exit/
+ * Games SDK: the game posts {okaySpaceGame:true,type} messages (ready/score/exit/
  * getPlayer); the host replies via sendPlayer(). WebView on native, iframe on web.
  */
 const GameWebView = forwardRef<GameWebViewHandle, { uri: string; onEvent: (e: GameEvent) => void }>(
@@ -17,11 +17,11 @@ const GameWebView = forwardRef<GameWebViewHandle, { uri: string; onEvent: (e: Ga
     const iframeRef = useRef<HTMLIFrameElement | null>(null);
 
     const reply = (msg: object) => {
-      const payload = JSON.stringify({ namiHost: true, ...msg });
+      const payload = JSON.stringify({ okaySpaceHost: true, ...msg });
       if (Platform.OS === "web") {
         iframeRef.current?.contentWindow?.postMessage(payload, "*");
       } else {
-        webRef.current?.injectJavaScript(`window.__namiHost && window.__namiHost(${JSON.stringify(payload)}); true;`);
+        webRef.current?.injectJavaScript(`window.__okaySpaceHost && window.__okaySpaceHost(${JSON.stringify(payload)}); true;`);
       }
     };
 
@@ -30,7 +30,7 @@ const GameWebView = forwardRef<GameWebViewHandle, { uri: string; onEvent: (e: Ga
     }));
 
     const handleRaw = (raw: string) => {
-      try { const d = JSON.parse(raw); if (d && d.namiGame) onEvent(d); } catch {}
+      try { const d = JSON.parse(raw); if (d && d.okaySpaceGame) onEvent(d); } catch {}
     };
 
     if (Platform.OS === "web") {
@@ -70,7 +70,7 @@ const WebBridge: React.FC<{ onEvent: (e: GameEvent) => void }> = ({ onEvent }) =
     const handler = (e: MessageEvent) => {
       try {
         const d = typeof e.data === "string" ? JSON.parse(e.data) : e.data;
-        if (d && d.namiGame) onEvent(d);
+        if (d && d.okaySpaceGame) onEvent(d);
       } catch {}
     };
     window.addEventListener("message", handler);

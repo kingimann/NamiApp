@@ -1,4 +1,4 @@
-### Nami App
+### OkaySpace
 
 **Get started**
 - [[Home]]

@@ -8,7 +8,7 @@ must be run with the CLI on a machine you're logged in on.
 > **What's already done in the repo**
 > - `eas.json` — `development`, `preview`, `preview:device` and `production`
 >   build profiles + a `production` submit profile for both platforms.
-> - `app.json` — `bundleIdentifier` / `package` (`com.namiapp.mobile`),
+> - `app.json` — `bundleIdentifier` / `package` (`com.okayspace.mobile`),
 >   iOS `infoPlist` usage strings, Android permissions, all config plugins,
 >   and `runtimeVersion` (policy `appVersion`) for OTA compatibility.
 > - The backend URL (`EXPO_PUBLIC_BACKEND_URL=https://okayspace.onrender.com`)
@@ -83,7 +83,7 @@ again, let EAS manage it. Everything is stored on EAS, nothing lands in git.
 ### iOS — App Store Connect
 
 1. Create the app record once in App Store Connect (matching bundle id
-   `com.namiapp.mobile`) and note its **Apple ID number** (the `ascAppId`).
+   `com.okayspace.mobile`) and note its **Apple ID number** (the `ascAppId`).
 2. Create an **App Store Connect API key** (App Store Connect → Users and Access
    → Integrations → App Store Connect API). EAS uses this instead of your
    password; store it with `eas credentials` or let `eas submit` prompt you.
@@ -98,7 +98,7 @@ again, let EAS manage it. Everything is stored on EAS, nothing lands in git.
 
 ### Android — Google Play
 
-1. In Play Console create the app (package `com.namiapp.mobile`) and a
+1. In Play Console create the app (package `com.okayspace.mobile`) and a
    **service account** with the *Release manager* role (Play Console → Setup →
    API access). Download its JSON key.
 2. Save the key at `frontend/credentials/play-store-service-account.json`

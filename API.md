@@ -13,7 +13,7 @@ All requests and responses are JSON over HTTPS.
 [Authentication](#authentication) ·
 [Plans & access](#plans--access-paid) ·
 [Webhooks](#webhooks-pro) ·
-[Login with OkaySpace (OAuth2)](#login-with-nami-oauth2) ·
+[Login with OkaySpace (OAuth2)](#login-with-okayspace-oauth2) ·
 [Conventions](#conventions) ·
 [Quick examples](#quick-examples) ·
 [Flutter & Dart integration](#flutter--dart-integration)
@@ -36,9 +36,9 @@ All requests and responses are JSON over HTTPS.
 [Payments](#payments-when-stripe-is-configured) ·
 [Money & wallet](#money-peer-to-peer--wallet) ·
 [Ads](#ads--advertising) ·
-[Publisher network](#publisher-network-display-nami-ads-on-your-site--earn) ·
+[Publisher network](#publisher-network-display-okayspace-ads-on-your-site--earn) ·
 [Payouts](#payouts) ·
-[OAuth / connected apps](#login-with-nami-oauth2--connected-apps) ·
+[OAuth / connected apps](#login-with-okayspace-oauth2--connected-apps) ·
 [Admin & moderation](#admin--moderation-adminmod-only) ·
 [Developer & E2E keys](#developer-api-keys--e2e-keys) ·
 [Webhooks endpoints](#webhooks-pro-1)
@@ -76,12 +76,12 @@ shown once; store them securely. Revoke anytime from the same screen.
 
 ```bash
 curl https://okayspace.onrender.com/api/posts/feed \
-  -H "Authorization: Bearer $NAMI_KEY"
+  -H "Authorization: Bearer $OKAYSPACE_KEY"
 ```
 
 ```js
 const res = await fetch("https://okayspace.onrender.com/api/posts/feed", {
-  headers: { Authorization: `Bearer ${process.env.NAMI_KEY}` },
+  headers: { Authorization: `Bearer ${process.env.OKAYSPACE_KEY}` },
 });
 const feed = await res.json();
 ```
@@ -90,7 +90,7 @@ const feed = await res.json();
 import requests
 r = requests.get(
     "https://okayspace.onrender.com/api/posts/feed",
-    headers={"Authorization": f"Bearer {NAMI_KEY}"},
+    headers={"Authorization": f"Bearer {OKAYSPACE_KEY}"},
 )
 feed = r.json()
 ```
@@ -128,7 +128,7 @@ Write scope requires Pro or higher.
 ## Webhooks (Pro+)
 
 Register endpoints to receive events. We `POST` a JSON body
-`{event, data, created_at}` and sign it: header `X-Nami-Signature: sha256=<hmac>`
+`{event, data, created_at}` and sign it: header `X-OkaySpace-Signature: sha256=<hmac>`
 (HMAC-SHA256 of the raw body with your signing secret). Verify it before trusting.
 
 | Method | Path | Description |

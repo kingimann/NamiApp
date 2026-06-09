@@ -1,6 +1,6 @@
-# Nami App Wiki
+# OkaySpace Wiki
 
-**Nami App** is a social + maps super-app for mobile and the web — a Twitter/Instagram-style social network fused with Google-Maps-style navigation, a location-aware marketplace, creator monetization, peer-to-peer payments, roadside assistance, custom forms, and a full Developer API for building on and embedding Nami anywhere.
+**OkaySpace** is a social + maps super-app for mobile and the web — a Twitter/Instagram-style social network fused with Google-Maps-style navigation, a location-aware marketplace, creator monetization, peer-to-peer payments, roadside assistance, custom forms, and a full Developer API for building on and embedding OkaySpace anywhere.
 
 Monorepo: a **React Native + Expo** client (`frontend/`) talking over REST + WebSockets to a **FastAPI** server (`backend/`) backed by **PostgreSQL**.
 

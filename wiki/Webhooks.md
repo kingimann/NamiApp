@@ -10,7 +10,7 @@ Mirror the notification types that actually fire, e.g.: `follow`, `friend_reques
 
 ## Delivery
 - POSTed as JSON: `{ "event", "data", "created_at" }`.
-- **Signed:** header `X-Nami-Signature: sha256=<hex>` — the HMAC-SHA256 of the **raw request body**, keyed with your signing secret. Also `X-Nami-Event`.
+- **Signed:** header `X-OkaySpace-Signature: sha256=<hex>` — the HMAC-SHA256 of the **raw request body**, keyed with your signing secret. Also `X-OkaySpace-Event`.
 - **Retried** with backoff (3 attempts: immediate, +2s, +6s).
 - Every attempt is recorded in a **delivery log**: `GET /webhooks/{id}/deliveries`.
 - **Test ping:** `POST /webhooks/{id}/test` sends a signed sample `ping` and returns your endpoint's status.
@@ -21,9 +21,9 @@ Mirror the notification types that actually fire, e.g.: `follow`, `friend_reques
 import crypto from "crypto";
 
 app.post("/hook", express.raw({ type: "*/*" }), (req, res) => {
-  const sig = req.header("X-Nami-Signature") || "";              // "sha256=<hex>"
+  const sig = req.header("X-OkaySpace-Signature") || "";              // "sha256=<hex>"
   const expected = "sha256=" + crypto
-    .createHmac("sha256", process.env.NAMI_WEBHOOK_SECRET)
+    .createHmac("sha256", process.env.OKAYSPACE_WEBHOOK_SECRET)
     .update(req.body)                                            // the RAW body
     .digest("hex");
   if (!crypto.timingSafeEqual(Buffer.from(sig), Buffer.from(expected)))

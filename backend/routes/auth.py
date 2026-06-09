@@ -1127,7 +1127,7 @@ async def create_api_key(body: ApiKeyCreate, authorization: Optional[str] = Head
     scopes = [s for s in (body.scopes or ["read", "write"]) if s in ("read", "write")] or ["read"]
     if not plan.get("write"):
         scopes = ["read"]
-    token = f"nami_sk_{secrets.token_urlsafe(32)}"
+    token = f"okayspace_sk_{secrets.token_urlsafe(32)}"
     key_id = str(uuid.uuid4())
     now = datetime.now(timezone.utc)
     label = (body.label or "API key").strip()[:60] or "API key"

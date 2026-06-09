@@ -174,7 +174,7 @@ export default function LeftSidebar() {
                 style={styles.row}
                 onPress={() => {
                   try {
-                    sessionStorage.setItem("nami_refreshed", "1");
+                    sessionStorage.setItem("okayspace_refreshed", "1");
                     (window as any).location.reload();
                   } catch {}
                 }}

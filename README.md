@@ -208,7 +208,7 @@ code-generation guidance (Dart/Flutter, Swift, Kotlin, Go, …).
 ## Project structure
 
 ```
-NamiApp/
+OkaySpace/
 ├── README.md                  # this file
 ├── API.md                     # developer-facing API reference
 ├── DEPLOY.md                  # deploy to Render (Postgres + the API)
@@ -489,7 +489,7 @@ OkaySpace and embedding it on any site or app.
 
 - **API keys** — generate labeled keys (shown once) with **read** or **read+write** scopes; list and revoke. Keys are long-lived bearer tokens.
 - **Plans, usage & quotas** — tiered plans (more keys, write access, webhooks, higher rate limits) with a usage meter and **pay-as-you-go** request packs (Stripe, with a test-mode fallback).
-- **Webhooks** — subscribe to **20+ signed event types** (follows, messages, tips, subscriptions, likes/replies/reposts, roadside, support, `form.submission`, …). Delivery is **HMAC-signed** (`X-Nami-Signature`), **retried with backoff**, and recorded in a **delivery log** you can **re-send (redeliver)** from; a **test ping** verifies your endpoint. Choose specific events or receive all.
+- **Webhooks** — subscribe to **20+ signed event types** (follows, messages, tips, subscriptions, likes/replies/reposts, roadside, support, `form.submission`, …). Delivery is **HMAC-signed** (`X-OkaySpace-Signature`), **retried with backoff**, and recorded in a **delivery log** you can **re-send (redeliver)** from; a **test ping** verifies your endpoint. Choose specific events or receive all.
 - **Login with OkaySpace (OAuth2)** — register an app for a client ID/secret and use the authorization-code flow (`/oauth/authorize` → `/oauth/token` → `/oauth/userinfo`) to add a "Sign in with OkaySpace" button.
 - **Custom forms** — build a form and embed it anywhere via a `<script>` snippet or iframe; theme it with `data-*` / query params (`theme`, `accent`, `bg`, `radius`, `hide_title`, `redirect`, prefill). Collect responses in-app, export **CSV**, and receive `form.submission` webhooks.
 - **Embeddable content + oEmbed** — public JSON and **themeable iframe cards** for posts, profiles, **marketplace listings**, **guides**, and **communities**; a drop-in `content-embed.js` loader (`data-post` / `data-profile` / `data-listing` / `data-guide` / `data-community`); a **cursor-paginated profile feed** for building a OkaySpace feed widget; and an **oEmbed** provider so pasted OkaySpace links auto-expand in WordPress/Discourse/Notion. Only public content is served (no subscriber-only posts, no sold/flagged listings, no banned users).

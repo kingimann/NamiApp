@@ -1,12 +1,12 @@
-# Codemagic CI/CD config for NamiApp (Expo / React Native).
+# Codemagic CI/CD config for OkaySpace (Expo / React Native).
 #
-# NamiApp is a monorepo: the mobile app lives in `frontend/`, so every step
+# OkaySpace is a monorepo: the mobile app lives in `frontend/`, so every step
 # cd's into it. This file builds a standalone, installable Android APK with no
 # paid accounts required. The iOS workflow is ready but needs your Apple
 # Developer credentials (see notes in that workflow).
 #
 # Secrets: add EXPO_PUBLIC_MAPBOX_TOKEN (and any other EXPO_PUBLIC_* values) in
-# Codemagic → Environment variables, put them in a group named "nami_env", then
+# Codemagic → Environment variables, put them in a group named "okayspace_env", then
 # uncomment the `groups:` lines below. Without the token the app still builds —
 # the map just shows "Map unavailable".
 #
@@ -14,7 +14,7 @@
 
 workflows:
   android-expo:
-    name: NamiApp Android (APK)
+    name: OkaySpace Android (APK)
     instance_type: linux_x2
     max_build_duration: 60
     environment:
@@ -22,10 +22,10 @@ workflows:
         # The backend URL is public (not a secret), so it's fine in git.
         EXPO_PUBLIC_BACKEND_URL: "https://okayspace.onrender.com"
       node: 20.19.4
-      # After creating the "nami_env" group with EXPO_PUBLIC_MAPBOX_TOKEN,
+      # After creating the "okayspace_env" group with EXPO_PUBLIC_MAPBOX_TOKEN,
       # uncomment these two lines so the native map renders:
       # groups:
-      #   - nami_env
+      #   - okayspace_env
     scripts:
       - name: Install dependencies
         script: |
@@ -52,7 +52,7 @@ workflows:
           failure: true
 
   ios-expo:
-    name: NamiApp iOS
+    name: OkaySpace iOS
     instance_type: mac_mini_m2
     max_build_duration: 90
     environment:
@@ -62,7 +62,7 @@ workflows:
       xcode: latest
       cocoapods: default
       # groups:
-      #   - nami_env
+      #   - okayspace_env
     scripts:
       - name: Install dependencies
         script: |
@@ -86,7 +86,7 @@ workflows:
       #   script: |
       #     cd frontend/ios
       #     xcode-project use-profiles
-      #     xcode-project build-ipa --workspace "*.xcworkspace" --scheme "NamiApp"
+      #     xcode-project build-ipa --workspace "*.xcworkspace" --scheme "OkaySpace"
     # artifacts:
     #   - frontend/ios/build/ios/ipa/*.ipa
     publishing:

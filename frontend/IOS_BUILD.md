@@ -56,7 +56,7 @@ for App Store review.
 
 ## Notes
 
-- Bundle ID is `com.namiapp.mobile` (set in `app.json` → `ios.bundleIdentifier`).
+- Bundle ID is `com.okayspace.mobile` (set in `app.json` → `ios.bundleIdentifier`).
   Change it before your first build if you want a different identifier — it's
   permanent once an app is created in App Store Connect.
 - The native build talks to the production backend at

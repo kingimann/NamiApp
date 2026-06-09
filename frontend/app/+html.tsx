@@ -78,13 +78,13 @@ export default function Root({ children }: PropsWithChildren) {
               }
 
               /* Branded launch screen shown while the app boots (and on PWA cold start). */
-              #nami-splash {
+              #okayspace-splash {
                 position: fixed; inset: 0; z-index: 99999;
                 display: flex; align-items: center; justify-content: center;
                 background: #0B141A; transition: opacity .35s ease;
               }
-              #nami-splash img { width: 96px; height: 96px; border-radius: 22px; box-shadow: 0 10px 34px rgba(0,0,0,.55); }
-              #nami-splash.hide { opacity: 0; pointer-events: none; }
+              #okayspace-splash img { width: 96px; height: 96px; border-radius: 22px; box-shadow: 0 10px 34px rgba(0,0,0,.55); }
+              #okayspace-splash.hide { opacity: 0; pointer-events: none; }
             `,
           }}
         />
@@ -153,8 +153,8 @@ export default function Root({ children }: PropsWithChildren) {
             __html: `
               (function(){
                 try {
-                  if (!sessionStorage.getItem('nami_refreshed')) return;
-                  sessionStorage.removeItem('nami_refreshed');
+                  if (!sessionStorage.getItem('okayspace_refreshed')) return;
+                  sessionStorage.removeItem('okayspace_refreshed');
                   window.addEventListener('load', function(){
                     var t = document.createElement('div');
                     t.textContent = '\\u2713 Refreshed';
@@ -169,14 +169,14 @@ export default function Root({ children }: PropsWithChildren) {
           }}
         />
         {/* Branded launch screen — removed as soon as the app mounts. */}
-        <div id="nami-splash">
+        <div id="okayspace-splash">
           <img src="/icon.png" alt="OkaySpace" />
         </div>
         <script
           dangerouslySetInnerHTML={{
             __html: `
               (function(){
-                function hide(){ var s=document.getElementById('nami-splash'); if(!s) return; s.className='hide'; setTimeout(function(){ if(s&&s.parentNode) s.parentNode.removeChild(s); }, 420); }
+                function hide(){ var s=document.getElementById('okayspace-splash'); if(!s) return; s.className='hide'; setTimeout(function(){ if(s&&s.parentNode) s.parentNode.removeChild(s); }, 420); }
                 var done=false; function finish(){ if(done) return; done=true; hide(); }
                 var root=document.querySelector('body > div'); // the React Native app root (first div)
                 if(root){

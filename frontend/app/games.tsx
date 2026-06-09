@@ -17,7 +17,7 @@ const webInput = Platform.OS === "web" ? ({ outlineStyle: "none" } as object) : 
 const SDK_SNIPPET = `<!-- Build a whole 3D game with the OkaySpace API (Three.js is bundled) -->
 <script src="https://okayspace.onrender.com/api/pub/games/sdk.js"></script>
 <script>
-  NamiGames.create3D({
+  OkaySpaceGames.create3D({
     background: 0x101018,
     onReady(g) {                       // g = your game API
       const player = g.box({ color: 0x00e0a4, y: 0.5 });
@@ -34,7 +34,7 @@ const SDK_SNIPPET = `<!-- Build a whole 3D game with the OkaySpace API (Three.js
       const me = await g.getPlayer();  // { name }
     },
   });
-  // Low-level platform calls also available: NamiGames.submitScore(n),
+  // Low-level platform calls also available: OkaySpaceGames.submitScore(n),
   // getPlayer(), exit(), and the raw THREE via g.THREE.
 </script>`;
 

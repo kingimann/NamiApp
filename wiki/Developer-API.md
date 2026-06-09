@@ -1,6 +1,6 @@
 # Developer API
 
-A first-class, paid add-on for building on Nami and embedding it on any site or app. In the app: **Settings → Developer API** (key management, plans, usage, webhooks, OAuth apps, quickstart, and a browsable endpoint reference). See also **[[API Reference]]**.
+A first-class, paid add-on for building on OkaySpace and embedding it on any site or app. In the app: **Settings → Developer API** (key management, plans, usage, webhooks, OAuth apps, quickstart, and a browsable endpoint reference). See also **[[API Reference]]**.
 
 ## API keys
 Generate labeled keys (shown once) with **read** or **read+write** scopes; list and revoke. Keys are long-lived bearer tokens — `Authorization: Bearer <key>` on every request.
@@ -9,13 +9,13 @@ Generate labeled keys (shown once) with **read** or **read+write** scopes; list 
 Tiered plans unlock more keys, write access, webhooks, and higher rate limits, with a usage meter and **pay-as-you-go** request packs (Stripe, with a test-mode fallback). Quota is queryable at `/payments/api-usage`.
 
 ## Webhooks
-Subscribe to **20+ signed event types** (follows, messages, tips, subscriptions, likes/replies/reposts, roadside, support, `form.submission`, …). Delivery is **HMAC-signed** (`X-Nami-Signature`), **retried with backoff**, recorded in a **delivery log** you can **re-send** from, and a **test ping** verifies your endpoint. Full details: **[[Webhooks]]**.
+Subscribe to **20+ signed event types** (follows, messages, tips, subscriptions, likes/replies/reposts, roadside, support, `form.submission`, …). Delivery is **HMAC-signed** (`X-OkaySpace-Signature`), **retried with backoff**, recorded in a **delivery log** you can **re-send** from, and a **test ping** verifies your endpoint. Full details: **[[Webhooks]]**.
 
-## Login with Nami (OAuth2)
-Register an app for a client ID/secret and use the authorization-code flow: `/oauth/authorize` → `/oauth/token` → `/oauth/userinfo`. Adds a "Sign in with Nami" button to any site.
+## Login with OkaySpace (OAuth2)
+Register an app for a client ID/secret and use the authorization-code flow: `/oauth/authorize` → `/oauth/token` → `/oauth/userinfo`. Adds a "Sign in with OkaySpace" button to any site.
 
 ## Embeddable content + oEmbed
-Embed Nami **content** anywhere — public JSON, themeable iframe **cards**, a drop-in loader, and an **oEmbed** provider so pasted links auto-expand in WordPress/Discourse/Notion.
+Embed OkaySpace **content** anywhere — public JSON, themeable iframe **cards**, a drop-in loader, and an **oEmbed** provider so pasted links auto-expand in WordPress/Discourse/Notion.
 
 | Type | JSON | Card | Loader attribute |
 | --- | --- | --- | --- |
@@ -31,7 +31,7 @@ Embed Nami **content** anywhere — public JSON, themeable iframe **cards**, a d
 ```
 
 - Cards accept `theme` (light/dark), `accent`, `radius` (via query or `data-*`).
-- **oEmbed:** `GET /pub/oembed?url=<nami link>` — only public content is served (no subscriber-only posts, no sold/flagged listings, no banned users).
+- **oEmbed:** `GET /pub/oembed?url=<okayspace link>` — only public content is served (no subscriber-only posts, no sold/flagged listings, no banned users).
 
 For embeddable **forms** (including paid forms), see **[[Forms]]**. For the publisher **ad** units, see the in-app Publisher section.
 
@@ -40,7 +40,7 @@ For embeddable **forms** (including paid forms), see **[[Forms]]**. For the publ
 - It's plain JSON+HTTPS, so it works from any language. Generate a typed client from `/openapi.json`, e.g.:
 
 ```bash
-openapi-generator generate -i https://<backend>/openapi.json -g dart-dio -o ./nami_client
+openapi-generator generate -i https://<backend>/openapi.json -g dart-dio -o ./okayspace_client
 # swap dart-dio for swift5, kotlin, go, typescript-fetch, ...
 ```
 

@@ -2,7 +2,7 @@
 
 A creator uploads a game (inline HTML or a hosted URL) and integrates the small
 **OkaySpace Games SDK** (`/api/pub/games/sdk.js`): a postMessage bridge giving the
-game `NamiGames.ready()`, `submitScore(n)`, `getPlayer()`, and `exit()`. Score
+game `OkaySpaceGames.ready()`, `submitScore(n)`, `getPlayer()`, and `exit()`. Score
 submission goes through the host app (which holds the user's auth), never the
 game itself — so games can't forge authenticated calls.
 
@@ -174,7 +174,7 @@ SDK_JS = """
 (function(){
   var pending = {};
   function send(msg){
-    msg.namiGame = true;
+    msg.okaySpaceGame = true;
     var s = JSON.stringify(msg);
     try { if (window.ReactNativeWebView) { window.ReactNativeWebView.postMessage(s); return; } } catch(e){}
     try { if (window.parent && window.parent !== window) window.parent.postMessage(s, '*'); } catch(e){}
@@ -188,16 +188,16 @@ SDK_JS = """
     onMessage: null,
     THREE: null
   };
-  window.NamiGames = NG;
+  window.OkaySpaceGames = NG;
   window.OkaySpace = NG;
 
   function handle(d){
-    if (!d || !d.namiHost) return;
+    if (!d || !d.okaySpaceHost) return;
     if (d.type === 'player' && pending.player) { pending.player(d.player || {}); pending.player = null; }
     if (typeof NG.onMessage === 'function') NG.onMessage(d);
   }
   window.addEventListener('message', function(e){ var d; try { d = typeof e.data === 'string' ? JSON.parse(e.data) : e.data; } catch(_){ return; } handle(d); });
-  window.__namiHost = function(raw){ try { handle(typeof raw === 'string' ? JSON.parse(raw) : raw); } catch(_){} };
+  window.__okaySpaceHost = function(raw){ try { handle(typeof raw === 'string' ? JSON.parse(raw) : raw); } catch(_){} };
 
   // ── 3D engine (Three.js bundled under the hood) ────────────────────
   // Build a whole game with the OkaySpace API — no need to touch Three.js directly.
@@ -294,7 +294,7 @@ async def play_game(game_id: str, request: Request) -> Response:
     sdk_tag = f'<script src="{base}/api/pub/games/sdk.js"></script>'
     if doc.get("html"):
         html = doc["html"]
-        # Inject the SDK right after <head> (or at the top) so NamiGames exists.
+        # Inject the SDK right after <head> (or at the top) so OkaySpaceGames exists.
         if "<head>" in html:
             html = html.replace("<head>", "<head>" + sdk_tag, 1)
         elif "<html" in html:

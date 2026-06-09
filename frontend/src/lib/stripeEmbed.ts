@@ -321,11 +321,11 @@ function embeddedConnectFlow(preferred: "account_onboarding" | "payouts" | "acco
     // Loading spinner while we set up the embedded component.
     const spinner = document.createElement("div");
     spinner.style.cssText = "padding:34px;display:flex;align-items:center;justify-content:center;";
-    spinner.innerHTML = '<div style="width:26px;height:26px;border:3px solid #e3e8e6;border-top-color:#00A884;border-radius:50%;animation:nami-spin 0.8s linear infinite"></div>';
-    if (!document.getElementById("nami-spin-style")) {
+    spinner.innerHTML = '<div style="width:26px;height:26px;border:3px solid #e3e8e6;border-top-color:#00A884;border-radius:50%;animation:okayspace-spin 0.8s linear infinite"></div>';
+    if (!document.getElementById("okayspace-spin-style")) {
       const st = document.createElement("style");
-      st.id = "nami-spin-style";
-      st.textContent = "@keyframes nami-spin{to{transform:rotate(360deg)}}";
+      st.id = "okayspace-spin-style";
+      st.textContent = "@keyframes okayspace-spin{to{transform:rotate(360deg)}}";
       document.head.appendChild(st);
     }
     container.appendChild(spinner);

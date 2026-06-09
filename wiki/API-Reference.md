@@ -23,7 +23,7 @@ For building third-party apps and embedding, see **[[Developer API]]**.
 | **Forms** | `/forms`(+`/{id}`,`/{id}/submissions{,.csv}`), `/pub/form*`, `/pub/form-checkout`, `/pub/form-paid` | See **[[Forms]]**. |
 | **Embed content** | `/pub/post/{id}`, `/pub/profile/{username}`(+`/posts`), `/pub/listing/{id}`, `/pub/guide/{slug}`, `/pub/community/{name}`, `/pub/*-card`, `/pub/content-embed.js`, `/pub/oembed` | Public JSON + themeable cards + oEmbed. See **[[Developer API]]**. |
 | **Webhooks** | `/webhooks`(+`/{id}`,`/{id}/test`,`/{id}/deliveries`,`/{id}/deliveries/{d}/redeliver`), `/webhooks/events` | See **[[Webhooks]]**. |
-| **Login with Nami (OAuth2)** | `/oauth/apps`, `/oauth/authorize`, `/oauth/token`, `/oauth/userinfo` | OAuth2 provider. |
+| **Login with OkaySpace (OAuth2)** | `/oauth/apps`, `/oauth/authorize`, `/oauth/token`, `/oauth/userinfo` | OAuth2 provider. |
 | **Publisher / Ads** | `/ads/*`, `/pub/sites*`, `/pub/embed.js`, `/pub/unit`, `/pub/ad` | Promoted posts, reel ads, publisher network. |
 | **Payments / Money** | `/payments/*`, `/money/*`, `/wallet/*`, `/currencies` | See **[[Payments and Money]]**. |
 | **Admin** | `/admin/users\|audit\|badges\|revenue\|fees\|integrations`, `/admin/render/*` | See **[[Admin Tools]]**. |
