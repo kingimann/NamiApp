@@ -310,11 +310,6 @@ function Reel({ post, active, muted, onToggleMute, onOpenComments, screenW, scre
           testID={`reel-tap-${post.id}`}
         >
           <ReelVideo uri={videoUri} active={active} paused={paused} muted={muted} rate={fastFwd ? 2 : rate} poster={video?.thumbnail} />
-          {paused && (
-            <View style={styles.centerPlay} pointerEvents="none">
-              <Ionicons name="play" size={66} color="rgba(255,255,255,0.92)" />
-            </View>
-          )}
           {fastFwd && (
             <View style={styles.speedPill} pointerEvents="none">
               <Ionicons name="play-forward" size={14} color="#fff" />
@@ -357,6 +352,23 @@ function Reel({ post, active, muted, onToggleMute, onOpenComments, screenW, scre
               <Text style={styles.bigText} numberOfLines={8}>{post.text}</Text>
             )}
           </View>
+        </View>
+      )}
+
+      {/* Facebook-style centered controls when paused: mute · play · speed.
+          Tapping a control acts on it; tapping elsewhere (falls through to the
+          video Pressable) resumes playback. */}
+      {!!videoUri && paused && (
+        <View style={styles.pauseControls} pointerEvents="box-none">
+          <TouchableOpacity style={styles.pauseCtrl} onPress={handleMute} testID="reel-pause-mute">
+            <Ionicons name={muted ? "volume-mute" : "volume-high"} size={24} color="#fff" />
+          </TouchableOpacity>
+          <TouchableOpacity style={styles.pausePlay} onPress={() => setPaused(false)} testID="reel-pause-play">
+            <Ionicons name="play" size={40} color="#fff" />
+          </TouchableOpacity>
+          <TouchableOpacity style={styles.pauseCtrl} onPress={cycleSpeed} testID="reel-pause-speed">
+            <Text style={styles.pauseCtrlText}>{rate}x</Text>
+          </TouchableOpacity>
         </View>
       )}
       <View style={styles.scrim} pointerEvents="none" />
@@ -638,7 +650,8 @@ function AdReel({ ad, active, muted, screenW, screenH, onSkip }: {
     const iv = setInterval(() => setElapsed((s) => s + 1), 1000);
     return () => clearInterval(iv);
   }, [active, paused]);
-  const canSkip = elapsed >= 5;
+  const skipAfter = Math.max(0, Math.min(15, ad.skippable_after ?? 5));
+  const canSkip = elapsed >= skipAfter;
   React.useEffect(() => {
     if (!active || paused) return;
     const dur = Math.max(5, Math.min(60, ad.duration || 15));
@@ -675,12 +688,13 @@ function AdReel({ ad, active, muted, screenW, screenH, onSkip }: {
         <Text style={styles.adBadgeText}>Sponsored · {Math.max(5, Math.min(60, ad.duration || 15))}s</Text>
       </View>
       <TouchableOpacity style={[styles.adSkip, { top: insets.top + 16 }]} onPress={() => canSkip && onSkip && onSkip()} disabled={!canSkip} testID={`reel-ad-skip-${ad.id}`}>
-        <Text style={styles.adSkipText}>{canSkip ? "Skip" : `Skip in ${Math.max(0, 5 - elapsed)}s`}</Text>
+        <Text style={styles.adSkipText}>{canSkip ? "Skip" : `Skip in ${Math.max(0, skipAfter - elapsed)}s`}</Text>
         {canSkip ? <Ionicons name="play-skip-forward" size={14} color="#fff" /> : null}
       </TouchableOpacity>
       <View style={[styles.adBottom, { bottom: insets.bottom + 90 }]} pointerEvents="box-none">
         <Text style={styles.adAdvertiser}>{ad.owner_name}</Text>
         <Text style={styles.adHeadline} numberOfLines={2}>{ad.headline}</Text>
+        {!!ad.description && <Text style={styles.adHeadline} numberOfLines={2}>{ad.description}</Text>}
         {ad.url ? (
           <TouchableOpacity style={styles.adCta} onPress={onCta} testID={`reel-ad-cta-${ad.id}`}>
             <Text style={styles.adCtaText}>{ad.cta || "Learn more"}</Text>
@@ -922,6 +936,10 @@ const styles = StyleSheet.create({
   emptyCtaText: { color: "#fff", fontSize: 14, fontWeight: "800" },
   scrim: { ...StyleSheet.absoluteFillObject, backgroundColor: "rgba(0,0,0,0.15)" },
   centerPlay: { ...StyleSheet.absoluteFillObject, alignItems: "center", justifyContent: "center" },
+  pauseControls: { ...StyleSheet.absoluteFillObject, flexDirection: "row", alignItems: "center", justifyContent: "center", gap: 26 },
+  pauseCtrl: { width: 48, height: 48, borderRadius: 24, backgroundColor: "rgba(0,0,0,0.55)", alignItems: "center", justifyContent: "center" },
+  pauseCtrlText: { color: "#fff", fontSize: 15, fontWeight: "800" },
+  pausePlay: { width: 72, height: 72, borderRadius: 36, backgroundColor: "rgba(0,0,0,0.55)", alignItems: "center", justifyContent: "center" },
   adProgressTrack: { position: "absolute", top: 56, left: 12, right: 12, height: 3, borderRadius: 2, backgroundColor: "rgba(255,255,255,0.25)" },
   adProgressFill: { height: 3, borderRadius: 2, backgroundColor: "#fff" },
   adBadge: { position: "absolute", top: 66, left: 12, flexDirection: "row", alignItems: "center", gap: 5, backgroundColor: "rgba(0,0,0,0.55)", borderRadius: 8, paddingHorizontal: 8, paddingVertical: 4 },

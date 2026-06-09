@@ -1,7 +1,7 @@
 import React, { useCallback, useEffect, useState } from "react";
 import {
   View, Text, StyleSheet, FlatList, TouchableOpacity, Image,
-  ActivityIndicator, Modal, TextInput, Alert, KeyboardAvoidingView, Platform, Linking,
+  ActivityIndicator, Modal, TextInput, Alert, KeyboardAvoidingView, Platform, Linking, ScrollView,
 } from "react-native";
 import { SafeAreaView, useSafeAreaInsets } from "react-native-safe-area-context";
 import { Ionicons } from "@expo/vector-icons";
@@ -74,6 +74,9 @@ export default function AdvertiseScreen() {
   const [rHeadline, setRHeadline] = useState("");
   const [rUrl, setRUrl] = useState("");
   const [rCta, setRCta] = useState("Learn more");
+  const [rDesc, setRDesc] = useState("");
+  const [rBudget, setRBudget] = useState("");
+  const [rSkip, setRSkip] = useState(5);
   const [rDuration, setRDuration] = useState(15);
   const [rDays, setRDays] = useState(7);
   const [rUploading, setRUploading] = useState(false);
@@ -134,8 +137,14 @@ export default function AdvertiseScreen() {
     if (rUrl.trim() && !/^https?:\/\//i.test(rUrl.trim())) { setReelMsg("Link must start with http(s)."); return; }
     setReelBusy(true); setReelMsg(null);
     try {
-      await api.createReelAd({ video_url: rVideo, thumbnail: rThumb, headline: rHeadline.trim(), url: rUrl.trim() || undefined, cta: rCta, duration: rDuration, days: rDays });
-      setReelOpen(false); setRVideo(""); setRThumb(null); setRHeadline(""); setRUrl("");
+      await api.createReelAd({
+        video_url: rVideo, thumbnail: rThumb, headline: rHeadline.trim(),
+        description: rDesc.trim() || undefined, url: rUrl.trim() || undefined,
+        cta: rCta, duration: rDuration, days: rDays,
+        budget: Number(rBudget) > 0 ? Number(rBudget) : undefined,
+        skippable_after: rSkip,
+      });
+      setReelOpen(false); setRVideo(""); setRThumb(null); setRHeadline(""); setRUrl(""); setRDesc(""); setRBudget("");
       await load();
     } catch (e: any) { setReelMsg(String(e?.message || e).replace(/^\d{3}:\s*/, "")); }
     finally { setReelBusy(false); }
@@ -683,10 +692,11 @@ export default function AdvertiseScreen() {
       <Modal visible={reelOpen} transparent animationType="slide" onRequestClose={() => !reelBusy && setReelOpen(false)}>
         <KeyboardAvoidingView behavior={Platform.OS === "ios" ? "padding" : undefined} style={styles.backdrop}>
           <TouchableOpacity style={StyleSheet.absoluteFill} activeOpacity={1} onPress={() => !reelBusy && setReelOpen(false)} />
-          <View style={[styles.sheet, { paddingBottom: insets.bottom + 20 }]}>
+          <View style={[styles.sheet, { paddingBottom: insets.bottom + 20, maxHeight: "90%" }]}>
             <View style={styles.handle} />
             <Text style={styles.sheetTitle}>Video reel ad</Text>
             <Text style={styles.sheetSub}>Plays full-screen in Reels with a Sponsored overlay and your call-to-action.</Text>
+            <ScrollView style={{ flexShrink: 1 }} keyboardShouldPersistTaps="handled" showsVerticalScrollIndicator={false}>
 
             <TouchableOpacity style={styles.reelVideoPick} onPress={pickReelVideo} disabled={rUploading} testID="reel-pick-video">
               {rUploading ? <ActivityIndicator color={theme.primary} /> : rVideo ? (
@@ -700,10 +710,22 @@ export default function AdvertiseScreen() {
             <View style={styles.inputWrap}>
               <TextInput style={styles.input} value={rHeadline} onChangeText={setRHeadline} placeholder="Check out my new release" placeholderTextColor={theme.textMuted} maxLength={120} testID="reel-headline" />
             </View>
+            <Text style={styles.fieldLabel}>Description (optional)</Text>
+            <View style={styles.inputWrap}>
+              <TextInput style={styles.input} value={rDesc} onChangeText={setRDesc} placeholder="A line of supporting text" placeholderTextColor={theme.textMuted} maxLength={200} testID="reel-desc" />
+            </View>
             <Text style={styles.fieldLabel}>Call-to-action link (optional)</Text>
             <View style={styles.inputWrap}>
               <Ionicons name="link" size={16} color={theme.textMuted} />
               <TextInput style={styles.input} value={rUrl} onChangeText={setRUrl} placeholder="https://example.com" placeholderTextColor={theme.textMuted} autoCapitalize="none" keyboardType="url" testID="reel-url" />
+            </View>
+            <Text style={styles.fieldLabel}>Button text</Text>
+            <View style={styles.ppcRow}>
+              {["Learn more", "Shop now", "Sign up", "Watch"].map((c) => (
+                <TouchableOpacity key={c} style={[styles.ppcTab, rCta === c && styles.ppcTabOn]} onPress={() => setRCta(c)} testID={`reel-cta-${c}`}>
+                  <Text style={[styles.ppcText, rCta === c && { color: theme.primary }]} numberOfLines={1}>{c}</Text>
+                </TouchableOpacity>
+              ))}
             </View>
 
             <Text style={styles.fieldLabel}>Ad length</Text>
@@ -711,6 +733,14 @@ export default function AdvertiseScreen() {
               {[5, 15, 30, 60].map((d) => (
                 <TouchableOpacity key={d} style={[styles.ppcTab, rDuration === d && styles.ppcTabOn]} onPress={() => setRDuration(d)} testID={`reel-dur-${d}`}>
                   <Text style={[styles.ppcText, rDuration === d && { color: theme.primary }]}>{d}s</Text>
+                </TouchableOpacity>
+              ))}
+            </View>
+            <Text style={styles.fieldLabel}>Viewer can skip after</Text>
+            <View style={styles.ppcRow}>
+              {[0, 5, 10, 15].map((s) => (
+                <TouchableOpacity key={s} style={[styles.ppcTab, rSkip === s && styles.ppcTabOn]} onPress={() => setRSkip(s)} testID={`reel-skip-${s}`}>
+                  <Text style={[styles.ppcText, rSkip === s && { color: theme.primary }]}>{s === 0 ? "Instantly" : `${s}s`}</Text>
                 </TouchableOpacity>
               ))}
             </View>
@@ -722,6 +752,12 @@ export default function AdvertiseScreen() {
                 </TouchableOpacity>
               ))}
             </View>
+            <Text style={styles.fieldLabel}>Total budget (optional)</Text>
+            <View style={styles.inputWrap}>
+              <Ionicons name="cash-outline" size={16} color={theme.textMuted} />
+              <TextInput style={styles.input} value={rBudget} onChangeText={(t) => setRBudget(t.replace(/[^0-9.]/g, ""))} placeholder="Cap total spend, e.g. 50" placeholderTextColor={theme.textMuted} keyboardType="decimal-pad" testID="reel-budget" />
+            </View>
+            </ScrollView>
 
             {reelMsg && <Text style={styles.topupMsg}>{reelMsg}</Text>}
             <TouchableOpacity style={[styles.payBtn, reelBusy && { opacity: 0.7 }]} onPress={submitReelAd} disabled={reelBusy} testID="reel-submit">

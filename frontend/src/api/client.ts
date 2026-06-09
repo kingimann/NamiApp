@@ -273,7 +273,7 @@ export const api = {
   getLinkAds: () => request<{ ads: LinkAd[] }>("/ads/links"),
   deleteLinkAd: (id: string) => request<{ ok: boolean }>(`/ads/links/${id}`, { method: "DELETE" }),
   // Reel video ads (sponsored full-screen videos in the reels feed)
-  createReelAd: (body: { video_url: string; thumbnail?: string | null; headline: string; url?: string; cta?: string; duration?: number; days?: number; cpc?: number }) =>
+  createReelAd: (body: { video_url: string; thumbnail?: string | null; headline: string; description?: string; url?: string; cta?: string; duration?: number; days?: number; cpc?: number; budget?: number; skippable_after?: number }) =>
     request<ReelAd>("/ads/reels", { method: "POST", body: JSON.stringify(body) }),
   getReelAds: () => request<{ ads: ReelAd[] }>("/ads/reels"),
   deleteReelAd: (id: string) => request<{ ok: boolean }>(`/ads/reels/${id}`, { method: "DELETE" }),

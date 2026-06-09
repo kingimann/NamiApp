@@ -20,11 +20,12 @@ from core import db, get_current_user, is_admin, _norm_dt, require_account_age, 
 
 router = APIRouter()
 
-# Revenue-share rates (test economy; tune freely).
-AD_CLICK_PAYOUT = 0.02            # flat host payout per click on non-budget ads
-HOST_REVENUE_SHARE = 0.5         # host's cut of a budget campaign's CPC (rest = platform)
-PROFILE_VIEWS_PER_PAYOUT = 100   # every N profile views …
-PROFILE_VIEW_PAYOUT = 0.10       # … the owner earns this
+# Revenue-share rates (test economy; tune freely). Deliberately stingy — like
+# TikTok/X, earning real money from ads should be hard, not automatic.
+AD_CLICK_PAYOUT = 0.01            # flat host payout per click on non-budget ads
+HOST_REVENUE_SHARE = 0.3         # host's cut of a budget campaign's CPC (rest = platform)
+PROFILE_VIEWS_PER_PAYOUT = 300   # every N profile views …
+PROFILE_VIEW_PAYOUT = 0.05       # … the owner earns this
 
 # Account-funded billing: advertisers load a prepaid ad balance; each
 # interaction debits it. Loading funds keeps campaigns running; at $0 they
@@ -50,8 +51,8 @@ async def _credit(to_user_id: str, amount: float, kind: str, from_name: str, sou
 # earning genuinely hard we require established accounts on BOTH sides, block
 # collusion (friends), and cap daily ad income.
 EARN_MIN_AGE_DAYS = MONETIZE_MIN_AGE_DAYS   # account must be this old to earn from ads
-EARN_MIN_FOLLOWERS = 25       # …and have a real audience
-EARN_DAILY_CAP = 2.00         # max ad $ a single account can earn per day
+EARN_MIN_FOLLOWERS = 250      # …and have a real audience (high bar, like TikTok/X)
+EARN_DAILY_CAP = 1.00         # max ad $ a single account can earn per day
 
 
 async def _established(user_id: str) -> bool:
@@ -538,11 +539,14 @@ class ReelAdCreate(BaseModel):
     video_url: str               # Cloudinary (or http) video URL
     thumbnail: Optional[str] = None
     headline: str
+    description: Optional[str] = None   # optional subtext under the headline
     url: Optional[str] = None    # optional CTA link
     cta: Optional[str] = "Learn more"
     duration: int = 15           # 5..60 seconds
     days: int = 7
     cpc: Optional[float] = None
+    budget: Optional[float] = None     # total spend cap; serving pauses when hit
+    skippable_after: int = 5           # seconds before the viewer can skip (0..15)
 
 
 async def bill_reel_ad(ad: dict, actor_id: Optional[str], kind: str) -> float:
@@ -574,8 +578,11 @@ def _reel_ad_view(d: dict) -> dict:
     return {
         "id": d["id"], "owner_id": d.get("owner_id"), "owner_name": d.get("owner_name", "Advertiser"),
         "video_url": d.get("video_url"), "thumbnail": d.get("thumbnail"),
-        "headline": d.get("headline"), "url": d.get("url"), "cta": d.get("cta") or "Learn more",
+        "headline": d.get("headline"), "description": d.get("description"),
+        "url": d.get("url"), "cta": d.get("cta") or "Learn more",
         "duration": int(d.get("duration", 15) or 15),
+        "skippable_after": int(d.get("skippable_after", 5) or 0),
+        "budget": (round(float(d.get("ad_budget")), 2) if d.get("ad_budget") else None),
         "cpc": round(float(d.get("ad_cpc", 0) or 0), 2),
         "impressions": impressions, "clicks": clicks,
         "ctr": round((clicks / impressions * 100), 1) if impressions else 0.0,
@@ -600,11 +607,14 @@ async def create_reel_ad(body: ReelAdCreate, authorization: Optional[str] = Head
     days = max(1, min(60, int(body.days or 7)))
     cpc = round(float(body.cpc or 0) or AD_DEFAULT_CPC, 2)
     now = datetime.now(timezone.utc)
+    budget = round(float(body.budget), 2) if body.budget and float(body.budget) > 0 else None
+    skippable_after = max(0, min(15, int(body.skippable_after if body.skippable_after is not None else 5)))
     doc = {
         "id": str(uuid.uuid4()), "owner_id": me["user_id"], "owner_name": me.get("name", "Advertiser"),
         "video_url": body.video_url, "thumbnail": body.thumbnail,
-        "headline": headline, "url": (body.url or None), "cta": (body.cta or "Learn more")[:40],
-        "duration": duration, "ad_cpc": cpc,
+        "headline": headline, "description": (body.description or "").strip()[:200] or None,
+        "url": (body.url or None), "cta": (body.cta or "Learn more")[:40],
+        "duration": duration, "ad_cpc": cpc, "ad_budget": budget, "skippable_after": skippable_after,
         "promoted_until": now + timedelta(days=days),
         "ad_impressions": 0, "ad_clicks": 0, "ad_spent": 0.0, "created_at": now,
     }
@@ -639,6 +649,10 @@ async def serve_reel_ad(authorization: Optional[str] = Header(None)):
     # Advertisers who still have ad balance (admins advertise for free).
     funded = []
     for r in rows:
+        # Total-budget cap: stop serving once the campaign has spent its budget.
+        budget = float(r.get("ad_budget") or 0)
+        if budget > 0 and float(r.get("ad_spent", 0) or 0) >= budget:
+            continue
         if await _advertiser_free(r.get("owner_id")):
             funded.append(r); continue
         bal = await _ad_balance(r.get("owner_id"))
