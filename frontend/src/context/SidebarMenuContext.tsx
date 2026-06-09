@@ -23,7 +23,6 @@ export const SIDEBAR_CATALOG: SidebarItem[] = [
   { id: "wallet", label: "Wallet", icon: "wallet", route: "/wallet", color: "#10B981" },
   { id: "feed", label: "Feed", icon: "home", route: "/(tabs)/feed", color: "#3B82F6" },
   { id: "map", label: "Map", icon: "map", route: "/(tabs)", color: "#14B8A6" },
-  { id: "messages", label: "Messages", icon: "chatbubbles", route: "/(tabs)/messages", color: "#06B6D4" },
 ];
 
 export const DEFAULT_SIDEBAR_IDS = [

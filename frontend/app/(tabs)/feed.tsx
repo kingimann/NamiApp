@@ -410,6 +410,9 @@ export default function FeedScreen() {
             <Text style={styles.title}>Feed</Text>
           </View>
           <View style={styles.headerActions}>
+            <TouchableOpacity onPress={() => router.push("/search")} style={styles.bellBtn} testID="feed-search" accessibilityRole="button" accessibilityLabel="Search">
+              <Ionicons name="search" size={22} color={theme.textPrimary} />
+            </TouchableOpacity>
             {!postingOff && (
               <TouchableOpacity
                 onPress={() => { setEditing(null); setReplyTo(null); setQuoting(null); setComposeOpen(true); }}
@@ -428,6 +431,9 @@ export default function FeedScreen() {
                   <Text style={styles.bellBadgeText}>{unreadNotif > 9 ? "9+" : unreadNotif}</Text>
                 </View>
               )}
+            </TouchableOpacity>
+            <TouchableOpacity onPress={() => router.push("/messages")} style={styles.bellBtn} testID="feed-messages" accessibilityRole="button" accessibilityLabel="Messages">
+              <Ionicons name="chatbubble-ellipses-outline" size={22} color={theme.textPrimary} />
             </TouchableOpacity>
           </View>
         </View>

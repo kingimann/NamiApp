@@ -81,7 +81,6 @@ export default function LiquidTabBar(_: any) {
   const router = useRouter();
   const pathname = usePathname();
   const { shortcuts, tabBarHidden, setTabBarHidden, fabLift, fabHidden } = useNavBar();
-  const searchScale = useRef(new Animated.Value(1)).current;
 
   // 0 = shown, 1 = hidden. Drives both the pill (slide down) and the ＋ (fade in).
   const [hidden, setHidden] = useState(false);
@@ -136,11 +135,6 @@ export default function LiquidTabBar(_: any) {
     );
   };
 
-  const mid = Math.ceil(shortcuts.length / 2);
-  const left = shortcuts.slice(0, mid);
-  const right = shortcuts.slice(mid);
-  const searchActive = (pathname || "").replace(/\/+$/, "") === "/search";
-
   const lift = 64 + insets.bottom + 18;  // distance to slide the pill fully off-screen
   const translateY = tv.interpolate({ inputRange: [0, 1], outputRange: [0, lift] });
   const pillOpacity = tv.interpolate({ inputRange: [0, 0.6, 1], outputRange: [1, 0.3, 0] });
@@ -155,23 +149,7 @@ export default function LiquidTabBar(_: any) {
         style={[styles.wrap, { bottom: insets.bottom + 8, opacity: pillOpacity, transform: [{ translateY }] }]}
       >
         <View style={[styles.pill, GLASS]}>
-          {left.map(renderItem)}
-          <Pressable
-            onPress={() => { if (!searchActive) router.push("/search" as any); }}
-            onPressIn={() => Animated.spring(searchScale, { toValue: 0.88, useNativeDriver: true, speed: 50, bounciness: 0 }).start()}
-            onPressOut={() => Animated.spring(searchScale, { toValue: 1, useNativeDriver: true, friction: 4, tension: 140 }).start()}
-            android_ripple={{ color: "rgba(255,255,255,0.12)", borderless: true }}
-            style={styles.item}
-            hitSlop={6}
-            accessibilityRole="button"
-            accessibilityLabel="Search the site"
-            testID="tab-search"
-          >
-            <Animated.View style={[styles.searchCircle, searchActive && styles.searchCircleActive, { transform: [{ scale: searchScale }] }]}>
-              <Ionicons name="search" size={21} color="#fff" />
-            </Animated.View>
-          </Pressable>
-          {right.map(renderItem)}
+          {shortcuts.map(renderItem)}
         </View>
       </Animated.View>
 

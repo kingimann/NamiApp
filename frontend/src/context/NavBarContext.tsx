@@ -42,12 +42,6 @@ export const NAV_CATALOG: NavShortcut[] = [
     activeOn: ["/", "/directions", "/eta", "/place", "/guide", "/g"],
   },
   {
-    id: "messages", label: "Chat",
-    iconOutline: "chatbubbles-outline", iconFilled: "chatbubbles",
-    route: "/messages",
-    activeOn: ["/messages", "/chat"],
-  },
-  {
     id: "groups", label: "Groups",
     iconOutline: "people-outline", iconFilled: "people",
     route: "/groups",
@@ -70,7 +64,7 @@ export const NAV_CATALOG: NavShortcut[] = [
   },
 ];
 
-export const DEFAULT_NAV_IDS = ["feed", "map", "messages", "groups"];
+export const DEFAULT_NAV_IDS = ["feed", "map", "groups", "marketplace"];
 const MIN_TABS = 3;
 const MAX_TABS = 4;
 const STORAGE_KEY = "nav_bar_tabs_v1";
