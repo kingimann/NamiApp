@@ -448,6 +448,28 @@ export default function MarketplaceScreen() {
           refreshControl={
             <RefreshControl refreshing={refreshing} onRefresh={() => { setRefreshing(true); load(); }} tintColor={theme.primary} />
           }
+          ListHeaderComponent={
+            !savedView && !marketOff ? (
+              <TouchableOpacity
+                style={styles.bizBanner}
+                activeOpacity={0.85}
+                onPress={() => router.push(myBiz ? { pathname: "/business/[id]", params: { id: myBiz.id } } : "/business")}
+                testID="market-business-banner"
+              >
+                <View style={styles.bizBannerIcon}>
+                  {myBiz?.logo ? <Image source={{ uri: myBiz.logo }} style={styles.bizBannerLogo} /> : <Ionicons name="business" size={20} color="#fff" />}
+                </View>
+                <View style={{ flex: 1 }}>
+                  <Text style={styles.bizBannerTitle} numberOfLines={1}>{myBiz ? myBiz.name : "Sell as a business"}</Text>
+                  <Text style={styles.bizBannerSub} numberOfLines={1}>{myBiz ? "Manage your storefront & listings" : "Create a storefront separate from your profile"}</Text>
+                </View>
+                <View style={styles.bizBannerCta}>
+                  <Text style={styles.bizBannerCtaText}>{myBiz ? "Open" : "Set up"}</Text>
+                  <Ionicons name="chevron-forward" size={15} color={theme.primary} />
+                </View>
+              </TouchableOpacity>
+            ) : null
+          }
           ListEmptyComponent={
             savedView ? (
               <View style={styles.empty}>
@@ -1080,6 +1102,13 @@ const styles = StyleSheet.create({
   bizRow: { flexDirection: "row", alignItems: "center", gap: 4, marginTop: 3 },
   bizLogo: { width: 14, height: 14, borderRadius: 7, backgroundColor: theme.surfaceAlt },
   bizName: { color: theme.textSecondary, fontSize: 11.5, fontWeight: "700", flexShrink: 1 },
+  bizBanner: { flexDirection: "row", alignItems: "center", gap: 12, backgroundColor: theme.surface, borderWidth: 1, borderColor: theme.border, borderRadius: 16, padding: 12, marginBottom: 4 },
+  bizBannerIcon: { width: 42, height: 42, borderRadius: 12, overflow: "hidden", backgroundColor: theme.primary, alignItems: "center", justifyContent: "center" },
+  bizBannerLogo: { width: "100%", height: "100%" },
+  bizBannerTitle: { color: theme.textPrimary, fontSize: 15, fontWeight: "800" },
+  bizBannerSub: { color: theme.textMuted, fontSize: 12.5, fontWeight: "600", marginTop: 1 },
+  bizBannerCta: { flexDirection: "row", alignItems: "center", gap: 2, backgroundColor: theme.surfaceAlt, borderRadius: 999, paddingLeft: 12, paddingRight: 8, paddingVertical: 7 },
+  bizBannerCtaText: { color: theme.primary, fontSize: 13, fontWeight: "800" },
   input: {
     ...GLASS, borderWidth: 1, borderColor: theme.border,
     borderRadius: 12, paddingHorizontal: 14, paddingVertical: 12,
