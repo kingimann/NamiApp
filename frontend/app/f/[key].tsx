@@ -248,7 +248,7 @@ export default function PublicFormScreen() {
                     style={styles.input}
                     value={values[k] || ""}
                     onChangeText={(t) => setVal(k, t)}
-                    placeholder={f.placeholder || (f.type === "date" ? "YYYY-MM-DD" : "")}
+                    placeholder={f.placeholder || ""}
                     placeholderTextColor={theme.textMuted}
                     keyboardType={f.type === "email" ? "email-address" : f.type === "phone" ? "phone-pad" : f.type === "number" ? "number-pad" : "default"}
                     autoCapitalize={f.type === "email" ? "none" : "sentences"}

@@ -7,7 +7,7 @@ import { theme } from "@/src/theme";
 
 export default function AuthRedirect() {
   const router = useRouter();
-  const { user, processSessionId, loading } = useAuth();
+  const { user, refresh, loading } = useAuth();
   const { shortcuts, ready: navReady } = useNavBar();
   const params = useLocalSearchParams<{ session_id?: string }>();
 
@@ -17,17 +17,17 @@ export default function AuthRedirect() {
       const home = (shortcuts[0]?.route || "/(tabs)") as any;
       const sid = params.session_id;
       if (sid) {
-        const ok = await processSessionId(sid);
-        if (ok) {
-          router.replace(home);
-          return;
-        }
+        // Returned from an external flow (e.g. Stripe) — re-check the session so
+        // any server-side change is reflected, then head home.
+        try { await refresh(); } catch {}
+        router.replace(home);
+        return;
       }
       if (!loading) {
         router.replace(user ? home : "/login");
       }
     })();
-  }, [params.session_id, processSessionId, router, user, loading, navReady, shortcuts]);
+  }, [params.session_id, refresh, router, user, loading, navReady, shortcuts]);
 
   return (
     <View style={styles.container} testID="auth-loader">

@@ -24,8 +24,8 @@ let cachedPub: Uint8Array | null = null;
 
 export async function ensureKeyPair(): Promise<{ pub: Uint8Array; priv: Uint8Array }> {
   if (cachedPriv && cachedPub) return { priv: cachedPriv, pub: cachedPub };
-  let priv64 = await storage.secureGet(PRIV_KEY);
-  let pub64 = await storage.secureGet(PUB_KEY);
+  let priv64 = (await storage.secureGet<string>(PRIV_KEY, "")) || "";
+  let pub64 = (await storage.secureGet<string>(PUB_KEY, "")) || "";
   if (!priv64 || !pub64) {
     const kp = nacl.box.keyPair();
     priv64 = encodeBase64(kp.secretKey);

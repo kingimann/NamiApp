@@ -84,7 +84,7 @@ export default function WalletScreen() {
   const [payEnabled, setPayEnabled] = useState(false);
   const [cashoutMin, setCashoutMin] = useState(20);
   const [cashoutFee, setCashoutFee] = useState(2);
-  const [payout, setPayout] = useState<{ connected: boolean; payouts_enabled: boolean; details_submitted: boolean } | null>(null);
+  const [payout, setPayout] = useState<Awaited<ReturnType<typeof api.getPayoutStatus>> | null>(null);
   const [connecting, setConnecting] = useState(false);
   const [payoutInfo, setPayoutInfo] = useState<Awaited<ReturnType<typeof api.getPayouts>> | null>(null);
   const [runningPayout, setRunningPayout] = useState(false);
@@ -385,7 +385,7 @@ export default function WalletScreen() {
               const onHold = !!payout?.hold_until && new Date(payout.hold_until) > new Date();
               const cashoutDisabled = onHold || !payout?.has_debit_card || balNow < cashoutMin;
               const reason = onHold
-                ? `Cash-out is paused for your security until ${new Date(payout.hold_until).toLocaleDateString()} — 7 business days after changing direct deposit.`
+                ? `Cash-out is paused for your security until ${new Date(payout?.hold_until ?? "").toLocaleDateString()} — 7 business days after changing direct deposit.`
                 : !payout?.has_debit_card
                 ? "Add a debit card in Manage payouts to cash out."
                 : balNow < cashoutMin ? `Minimum cash-out is $${cashoutMin.toFixed(0)}.` : "";
@@ -1100,7 +1100,6 @@ const styles = StyleSheet.create({
   payoutCard: { ...GLASS, borderRadius: 16, borderWidth: 1, borderColor: theme.border, padding: 16, gap: 10 },
   payoutHead: { flexDirection: "row", alignItems: "center", gap: 8 },
   payoutDot: { width: 9, height: 9, borderRadius: 5 },
-  payoutStatus: { color: theme.textPrimary, fontSize: 15, fontWeight: "800" },
   payoutSub: { color: theme.textSecondary, fontSize: 13, lineHeight: 19 },
   payoutBtn: { flexDirection: "row", alignItems: "center", justifyContent: "center", gap: 8, backgroundColor: theme.primary, borderRadius: 12, paddingVertical: 12, marginTop: 2 },
   payoutBtnText: { color: "#fff", fontWeight: "800", fontSize: 14 },

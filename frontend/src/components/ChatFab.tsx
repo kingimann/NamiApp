@@ -20,7 +20,7 @@ export default function ChatFab() {
 
   useFocusEffect(useCallback(() => {
     let alive = true;
-    storage.getItem(CHAT_FAB_SIDE_KEY, "right").then((v) => {
+    storage.getItem<string>(CHAT_FAB_SIDE_KEY, "right").then((v) => {
       if (alive) setSide(v === "left" ? "left" : "right");
     });
     return () => { alive = false; };

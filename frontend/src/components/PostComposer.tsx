@@ -344,7 +344,7 @@ export default function PostComposer({
     const a = r.assets?.[0];
     if (a?.base64) {
       setMedia((arr) =>
-        [...arr, { type: "image", base64: `data:image/jpeg;base64,${a.base64}` }].slice(0, MAX_MEDIA),
+        [...arr, { type: "image" as const, base64: `data:image/jpeg;base64,${a.base64}` }].slice(0, MAX_MEDIA),
       );
     }
   };
