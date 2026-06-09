@@ -333,6 +333,7 @@ class Message(BaseModel):
     media: List["PostMedia"] = []
     audio_base64: Optional[str] = None       # voice note
     audio_duration_ms: Optional[int] = None  # length of the voice note
+    transcript: Optional[str] = None         # cached speech-to-text (non-E2E voice notes)
     post_id: Optional[str] = None            # shared post (type == "post")
     gif_url: Optional[str] = None            # type == "gif"
     file_base64: Optional[str] = None        # type == "file"

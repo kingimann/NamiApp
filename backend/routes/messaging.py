@@ -923,6 +923,47 @@ async def vote_poll(conv_id: str, msg_id: str, body: PollVoteBody, authorization
     return Message(**_decrypt_msg(m2))
 
 
+class TranscribeBody(BaseModel):
+    # For end-to-end encrypted voice notes the server can't read the audio, so the
+    # client decrypts it and posts the raw base64 here. Omit for plain voice notes.
+    audio_base64: Optional[str] = None
+
+
+@router.post("/conversations/{conv_id}/messages/{msg_id}/transcribe")
+async def transcribe_voice(conv_id: str, msg_id: str, body: TranscribeBody, authorization: Optional[str] = Header(None)):
+    """Transcribe a voice note to text. Returns {text, cached}. For E2E notes the
+    client must supply the decrypted `audio_base64`; the plaintext audio is used
+    only for this call and never stored."""
+    from services.transcribe import transcribe_audio, transcribe_enabled
+    user = await get_current_user(authorization)
+    conv = await db.conversations.find_one({"id": conv_id}, {"_id": 0})
+    if not conv or user["user_id"] not in conv["participant_ids"]:
+        raise HTTPException(status_code=404, detail="Conversation not found")
+    m = await db.messages.find_one({"id": msg_id, "conversation_id": conv_id}, {"_id": 0})
+    if not m or m.get("type") != "voice" or m.get("deleted"):
+        raise HTTPException(status_code=404, detail="Voice message not found")
+    # Already transcribed once (cached on a plain voice note) — hand it straight back.
+    if m.get("transcript"):
+        return {"text": m["transcript"], "cached": True}
+    if not transcribe_enabled():
+        raise HTTPException(status_code=503, detail={"code": "transcribe_unavailable", "message": "Voice transcription isn't set up on this server yet."})
+    stored = m.get("audio_base64") or ""
+    is_e2e = stored.startswith("e2eb:v1:")
+    audio = body.audio_base64 if (body.audio_base64 and is_e2e) else stored
+    if is_e2e and not body.audio_base64:
+        raise HTTPException(status_code=400, detail={"code": "need_decrypted_audio", "message": "This voice note is end-to-end encrypted — decrypt it client-side first."})
+    if not audio:
+        raise HTTPException(status_code=400, detail="No audio to transcribe")
+    text = await transcribe_audio(audio)
+    if not text:
+        raise HTTPException(status_code=502, detail="Couldn't transcribe this voice note")
+    # Cache only when the audio is the server's own non-E2E copy — never persist a
+    # client-decrypted E2E transcript (that would defeat end-to-end encryption).
+    if not is_e2e:
+        await db.messages.update_one({"id": msg_id, "conversation_id": conv_id}, {"$set": {"transcript": text}})
+    return {"text": text, "cached": False}
+
+
 # ── Scheduled messages ──────────────────────────────────────────────────────
 # A scheduled message stores the exact MessageCreate payload (already E2E
 # encrypted by the sender when applicable) plus a future `send_at`. A background

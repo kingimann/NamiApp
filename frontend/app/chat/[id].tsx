@@ -142,6 +142,8 @@ export default function ChatScreen() {
   const [scheduling, setScheduling] = useState(false);
   const [scheduledList, setScheduledList] = useState<ScheduledMessage[]>([]);
   const [scheduledOpen, setScheduledOpen] = useState(false);
+  const [transcripts, setTranscripts] = useState<Record<string, string>>({});
+  const [transcribingId, setTranscribingId] = useState<string | null>(null);
   const [unlockOpen, setUnlockOpen] = useState(false);
   const [tipOpen, setTipOpen] = useState(false);
   const [optionsOpen, setOptionsOpen] = useState(false);
@@ -807,6 +809,24 @@ export default function ChatScreen() {
     try { await api.cancelScheduledMessage(id, sid); } catch { loadScheduled(); }
   };
 
+  const transcribeVoice = async (item: Message) => {
+    if (!id || transcribingId) return;
+    if (transcripts[item.id] || item.transcript) return;  // already have one
+    setTranscribingId(item.id);
+    try {
+      const isE2E = isE2EMedia(item.audio_base64 || "");
+      const audio = isE2E ? blobs[`v:${item.id}`] : undefined;  // server has the plain copy
+      if (isE2E && !audio) { setTranscribingId(null); return; }  // still decrypting
+      const res = await api.transcribeVoiceMessage(id, item.id, audio);
+      setTranscripts((t) => ({ ...t, [item.id]: res.text }));
+    } catch (e: any) {
+      const raw = (e?.message || "Couldn't transcribe").replace(/^\d+:\s*/, "");
+      setTranscripts((t) => ({ ...t, [item.id]: `⚠️ ${raw}` }));
+    } finally {
+      setTranscribingId(null);
+    }
+  };
+
   const send = async () => {
     if (editingMsg) { await saveEdit(); return; }
     if (!text.trim() || !id) return;
@@ -1407,8 +1427,32 @@ export default function ChatScreen() {
                     ) : item.type === "voice" && item.audio_base64 ? (
                       (() => {
                         const uri = isE2EMedia(item.audio_base64 || "") ? blobs[`v:${item.id}`] : item.audio_base64;
+                        const tx = transcripts[item.id] || item.transcript || "";
                         return uri ? (
-                          <VoiceMessage uri={uri} durationMs={item.audio_duration_ms} mine={mine} testID={`voice-msg-${item.id}`} />
+                          <View>
+                            <VoiceMessage uri={uri} durationMs={item.audio_duration_ms} mine={mine} testID={`voice-msg-${item.id}`} />
+                            {tx ? (
+                              <Text style={[styles.transcriptText, mine && { color: "rgba(255,255,255,0.9)", borderTopColor: "rgba(255,255,255,0.25)" }]} testID={`transcript-${item.id}`}>
+                                {tx}
+                              </Text>
+                            ) : (
+                              <TouchableOpacity
+                                style={styles.transcribeBtn}
+                                onPress={() => transcribeVoice(item)}
+                                disabled={transcribingId === item.id}
+                                testID={`transcribe-${item.id}`}
+                              >
+                                {transcribingId === item.id ? (
+                                  <ActivityIndicator size="small" color={mine ? "#fff" : theme.primary} />
+                                ) : (
+                                  <>
+                                    <Ionicons name="text" size={13} color={mine ? "rgba(255,255,255,0.9)" : theme.primary} />
+                                    <Text style={[styles.transcribeText, mine && { color: "rgba(255,255,255,0.9)" }]}>Transcribe</Text>
+                                  </>
+                                )}
+                              </TouchableOpacity>
+                            )}
+                          </View>
                         ) : (
                           <View style={styles.sharedLoading}><ActivityIndicator color={mine ? "#fff" : theme.primary} size="small" /></View>
                         );
@@ -2193,6 +2237,10 @@ const styles = StyleSheet.create({
   formIcon: { width: 38, height: 38, borderRadius: 11, backgroundColor: "#0EA5A0", alignItems: "center", justifyContent: "center" },
   formTitle: { color: theme.textPrimary, fontSize: 14, fontWeight: "800" },
   formSub: { color: theme.textMuted, fontSize: 12, marginTop: 1 },
+  // Voice transcript
+  transcribeBtn: { flexDirection: "row", alignItems: "center", gap: 5, marginTop: 6, alignSelf: "flex-start", paddingVertical: 3, paddingHorizontal: 8, borderRadius: 12, backgroundColor: "rgba(127,127,127,0.14)" },
+  transcribeText: { color: theme.primary, fontSize: 12, fontWeight: "700" },
+  transcriptText: { marginTop: 7, paddingTop: 7, borderTopWidth: 1, borderTopColor: theme.border, color: theme.textPrimary, fontSize: 13, lineHeight: 18, fontStyle: "italic" },
   // Poll bubble
   pollCard: { width: 240, gap: 7 },
   pollHead: { flexDirection: "row", alignItems: "flex-start", gap: 6, marginBottom: 2 },

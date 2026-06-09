@@ -582,6 +582,10 @@ export const api = {
     request<ScheduledMessage[]>(`/conversations/${conv_id}/scheduled`),
   cancelScheduledMessage: (conv_id: string, sid: string) =>
     request<{ ok: boolean }>(`/conversations/${conv_id}/scheduled/${sid}`, { method: "DELETE" }),
+  transcribeVoiceMessage: (conv_id: string, msg_id: string, audio_base64?: string) =>
+    request<{ text: string; cached: boolean }>(`/conversations/${conv_id}/messages/${msg_id}/transcribe`, {
+      method: "POST", body: JSON.stringify({ audio_base64: audio_base64 || null }),
+    }),
   // Custom emojis (global registry, used as :shortcode: in chat).
   listCustomEmojis: () => request<CustomEmoji[]>("/emojis"),
   createCustomEmoji: (shortcode: string, image_base64: string) =>
@@ -1330,6 +1334,7 @@ export type Message = {
   media?: PostMedia[];
   audio_base64?: string | null;
   audio_duration_ms?: number | null;
+  transcript?: string | null;
   post_id?: string | null;
   gif_url?: string | null;
   file_base64?: string | null; file_name?: string | null; file_size?: number | null; file_mime?: string | null;
