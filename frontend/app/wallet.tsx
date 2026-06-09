@@ -1,4 +1,4 @@
-import React, { useCallback, useEffect, useRef, useState } from "react";
+import React, { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import {
   View, Text, StyleSheet, ScrollView, TouchableOpacity, TextInput,
   ActivityIndicator, Platform, Linking, Alert, Share, Modal,
@@ -29,11 +29,6 @@ function sourceLabel(src?: string) {
   if (src === "stripe") return "Card · Stripe";
   if (src === "transfer") return "Wallet transfer";
   return "Test mode";
-}
-function fmtTopup(iso: string) {
-  try {
-    return new Date(iso).toLocaleString([], { month: "short", day: "numeric", hour: "numeric", minute: "2-digit" });
-  } catch { return ""; }
 }
 const REQ_LABELS: Record<string, string> = {
   external_account: "a bank account or debit card",
@@ -102,6 +97,27 @@ export default function WalletScreen() {
   const [cashoutAmt, setCashoutAmt] = useState("");
   const [cashingOut, setCashingOut] = useState(false);
   const [manageOpen, setManageOpen] = useState(false);
+  const [txnFilter, setTxnFilter] = useState<"all" | "in" | "out">("all");
+
+  // One unified transaction stream: top-ups + money received + money sent,
+  // newest first, so everything lives in a single list instead of three.
+  type UnifiedTxn =
+    | { key: string; at: string; type: "topup"; topup: Topup }
+    | { key: string; at: string; type: "received"; txn: WalletTxn }
+    | { key: string; at: string; type: "sent"; txn: WalletTxn };
+  const allTxns = useMemo<UnifiedTxn[]>(() => {
+    const list: UnifiedTxn[] = [];
+    for (const t of topups) list.push({ key: `topup_${t.id}`, at: t.created_at, type: "topup", topup: t });
+    for (const t of (w?.recent || [])) list.push({ key: `recv_${t.id}`, at: t.created_at, type: "received", txn: t });
+    for (const t of (w?.sent || [])) list.push({ key: `sent_${t.id}`, at: t.created_at, type: "sent", txn: t });
+    list.sort((a, b) => (a.at < b.at ? 1 : a.at > b.at ? -1 : 0));
+    return list;
+  }, [topups, w?.recent, w?.sent]);
+  const shownTxns = useMemo(() => {
+    if (txnFilter === "in") return allTxns.filter((t) => t.type !== "sent");
+    if (txnFilter === "out") return allTxns.filter((t) => t.type === "sent");
+    return allTxns;
+  }, [allTxns, txnFilter]);
 
   const load = useCallback(async () => {
     try {
@@ -417,35 +433,6 @@ export default function WalletScreen() {
             </TouchableOpacity>
           ) : null}
 
-          {topups.length > 0 && (
-            <>
-              <Text style={styles.section}>Top-ups</Text>
-              <View style={styles.topupsCard}>
-                {topups.slice(0, 8).map((t, i, arr) => {
-                  const st = TOPUP_STATUS[t.status] || TOPUP_STATUS.completed;
-                  return (
-                    <TouchableOpacity key={t.id} activeOpacity={0.6} style={[styles.topupRow, i === arr.length - 1 && styles.topupRowLast]} onPress={() => { setCopied(false); setTopupDetail(t); }} testID={`topup-${t.id}`}>
-                      <View style={[styles.topupIcon, { backgroundColor: st.bg }]}>
-                        <Ionicons name={st.icon as any} size={18} color={st.color} />
-                      </View>
-                      <View style={{ flex: 1 }}>
-                        <Text style={styles.topupTitle}>Wallet top-up</Text>
-                        <Text style={styles.topupMeta}>{fmtTopup(t.created_at)}{t.source === "test" ? " · test" : ""}</Text>
-                      </View>
-                      <View style={styles.topupRight}>
-                        <Text style={[styles.topupAmt, t.status === "failed" && styles.topupAmtFailed]}>+${t.amount.toFixed(2)}</Text>
-                        <View style={[styles.statusPill, { backgroundColor: st.bg }]}>
-                          <Text style={[styles.statusText, { color: st.color }]}>{st.label}</Text>
-                        </View>
-                      </View>
-                      <Ionicons name="chevron-forward" size={16} color={theme.textMuted} style={{ marginLeft: 4 }} />
-                    </TouchableOpacity>
-                  );
-                })}
-              </View>
-            </>
-          )}
-
           <View style={styles.totalCard}>
             <Text style={styles.totalLabel}>Total earned</Text>
             <Text style={styles.totalValue}>${(w?.total_earned ?? 0).toFixed(2)}</Text>
@@ -673,54 +660,93 @@ export default function WalletScreen() {
             ))}
           </View>
 
-          <TouchableOpacity style={styles.allActivityBtn} onPress={() => router.push("/activity")} activeOpacity={0.7} testID="wallet-all-activity">
-            <Ionicons name="list" size={17} color={theme.primary} />
-            <Text style={styles.allActivityText}>View all activity</Text>
-            <Ionicons name="chevron-forward" size={16} color={theme.textMuted} />
-          </TouchableOpacity>
-
-          <Text style={styles.section}>Received</Text>
-          {(w?.recent || []).length === 0 ? (
-            <Text style={styles.empty}>No earnings yet. When people tip or subscribe to you, they'll show here.</Text>
-          ) : (
-            (w?.recent || []).map((t) => (
-              <TouchableOpacity key={t.id} style={styles.txn} activeOpacity={0.6} onPress={() => { setCopied(false); setDetail({ txn: t, direction: "received" }); }} testID={`txn-recv-${t.id}`}>
-                <View style={[styles.txnIcon, { backgroundColor: theme.surfaceAlt }]}>
-                  <Ionicons name={t.kind === "subscription" ? "star" : "cash"} size={16} color={theme.primary} />
-                </View>
-                <View style={{ flex: 1 }}>
-                  <Text style={styles.txnName}>{t.from_name}</Text>
-                  <Text style={styles.txnKind}>{t.kind === "subscription" ? "Subscription" : "Tip"} · {fmtWhen(t.created_at)}</Text>
-                </View>
-                <Text style={styles.txnAmt}>+${t.amount.toFixed(2)}</Text>
-                <Ionicons name="chevron-forward" size={16} color={theme.textMuted} style={{ marginLeft: 6 }} />
-              </TouchableOpacity>
-            ))
-          )}
-
-          <View style={styles.sentHeader}>
-            <Text style={[styles.section, { marginBottom: 0 }]}>Sent</Text>
-            <Text style={styles.spentTotal}>
-              ${(w?.total_spent ?? 0).toFixed(2)} · {w?.subscriptions_count ?? 0} active sub{(w?.subscriptions_count ?? 0) === 1 ? "" : "s"}
-            </Text>
+          <View style={styles.txnHeader}>
+            <Text style={[styles.section, { marginTop: 0, marginBottom: 0 }]}>Transactions</Text>
+            <TouchableOpacity onPress={() => router.push("/activity")} testID="wallet-all-activity">
+              <Text style={styles.viewAllLink}>View all</Text>
+            </TouchableOpacity>
           </View>
-          {(w?.sent || []).length === 0 ? (
-            <Text style={styles.empty}>You haven't tipped or subscribed to anyone yet.</Text>
+          <View style={styles.filterRow}>
+            {([
+              { k: "all", label: "All" },
+              { k: "in", label: "In" },
+              { k: "out", label: "Out" },
+            ] as const).map((f) => {
+              const on = txnFilter === f.k;
+              return (
+                <TouchableOpacity
+                  key={f.k}
+                  style={[styles.filterChip, on && styles.filterChipOn]}
+                  onPress={() => setTxnFilter(f.k)}
+                  testID={`txn-filter-${f.k}`}
+                >
+                  <Text style={[styles.filterChipText, on && styles.filterChipTextOn]}>{f.label}</Text>
+                </TouchableOpacity>
+              );
+            })}
+          </View>
+
+          {shownTxns.length === 0 ? (
+            <Text style={styles.empty}>
+              {txnFilter === "out"
+                ? "You haven't tipped or subscribed to anyone yet."
+                : txnFilter === "in"
+                ? "No money in yet. Top-ups, tips and subscriptions will show here."
+                : "No transactions yet. Top up your wallet or earn from tips and subscriptions."}
+            </Text>
           ) : (
-            (w?.sent || []).map((t) => (
-              <TouchableOpacity key={t.id} style={styles.txn} activeOpacity={0.6} onPress={() => { setCopied(false); setDetail({ txn: t, direction: "sent" }); }} testID={`txn-sent-${t.id}`}>
-                <View style={[styles.txnIcon, { backgroundColor: theme.surfaceAlt }]}>
-                  <Ionicons name={t.kind === "subscription" ? "star-outline" : "arrow-up-circle-outline"} size={16} color={theme.textSecondary} />
-                </View>
-                <View style={{ flex: 1 }}>
-                  <Text style={styles.txnName}>To {t.from_name}</Text>
-                  <Text style={styles.txnKind}>{t.kind === "subscription" ? "Subscription" : "Tip"} · {fmtWhen(t.created_at)}</Text>
-                </View>
-                <Text style={styles.txnAmtOut}>-${t.amount.toFixed(2)}</Text>
-                <Ionicons name="chevron-forward" size={16} color={theme.textMuted} style={{ marginLeft: 6 }} />
-              </TouchableOpacity>
-            ))
+            <View style={styles.txnCard}>
+              {shownTxns.map((row, i) => {
+                const last = i === shownTxns.length - 1;
+                if (row.type === "topup") {
+                  const t = row.topup;
+                  const st = TOPUP_STATUS[t.status] || TOPUP_STATUS.completed;
+                  return (
+                    <TouchableOpacity key={row.key} activeOpacity={0.6} style={[styles.txn, last && styles.txnLast]} onPress={() => { setCopied(false); setTopupDetail(t); }} testID={`topup-${t.id}`}>
+                      <View style={[styles.txnIcon, { backgroundColor: st.bg }]}>
+                        <Ionicons name={st.icon as any} size={17} color={st.color} />
+                      </View>
+                      <View style={{ flex: 1 }}>
+                        <Text style={styles.txnName}>Wallet top-up</Text>
+                        <Text style={styles.txnKind}>{fmtWhen(t.created_at)}{t.source === "test" ? " · test" : ""}</Text>
+                      </View>
+                      <View style={styles.txnRight}>
+                        <Text style={[styles.txnAmt, t.status === "failed" && styles.topupAmtFailed]}>+${t.amount.toFixed(2)}</Text>
+                        {t.status !== "completed" ? (
+                          <View style={[styles.statusPill, { backgroundColor: st.bg }]}>
+                            <Text style={[styles.statusText, { color: st.color }]}>{st.label}</Text>
+                          </View>
+                        ) : null}
+                      </View>
+                      <Ionicons name="chevron-forward" size={16} color={theme.textMuted} style={{ marginLeft: 4 }} />
+                    </TouchableOpacity>
+                  );
+                }
+                const t = row.txn;
+                const received = row.type === "received";
+                return (
+                  <TouchableOpacity key={row.key} style={[styles.txn, last && styles.txnLast]} activeOpacity={0.6} onPress={() => { setCopied(false); setDetail({ txn: t, direction: received ? "received" : "sent" }); }} testID={`txn-${received ? "recv" : "sent"}-${t.id}`}>
+                    <View style={[styles.txnIcon, { backgroundColor: theme.surfaceAlt }]}>
+                      <Ionicons
+                        name={t.kind === "subscription" ? (received ? "star" : "star-outline") : (received ? "cash" : "arrow-up-circle-outline")}
+                        size={16}
+                        color={received ? theme.primary : theme.textSecondary}
+                      />
+                    </View>
+                    <View style={{ flex: 1 }}>
+                      <Text style={styles.txnName}>{received ? t.from_name : `To ${t.from_name}`}</Text>
+                      <Text style={styles.txnKind}>{t.kind === "subscription" ? "Subscription" : "Tip"} · {fmtWhen(t.created_at)}</Text>
+                    </View>
+                    <Text style={received ? styles.txnAmt : styles.txnAmtOut}>{received ? "+" : "-"}${t.amount.toFixed(2)}</Text>
+                    <Ionicons name="chevron-forward" size={16} color={theme.textMuted} style={{ marginLeft: 6 }} />
+                  </TouchableOpacity>
+                );
+              })}
+            </View>
           )}
+          <Text style={styles.txnFootnote}>
+            ${(w?.total_spent ?? 0).toFixed(2)} spent · {w?.subscriptions_count ?? 0} active sub{(w?.subscriptions_count ?? 0) === 1 ? "" : "s"}
+          </Text>
         </ScrollView>
       )}
 
@@ -1095,8 +1121,16 @@ const styles = StyleSheet.create({
   statNum: { color: theme.textPrimary, fontSize: 17, fontWeight: "800" },
   statLabel: { color: theme.textMuted, fontSize: 11, textAlign: "center" },
   section: { color: theme.textMuted, fontSize: 12, fontWeight: "800", textTransform: "uppercase", letterSpacing: 0.5, marginTop: 26, marginBottom: 12 },
-  allActivityBtn: { flexDirection: "row", alignItems: "center", gap: 10, marginTop: 22, paddingVertical: 14, paddingHorizontal: 16, borderRadius: 14, ...GLASS, borderWidth: StyleSheet.hairlineWidth, borderColor: theme.border },
-  allActivityText: { flex: 1, color: theme.textPrimary, fontSize: 14.5, fontWeight: "700" },
+  txnHeader: { flexDirection: "row", alignItems: "center", justifyContent: "space-between", marginTop: 26, marginBottom: 12 },
+  viewAllLink: { color: theme.primary, fontSize: 13, fontWeight: "800" },
+  filterRow: { flexDirection: "row", gap: 8, marginBottom: 12 },
+  filterChip: { paddingHorizontal: 16, paddingVertical: 7, borderRadius: 20, ...GLASS, borderWidth: 1, borderColor: theme.border },
+  filterChipOn: { backgroundColor: theme.primary, borderColor: theme.primary },
+  filterChipText: { color: theme.textSecondary, fontSize: 13, fontWeight: "700" },
+  filterChipTextOn: { color: "#fff" },
+  txnCard: { ...GLASS, borderRadius: 16, borderWidth: 1, borderColor: theme.border, paddingHorizontal: 16 },
+  txnRight: { alignItems: "flex-end", gap: 5 },
+  txnFootnote: { color: theme.textMuted, fontSize: 12, fontWeight: "600", textAlign: "right", marginTop: 10 },
   payoutCard: { ...GLASS, borderRadius: 16, borderWidth: 1, borderColor: theme.border, padding: 16, gap: 10 },
   payoutHead: { flexDirection: "row", alignItems: "center", gap: 8 },
   payoutDot: { width: 9, height: 9, borderRadius: 5 },
@@ -1110,14 +1144,6 @@ const styles = StyleSheet.create({
   cashoutBanner: { flexDirection: "row", alignItems: "center", gap: 12, backgroundColor: "rgba(217,119,6,0.12)", borderWidth: 1, borderColor: "rgba(217,119,6,0.4)", borderRadius: 14, padding: 14, marginTop: 14 },
   cashoutTitle: { color: "#D97706", fontSize: 14.5, fontWeight: "800" },
   cashoutSub: { color: theme.textSecondary, fontSize: 12.5, marginTop: 2, lineHeight: 17 },
-  topupsCard: { ...GLASS, borderRadius: 16, borderWidth: 1, borderColor: theme.border, paddingHorizontal: 16 },
-  topupRow: { flexDirection: "row", alignItems: "center", gap: 13, paddingVertical: 14, borderBottomWidth: StyleSheet.hairlineWidth, borderBottomColor: theme.border },
-  topupRowLast: { borderBottomWidth: 0 },
-  topupIcon: { width: 40, height: 40, borderRadius: 12, alignItems: "center", justifyContent: "center" },
-  topupTitle: { color: theme.textPrimary, fontSize: 15, fontWeight: "700" },
-  topupMeta: { color: theme.textMuted, fontSize: 12.5, marginTop: 2 },
-  topupRight: { alignItems: "flex-end", gap: 5 },
-  topupAmt: { color: "#16A34A", fontSize: 15.5, fontWeight: "800" },
   topupAmtFailed: { color: theme.textMuted, textDecorationLine: "line-through" },
   statusPill: { borderRadius: 8, paddingHorizontal: 8, paddingVertical: 3 },
   statusText: { fontSize: 10.5, fontWeight: "800", textTransform: "uppercase", letterSpacing: 0.3 },
@@ -1153,14 +1179,13 @@ const styles = StyleSheet.create({
   tiersInfoName: { flex: 1, color: theme.textPrimary, fontSize: 14, fontWeight: "700" },
   tiersInfoPrice: { color: theme.primary, fontSize: 14, fontWeight: "800" },
   empty: { color: theme.textMuted, fontSize: 13, paddingVertical: 16 },
-  txn: { flexDirection: "row", alignItems: "center", gap: 12, paddingVertical: 11, borderBottomWidth: StyleSheet.hairlineWidth, borderBottomColor: theme.border },
-  txnIcon: { width: 38, height: 38, borderRadius: 10, alignItems: "center", justifyContent: "center" },
-  txnName: { color: theme.textPrimary, fontSize: 14, fontWeight: "700" },
-  txnKind: { color: theme.textMuted, fontSize: 12, marginTop: 1 },
-  txnAmt: { color: "#22C55E", fontSize: 15, fontWeight: "800" },
+  txn: { flexDirection: "row", alignItems: "center", gap: 12, paddingVertical: 13, borderBottomWidth: StyleSheet.hairlineWidth, borderBottomColor: theme.border },
+  txnLast: { borderBottomWidth: 0 },
+  txnIcon: { width: 40, height: 40, borderRadius: 12, alignItems: "center", justifyContent: "center" },
+  txnName: { color: theme.textPrimary, fontSize: 14.5, fontWeight: "700" },
+  txnKind: { color: theme.textMuted, fontSize: 12.5, marginTop: 2 },
+  txnAmt: { color: "#16A34A", fontSize: 15, fontWeight: "800" },
   txnAmtOut: { color: theme.textSecondary, fontSize: 15, fontWeight: "800" },
-  sentHeader: { flexDirection: "row", alignItems: "flex-end", justifyContent: "space-between", marginTop: 24, marginBottom: 10 },
-  spentTotal: { color: theme.textMuted, fontSize: 12, fontWeight: "700" },
 
   detailBackdrop: { flex: 1, backgroundColor: "rgba(0,0,0,0.6)", alignItems: "center", justifyContent: "center", padding: 24 },
   detailCard: { width: "100%", maxWidth: 420, ...GLASS, borderRadius: 20, borderWidth: 1, borderColor: theme.border, padding: 22, alignItems: "center" },
