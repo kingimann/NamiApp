@@ -1,0 +1,74 @@
+name: EAS Build
+
+# Build the native app on Expo Application Services (EAS).
+#
+# Trigger it manually from the GitHub UI: Actions → "EAS Build" → Run workflow,
+# then pick a platform and a profile (profiles live in frontend/eas.json).
+#
+# Prerequisites (one-time):
+#   1. Add a repo secret EXPO_TOKEN — create it at https://expo.dev → Account →
+#      Settings → Access tokens (a "Robot"/personal access token).
+#   2. The Expo project must be linked (app.json -> extra.eas.projectId). If it
+#      isn't yet, run `npx eas init` locally once and commit the change.
+#   3. iOS/Android build credentials must exist on EAS (run `eas credentials`
+#      once, or let the first interactive build create them). --non-interactive
+#      here will fail if they're missing.
+
+on:
+  workflow_dispatch:
+    inputs:
+      platform:
+        description: Platform to build
+        type: choice
+        default: android
+        options:
+          - android
+          - ios
+          - all
+      profile:
+        description: Build profile (from eas.json)
+        type: choice
+        default: preview
+        options:
+          - preview
+          - production
+          - development
+
+concurrency:
+  group: eas-build-${{ github.ref }}-${{ github.event.inputs.platform }}
+  cancel-in-progress: false
+
+jobs:
+  build:
+    name: EAS Build (${{ github.event.inputs.platform }} / ${{ github.event.inputs.profile }})
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: frontend
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v4
+
+      - name: Set up Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: 20.19.4
+
+      - name: Set up EAS CLI
+        uses: expo/expo-github-action@v8
+        with:
+          eas-version: latest
+          token: ${{ secrets.EXPO_TOKEN }}
+
+      - name: Verify EXPO_TOKEN is set
+        run: |
+          if [ -z "${{ secrets.EXPO_TOKEN }}" ]; then
+            echo "::error::EXPO_TOKEN secret is not set. Add it in Settings → Secrets and variables → Actions."
+            exit 1
+          fi
+
+      - name: Install dependencies
+        run: corepack enable && yarn install --network-timeout 1000000
+
+      - name: Run EAS Build
+        run: eas build --platform ${{ github.event.inputs.platform }} --profile ${{ github.event.inputs.profile }} --non-interactive --no-wait
