@@ -17,12 +17,14 @@
 #     user: nampo
 
 services:
-  # API (FastAPI). Reachable at https://okayspace-api.onrender.com — the web app
-  # calls it via EXPO_PUBLIC_BACKEND_URL below. To also serve it at
-  # api.okayspace.ca, add a `domains: [api.okayspace.ca]` block here and point
-  # EXPO_PUBLIC_BACKEND_URL at it.
+  # API (FastAPI). This is the EXISTING, working backend service — its public URL
+  # (https://nampo-backend.onrender.com) holds the live data, so the service name
+  # must stay `nampo-backend` (renaming it in Render creates a new, empty service
+  # and breaks the web app's API calls). The web build points at it via
+  # EXPO_PUBLIC_BACKEND_URL below. The user-facing site is okayspace.ca (attached
+  # to the web service); this backend URL is internal/invisible to visitors.
   - type: web
-    name: okayspace-api
+    name: nampo-backend
     runtime: docker
     dockerfilePath: ./backend/Dockerfile
     dockerContext: ./backend
@@ -119,7 +121,7 @@ services:
   # EXPO_PUBLIC_BACKEND_URL (the backend allows CORS), so no proxy is needed.
   - type: web
     runtime: static
-    name: okayspace-web
+    name: nampo-web
     # NOTE: static sites have no `plan` field — they're free. Adding one fails
     # blueprint sync with "no such plan free for service type web".
     # Install with Yarn (this repo's declared packageManager) — npm ci crashes
@@ -143,14 +145,13 @@ services:
       # Expo SDK 54 requires Node >= 20.19.4.
       - key: NODE_VERSION
         value: "20.19.4"
-      # Baked into the web build at export time. The backend URL is not secret,
-      # so hardcode it here. It must match the API service's URL (name
-      # `okayspace-api` → okayspace-api.onrender.com). If you later attach
-      # api.okayspace.ca to that service, change this to https://api.okayspace.ca.
-      # The Mapbox PUBLIC token is bundled too; paste it in the dashboard
-      # (sync:false) since it shouldn't live in git.
+      # Baked into the web build at export time. MUST match the real, reachable
+      # backend URL (the existing nampo-backend service). Don't change this to a
+      # service that doesn't exist yet — the web app would fail every API call
+      # ("Failed to fetch") and login breaks. The Mapbox PUBLIC token is bundled
+      # too; paste it in the dashboard (sync:false) since it shouldn't live in git.
       - key: EXPO_PUBLIC_BACKEND_URL
-        value: https://okayspace-api.onrender.com
+        value: https://nampo-backend.onrender.com
       # Stripe publishable key (pk_…) for rendering Stripe inside the site.
       - key: EXPO_PUBLIC_STRIPE_KEY
         sync: false
