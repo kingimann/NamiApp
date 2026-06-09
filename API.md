@@ -24,7 +24,7 @@ All requests and responses are JSON over HTTPS.
 [Stories](#stories) ·
 [Messaging](#messaging) ·
 [Calls](#calls-livekit-voice) ·
-[Communities](#communities-forum) ·
+[Communities](#communities-reddit-style-forum) ·
 [Groups](#groups-chat-communities) ·
 [Marketplace](#marketplace) ·
 [Places, guides, reviews](#places-guides-reviews) ·
@@ -227,7 +227,7 @@ Developer API key (Settings → Developer API).
 | POST | `/auth/recover-password` | Owner break-glass reset — `{secret, identifier, new_password}` (needs `RECOVERY_SECRET`) |
 | POST | `/auth/phone/send-code` · `/auth/phone/verify` | Verify a phone number via SMS code (when signed in) |
 | GET | `/auth/me` | Current user (incl. `picture`, `wallet_balance`, `currency`, `twofa_enabled`, `sms_notifications`) |
-| PATCH | `/auth/me` | Update profile — `name`, `bio`, `picture`, home/work, `sub_price`, `payout_frequency\|threshold`, `default_comment_policy\|likes_disabled`, `currency`, `sms_notifications` |
+| PATCH | `/auth/me` | Update profile & privacy — identity (`name`, `bio`, `status`, `headline`, `picture`), customization (`cover_photo`, `accent_color`, `interests[]`, `featured_links[]`, `avatar_frame`, `profile_background`), `pronouns\|location\|birthday\|socials`, home/work, `sub_price`, payout prefs, `currency`, and visibility (`is_private`, `searchable`, `hide_online`, `show_points`, `message_policy`, `default_comment_policy`, `tag_policy`, `connections_visibility`, `hide_likes`, `default_likes_disabled`) |
 | PATCH | `/auth/me/email\|password\|phone` | Change email / password / phone |
 | POST | `/auth/username` | Claim a username |
 | GET/POST/DELETE | `/auth/api-keys` | Manage developer API keys |
@@ -254,15 +254,27 @@ Developer API key (Settings → Developer API).
 | DELETE | `/users/{id}/subscribe` | Unsubscribe |
 | GET | `/wallet` | Earnings summary (`balance`, `currency`, recent received/sent) |
 | GET | `/wallet/export` | CSV export of wallet activity |
+| GET | `/points/leaderboard` | Top members by activity points (Snapscore) — `{leaders:[{rank,user_id,name,points,level,level_title,...}]}` |
 
-> Profile fields (`name`, `bio`, `picture`, home/work, `sub_price`, payout prefs,
-> privacy defaults, `currency`, `sms_notifications`) are read via `GET /auth/me` and
-> updated via `PATCH /auth/me` (see **Auth**).
+> **Activity points (Snapscore):** users earn points for being active (rate-limited
+> presence heartbeats), posting (+5), stories (+3), messages (+1), gaining a
+> follower (+4), and community upvotes (+2, once per voter). `points`, derived
+> `level`/`level_title`, and `show_points` are returned on the user/public-user
+> objects.
+
+> **Profile fields** read via `GET /auth/me`, updated via `PATCH /auth/me` (see
+> **Auth**): `name`, `bio`, `picture`, `status`, `headline`, `pronouns`,
+> `location`, `birthday`, `socials`, `cover_photo`, `accent_color`, `interests[]`,
+> `featured_links[]`, `avatar_frame`, `profile_background`, home/work, `sub_price`,
+> payout prefs, `currency`, `sms_notifications`, and privacy/visibility
+> (`is_private`, `searchable`, `hide_online`, `show_points`, `message_policy`,
+> `default_comment_policy`, `tag_policy`, `connections_visibility`, `hide_likes`,
+> `default_likes_disabled`).
 
 ### Posts & feed
 | Method | Path | Description |
 | --- | --- | --- |
-| POST | `/posts` | Create — `{text?, media[]?, poll?, parent_id?, quote_of?, place_*?, community_id?, title?, likes_disabled?, comment_policy?}` |
+| POST | `/posts` | Create — `{text?, media[]?, poll?, parent_id?, quote_of?, place_*?, community_id?, title?, flair?, likes_disabled?, comment_policy?}` |
 | GET | `/posts/{id}` | Fetch one (hydrated for the viewer) |
 | PATCH | `/posts/{id}` | Edit — `{text?, media?}` |
 | DELETE | `/posts/{id}` | Delete your post |
@@ -338,13 +350,28 @@ supports server-side encryption at rest regardless).
 
 Needs `LIVEKIT_*`; returns `503 calls_not_configured` otherwise. Room = `call_{conversation_id}`.
 
-### Communities (forum)
+### Communities (Reddit-style forum)
 | Method | Path | Description |
 | --- | --- | --- |
-| GET/POST | `/communities` | Discover / create (`{name, title, description?}`) |
-| GET | `/communities/{name}` | Community details |
+| GET | `/communities?sort=active\|top\|new&q=` | Discover (favorites first; `active` = trending; `q` searches by relevance) |
+| POST | `/communities` | Create — `{name, title?, description?, color?, icon?, rules[]?, flairs[]?, banner?}` |
+| GET | `/communities/feed` | Aggregated threads across communities you've joined |
+| GET | `/communities/{name}` | Community details (rules, flairs, banner, wiki, `is_favorite`, `can_moderate`, …) |
+| PATCH | `/communities/{name}` | Moderators edit — `{title?, description?, color?, icon?, banner?, rules[]?, flairs[]?, wiki?, banned_keywords[]?}` |
 | POST/DELETE | `/communities/{name}/join` | Join / leave |
-| GET | `/communities/{name}/posts?sort=hot\|new\|top` | Threads with sorting |
+| POST/DELETE | `/communities/{name}/favorite` | Favorite / unfavorite (sorts first in Discover) |
+| GET | `/communities/{name}/posts?sort=hot\|new\|top\|rising&flair=&search=` | Threads — time-decayed Hot, flair filter, text search |
+| GET | `/communities/{name}/members` | Members with roles (owner/mod/member) |
+| GET | `/communities/{name}/top` | Top members by per-community karma |
+| POST/DELETE | `/communities/{name}/mods/{user_id}` | Owner promotes / demotes a moderator |
+| DELETE | `/communities/{name}/members/{user_id}` | Moderator removes a member |
+| POST | `/communities/{name}/posts/{id}/remove` | Moderator removes a post |
+| POST | `/communities/{name}/posts/{id}/pin` | Moderator pins / unpins a post |
+
+> Post to a community via `POST /posts` with `{community_id, title, text?, flair?}`
+> (you must be a member; the flair must be one the community offers; posts hitting
+> the community's `banned_keywords` are rejected). Voting reuses post reactions
+> (👍/👎); a 👍 grants the author **karma** (global points + a per-community badge).
 
 ### Groups (chat communities)
 | Method | Path | Description |
