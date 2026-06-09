@@ -1,7 +1,7 @@
 import React, { useCallback, useEffect, useRef, useState } from "react";
 import {
   View, Text, StyleSheet, FlatList, TouchableOpacity,
-  ActivityIndicator, RefreshControl, Modal, Alert, Platform, Animated, Easing,
+  ActivityIndicator, RefreshControl, Modal, Alert, Platform, Animated, Easing, useWindowDimensions,
 } from "react-native";
 import { SafeAreaView, useSafeAreaInsets } from "react-native-safe-area-context";
 import { SidebarMenuButton } from "@/src/components/LeftSidebar";
@@ -49,6 +49,10 @@ export default function FeedScreen() {
   const router = useRouter();
   const params = useLocalSearchParams<{ compose?: string }>();
   const insets = useSafeAreaInsets();
+  // On desktop web the left/right rails provide nav, search, compose &
+  // notifications, so the in-column header drops those (X-style minimal header).
+  const { width: _winW } = useWindowDimensions();
+  const desktopWeb = Platform.OS === "web" && _winW >= 900;
   const [tab, setTab] = useState<Tab>("explore");
   const [posts, setPosts] = useState<Post[]>([]);
   const [loading, setLoading] = useState(true);
@@ -398,6 +402,7 @@ export default function FeedScreen() {
         style={[
           styles.topBar,
           GLASS,
+          desktopWeb && styles.topBarDesktop,
           {
             opacity: topHide.interpolate({ inputRange: [0, 0.7, 1], outputRange: [1, 0.25, 0] }),
             transform: [{ translateY: topHide.interpolate({ inputRange: [0, 1], outputRange: [0, -(topBarH + insets.top + 14)] }) }],
@@ -405,15 +410,17 @@ export default function FeedScreen() {
         ]}
       >
         <View style={styles.header}>
-          <SidebarMenuButton />
+          {!desktopWeb && <SidebarMenuButton />}
           <View style={styles.brandRow}>
-            <Text style={styles.title}>Feed</Text>
+            <Text style={styles.title}>{desktopWeb ? "Home" : "Feed"}</Text>
           </View>
           <View style={styles.headerActions}>
-            <TouchableOpacity onPress={() => router.push("/search")} style={styles.bellBtn} testID="feed-search" accessibilityRole="button" accessibilityLabel="Search">
-              <Ionicons name="search" size={22} color={theme.textPrimary} />
-            </TouchableOpacity>
-            {!postingOff && (
+            {!desktopWeb && (
+              <TouchableOpacity onPress={() => router.push("/search")} style={styles.bellBtn} testID="feed-search" accessibilityRole="button" accessibilityLabel="Search">
+                <Ionicons name="search" size={22} color={theme.textPrimary} />
+              </TouchableOpacity>
+            )}
+            {!postingOff && !desktopWeb && (
               <TouchableOpacity
                 onPress={() => { setEditing(null); setReplyTo(null); setQuoting(null); setComposeOpen(true); }}
                 style={styles.bellBtn}
@@ -424,14 +431,16 @@ export default function FeedScreen() {
                 <Ionicons name="add-circle" size={26} color={theme.primary} />
               </TouchableOpacity>
             )}
-            <TouchableOpacity onPress={() => router.push("/notifications")} style={styles.bellBtn} testID="feed-notifications">
-              <Ionicons name="notifications-outline" size={22} color={theme.textPrimary} />
-              {unreadNotif > 0 && (
-                <View style={styles.bellBadge}>
-                  <Text style={styles.bellBadgeText}>{unreadNotif > 9 ? "9+" : unreadNotif}</Text>
-                </View>
-              )}
-            </TouchableOpacity>
+            {!desktopWeb && (
+              <TouchableOpacity onPress={() => router.push("/notifications")} style={styles.bellBtn} testID="feed-notifications">
+                <Ionicons name="notifications-outline" size={22} color={theme.textPrimary} />
+                {unreadNotif > 0 && (
+                  <View style={styles.bellBadge}>
+                    <Text style={styles.bellBadgeText}>{unreadNotif > 9 ? "9+" : unreadNotif}</Text>
+                  </View>
+                )}
+              </TouchableOpacity>
+            )}
             <TouchableOpacity onPress={() => router.push("/messages")} style={styles.bellBtn} testID="feed-messages" accessibilityRole="button" accessibilityLabel="Messages">
               <Ionicons name="chatbubble-ellipses-outline" size={22} color={theme.textPrimary} />
             </TouchableOpacity>
@@ -577,6 +586,12 @@ const styles = StyleSheet.create({
     zIndex: 40,
     shadowColor: "#000", shadowOpacity: 0.32, shadowRadius: 14, shadowOffset: { width: 0, height: 6 },
     elevation: 10,
+  },
+  // Desktop: a flat, full-width sticky header (no floating rounded pill).
+  topBarDesktop: {
+    top: 0, left: 0, right: 0, borderRadius: 0,
+    borderBottomWidth: StyleSheet.hairlineWidth, borderBottomColor: theme.border,
+    shadowOpacity: 0, elevation: 0,
   },
   header: {
     flexDirection: "row", alignItems: "center", justifyContent: "space-between",

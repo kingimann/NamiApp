@@ -2,7 +2,7 @@ import { Stack, usePathname, useRouter } from "expo-router";
 import * as SplashScreen from "expo-splash-screen";
 import { useEffect } from "react";
 import { StatusBar } from "expo-status-bar";
-import { Platform, View } from "react-native";
+import { Platform, View, useWindowDimensions } from "react-native";
 import { SafeAreaProvider } from "react-native-safe-area-context";
 import { GestureHandlerRootView } from "react-native-gesture-handler";
 
@@ -112,7 +112,10 @@ function shouldShowBar(pathname: string) {
 function GlobalTabBar() {
   const { user } = useAuth();
   const pathname = usePathname();
+  const { width } = useWindowDimensions();
   if (!user) return null;
+  // On desktop web the left nav rail (DesktopShell) replaces the floating pill.
+  if (Platform.OS === "web" && width >= 900) return null;
   if (!shouldShowBar(pathname || "")) return null;
   return <LiquidTabBar />;
 }

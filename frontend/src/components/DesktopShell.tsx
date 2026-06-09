@@ -1,30 +1,224 @@
-import React from "react";
-import { View, StyleSheet, Platform, useWindowDimensions } from "react-native";
+import React, { useEffect, useState } from "react";
+import {
+  View, Text, StyleSheet, Pressable, ScrollView, Platform, useWindowDimensions, Image,
+} from "react-native";
+import { Ionicons } from "@expo/vector-icons";
+import { usePathname, useRouter } from "expo-router";
 import { theme } from "@/src/theme";
+import { useAuth } from "@/src/context/AuthContext";
+import { useSidebar } from "@/src/context/SidebarContext";
+import { api, LeaderboardEntry } from "@/src/api/client";
 
-// PC = the mobile app, fitted to desktop: the same mobile UI centred in a
-// comfortable column (so it isn't stretched edge-to-edge) with subtle side
-// borders. No phone-frame chrome, no separate desktop nav — the mobile bottom
-// bar / header are used as-is. Passthrough on phones and native.
-const BREAKPOINT = 700;   // below this, use the mobile layout untouched
-const COLUMN_MAX = 600;   // comfortable reading width on desktop
+// Below this width we keep the mobile layout untouched. At/above it (desktop
+// web only) we render real website chrome: a persistent left nav rail and a
+// centred, max-width content column — instead of full-bleed mobile UI. The
+// right rail (trends / who-to-follow) only appears when there's room for it.
+const DESKTOP_BP = 900;
+const WIDE_BP = 1180;
+const RAIL_W = 244;
+const RIGHT_W = 320;
+const CONTENT_MAX = 680;
+
+type Item = {
+  label: string;
+  route: string;
+  icon: keyof typeof Ionicons.glyphMap;     // filled name; outline = `${icon}-outline`
+  activeOn?: string[];
+};
+
+const ITEMS: Item[] = [
+  { label: "Home", route: "/feed", icon: "home", activeOn: ["/feed", "/post", "/user", "/hashtag"] },
+  { label: "Map", route: "/", icon: "map", activeOn: ["/", "/directions", "/place", "/guide", "/g", "/eta"] },
+  { label: "Reels", route: "/reels", icon: "play-circle" },
+  { label: "Marketplace", route: "/marketplace", icon: "storefront", activeOn: ["/marketplace", "/listing", "/seller", "/business", "/my-marketplace", "/my-listings", "/shop"] },
+  { label: "Groups", route: "/groups", icon: "people", activeOn: ["/groups", "/group"] },
+  { label: "Communities", route: "/communities", icon: "planet", activeOn: ["/communities", "/c"] },
+  { label: "Notifications", route: "/notifications", icon: "notifications" },
+  { label: "Profile", route: "/profile", icon: "person", activeOn: ["/profile"] },
+];
+
+// Routes that should use the FULL desktop width (no centred column / right rail),
+// e.g. the map needs all the space it can get.
+const FULL_BLEED = ["/", "/directions"];
+
+function RightRail() {
+  const router = useRouter();
+  const [tags, setTags] = useState<{ tag: string; count: number }[]>([]);
+  const [leaders, setLeaders] = useState<LeaderboardEntry[]>([]);
+  useEffect(() => {
+    let alive = true;
+    api.trendingHashtags().then((r) => { if (alive) setTags((r.hashtags || []).slice(0, 6)); }).catch(() => {});
+    api.pointsLeaderboard().then((r) => { if (alive) setLeaders((r.leaders || []).slice(0, 5)); }).catch(() => {});
+    return () => { alive = false; };
+  }, []);
+
+  return (
+    <ScrollView style={styles.right} contentContainerStyle={{ paddingVertical: 16, gap: 14 }} showsVerticalScrollIndicator={false}>
+      <Pressable style={styles.searchBtn} onPress={() => router.push("/search")} testID="desktop-search">
+        <Ionicons name="search" size={17} color={theme.textMuted} />
+        <Text style={styles.searchText}>Search OkaySpace</Text>
+      </Pressable>
+
+      {tags.length > 0 && (
+        <View style={styles.card}>
+          <Text style={styles.cardTitle}>Trending</Text>
+          {tags.map((t) => (
+            <Pressable key={t.tag} style={styles.tagRow} onPress={() => router.push({ pathname: "/hashtag/[tag]", params: { tag: t.tag } })} testID={`trend-${t.tag}`}>
+              <Text style={styles.tagText} numberOfLines={1}>#{t.tag}</Text>
+              <Text style={styles.tagCount}>{t.count} post{t.count === 1 ? "" : "s"}</Text>
+            </Pressable>
+          ))}
+        </View>
+      )}
+
+      {leaders.length > 0 && (
+        <View style={styles.card}>
+          <Text style={styles.cardTitle}>Top members</Text>
+          {leaders.map((u) => (
+            <Pressable key={u.user_id} style={styles.personRow} onPress={() => router.push({ pathname: "/user/[name]", params: { name: u.username || u.name } })} testID={`top-${u.user_id}`}>
+              <Image source={{ uri: u.picture || "https://api.dicebear.com/7.x/initials/png?seed=" + encodeURIComponent(u.name) }} style={styles.personAvatar} />
+              <View style={{ flex: 1 }}>
+                <Text style={styles.personName} numberOfLines={1}>{u.name}</Text>
+                <Text style={styles.personMeta} numberOfLines={1}>{u.points.toLocaleString()} pts</Text>
+              </View>
+              <Text style={styles.rank}>#{u.rank}</Text>
+            </Pressable>
+          ))}
+          <Pressable onPress={() => router.push("/leaderboard")} testID="right-leaderboard-all">
+            <Text style={styles.seeAll}>See leaderboard</Text>
+          </Pressable>
+        </View>
+      )}
+
+      <Text style={styles.footer}>OkaySpace · okayspace.ca</Text>
+    </ScrollView>
+  );
+}
 
 export default function DesktopShell({ children }: { children: React.ReactNode }) {
   const { width } = useWindowDimensions();
-  const constrain = Platform.OS === "web" && width > BREAKPOINT;
-  if (!constrain) return <>{children}</>;
+  const { user } = useAuth();
+  const pathname = usePathname() || "/";
+  const router = useRouter();
+  const sidebar = useSidebar();
+
+  const desktop = Platform.OS === "web" && width >= DESKTOP_BP && !!user;
+  if (!desktop) return <>{children}</>;
+
+  const fullBleed = FULL_BLEED.includes(pathname);
+  const showRight = !fullBleed && width >= WIDE_BP;
+
+  const isActive = (it: Item) => {
+    const ons = it.activeOn || [it.route];
+    return ons.some((p) =>
+      p === "/" ? pathname === "/" : (pathname === p || pathname.startsWith(p + "/")),
+    );
+  };
+
   return (
-    <View style={styles.backdrop}>
-      <View style={styles.column}>{children}</View>
+    <View style={styles.row}>
+      <View style={styles.rail}>
+        <Pressable style={styles.brandRow} onPress={() => router.push("/feed")}>
+          <View style={styles.brandDot}><Ionicons name="planet" size={18} color="#fff" /></View>
+          <Text style={styles.brand}>OkaySpace</Text>
+        </Pressable>
+        <ScrollView showsVerticalScrollIndicator={false} style={{ flex: 1 }}>
+          {ITEMS.map((it) => {
+            const active = isActive(it);
+            return (
+              <Pressable
+                key={it.route}
+                style={[styles.navItem, active && styles.navItemActive]}
+                onPress={() => router.push(it.route as any)}
+                testID={`desktop-nav-${it.label.toLowerCase()}`}
+              >
+                <Ionicons
+                  name={(active ? it.icon : (`${it.icon}-outline` as keyof typeof Ionicons.glyphMap))}
+                  size={24}
+                  color={active ? theme.primary : theme.textPrimary}
+                />
+                <Text style={[styles.navText, active && { color: theme.primary, fontWeight: "800" }]}>{it.label}</Text>
+              </Pressable>
+            );
+          })}
+          <Pressable style={styles.navItem} onPress={() => router.push("/settings")} testID="desktop-nav-settings">
+            <Ionicons name="settings-outline" size={24} color={theme.textPrimary} />
+            <Text style={styles.navText}>Settings</Text>
+          </Pressable>
+          <Pressable style={styles.navItem} onPress={() => sidebar.setOpen(true)} testID="desktop-nav-more">
+            <Ionicons name="menu" size={24} color={theme.textPrimary} />
+            <Text style={styles.navText}>More</Text>
+          </Pressable>
+        </ScrollView>
+
+        <Pressable style={styles.postBtn} onPress={() => router.push("/feed?compose=1" as any)} testID="desktop-post">
+          <Ionicons name="create-outline" size={18} color="#fff" />
+          <Text style={styles.postBtnText}>Post</Text>
+        </Pressable>
+
+        <Pressable style={styles.account} onPress={() => router.push("/profile")} testID="desktop-account">
+          <Image source={{ uri: user?.picture || "https://api.dicebear.com/7.x/initials/png?seed=" + encodeURIComponent(user?.name || "U") }} style={styles.accountAvatar} />
+          <View style={{ flex: 1 }}>
+            <Text style={styles.accountName} numberOfLines={1}>{user?.name || "You"}</Text>
+            {!!user?.username && <Text style={styles.accountHandle} numberOfLines={1}>@{user.username}</Text>}
+          </View>
+        </Pressable>
+      </View>
+
+      {fullBleed ? (
+        // Full-bleed pages (map) use all remaining width.
+        <View style={{ flex: 1 }}>{children}</View>
+      ) : (
+        <View style={styles.contentWrap}>
+          <View style={styles.content}>{children}</View>
+        </View>
+      )}
+
+      {showRight && <RightRail />}
     </View>
   );
 }
 
 const styles = StyleSheet.create({
-  backdrop: { flex: 1, alignItems: "center", backgroundColor: theme.bg },
-  column: {
-    flex: 1, width: "100%", maxWidth: COLUMN_MAX,
-    borderLeftWidth: StyleSheet.hairlineWidth, borderRightWidth: StyleSheet.hairlineWidth,
-    borderColor: theme.border,
+  row: { flex: 1, flexDirection: "row", backgroundColor: theme.bg, justifyContent: "center" },
+  rail: {
+    width: RAIL_W, paddingHorizontal: 12, paddingVertical: 16,
+    borderRightWidth: StyleSheet.hairlineWidth, borderRightColor: theme.border,
+    backgroundColor: theme.bg,
   },
+  brandRow: { flexDirection: "row", alignItems: "center", gap: 10, paddingHorizontal: 10, marginBottom: 14 },
+  brandDot: { width: 32, height: 32, borderRadius: 16, backgroundColor: theme.primary, alignItems: "center", justifyContent: "center" },
+  brand: { color: theme.textPrimary, fontSize: 19, fontWeight: "900" },
+  navItem: { flexDirection: "row", alignItems: "center", gap: 16, paddingHorizontal: 12, paddingVertical: 11, borderRadius: 999, marginBottom: 2 },
+  navItemActive: { backgroundColor: theme.surfaceAlt },
+  navText: { color: theme.textPrimary, fontSize: 16, fontWeight: "600" },
+  postBtn: { flexDirection: "row", alignItems: "center", justifyContent: "center", gap: 8, backgroundColor: theme.primary, borderRadius: 999, paddingVertical: 13, marginTop: 10 },
+  postBtnText: { color: "#fff", fontSize: 16, fontWeight: "800" },
+  account: { flexDirection: "row", alignItems: "center", gap: 10, padding: 8, borderRadius: 999, marginTop: 8 },
+  accountAvatar: { width: 36, height: 36, borderRadius: 18, backgroundColor: theme.surfaceAlt },
+  accountName: { color: theme.textPrimary, fontSize: 14, fontWeight: "800" },
+  accountHandle: { color: theme.textMuted, fontSize: 12.5 },
+  // The page content, pinned to a comfortable reading column and centred.
+  contentWrap: { flex: 1, alignItems: "center" },
+  content: {
+    flex: 1, width: "100%", maxWidth: CONTENT_MAX,
+    borderRightWidth: StyleSheet.hairlineWidth, borderRightColor: theme.border,
+    borderLeftWidth: StyleSheet.hairlineWidth, borderLeftColor: theme.border,
+  },
+  // Right rail.
+  right: { width: RIGHT_W, paddingHorizontal: 16, borderLeftWidth: StyleSheet.hairlineWidth, borderLeftColor: theme.border },
+  searchBtn: { flexDirection: "row", alignItems: "center", gap: 10, backgroundColor: theme.surfaceAlt, borderRadius: 999, paddingHorizontal: 16, paddingVertical: 11 },
+  searchText: { color: theme.textMuted, fontSize: 14, fontWeight: "600" },
+  card: { backgroundColor: theme.surface, borderRadius: 16, borderWidth: 1, borderColor: theme.border, padding: 14, gap: 4 },
+  cardTitle: { color: theme.textPrimary, fontSize: 16, fontWeight: "800", marginBottom: 6 },
+  tagRow: { paddingVertical: 7 },
+  tagText: { color: theme.textPrimary, fontSize: 14, fontWeight: "700" },
+  tagCount: { color: theme.textMuted, fontSize: 12, marginTop: 1 },
+  personRow: { flexDirection: "row", alignItems: "center", gap: 10, paddingVertical: 7 },
+  personAvatar: { width: 36, height: 36, borderRadius: 18, backgroundColor: theme.surfaceAlt },
+  personName: { color: theme.textPrimary, fontSize: 14, fontWeight: "700" },
+  personMeta: { color: theme.textMuted, fontSize: 12, marginTop: 1 },
+  rank: { color: theme.textMuted, fontSize: 13, fontWeight: "800" },
+  seeAll: { color: theme.primary, fontSize: 13, fontWeight: "700", paddingTop: 8 },
+  footer: { color: theme.textMuted, fontSize: 12, paddingHorizontal: 4, paddingTop: 4 },
 });
