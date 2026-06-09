@@ -316,6 +316,11 @@ export default function ChatScreen() {
   // poll for new messages every 3s — detect new/edited/deleted/read/delivered
   // changes, not just count changes.
   const msgSigRef = useRef("");
+  // Count of in-flight optimistic mutations (reactions/pins/votes) whose change
+  // isn't part of msgSig. While any are pending, the poll must not replace the
+  // list with a server snapshot that doesn't yet reflect them, or the optimistic
+  // update visibly flickers off and back on.
+  const pendingMutationsRef = useRef(0);
   const msgSig = (arr: Message[]) =>
     arr.map((x) => `${x.id}:${x.edited_at || ""}:${x.deleted ? 1 : 0}:${x.read_at || ""}:${x.delivered_at || ""}`).join("|");
   useEffect(() => {
@@ -323,6 +328,7 @@ export default function ChatScreen() {
     const t = setInterval(async () => {
       try {
         const m = await api.listMessages(id);
+        if (pendingMutationsRef.current > 0) return;  // don't clobber optimistic state
         const s = msgSig(m);
         if (s !== msgSigRef.current) { msgSigRef.current = s; setMessages(m); }
       } catch {}
@@ -452,10 +458,12 @@ export default function ChatScreen() {
       if (r[uid] === emoji) delete r[uid]; else r[uid] = emoji;
       return { ...x, reactions: r };
     }));
+    pendingMutationsRef.current += 1;
     try {
       const updated = await api.reactToMessage(id, m.id, emoji);
       setMessages((arr) => arr.map((x) => (x.id === updated.id ? updated : x)));
     } catch { load(); }
+    finally { pendingMutationsRef.current = Math.max(0, pendingMutationsRef.current - 1); }
   };
 
   // Single tap reveals the timestamp + read/seen status (Messenger style);
@@ -506,8 +514,10 @@ export default function ChatScreen() {
     setActionMsg(null);
     if (!id) return;
     setMessages((arr) => arr.map((x) => x.id === m.id ? { ...x, pinned: !x.pinned } : x));
+    pendingMutationsRef.current += 1;
     try { const u = await api.pinMessage(id, m.id); setMessages((arr) => arr.map((x) => x.id === u.id ? u : x)); }
     catch { load(); }
+    finally { pendingMutationsRef.current = Math.max(0, pendingMutationsRef.current - 1); }
   };
   const jumpToMessage = (m: Message) => {
     const idx = messages.findIndex((x) => x.id === m.id);
@@ -768,10 +778,12 @@ export default function ChatScreen() {
       }
       return { ...m, poll_votes: votes };
     }));
+    pendingMutationsRef.current += 1;
     try {
       const updated = await api.votePollMessage(id, item.id, option);
       setMessages((ms) => ms.map((m) => (m.id === item.id ? updated : m)));
     } catch {}
+    finally { pendingMutationsRef.current = Math.max(0, pendingMutationsRef.current - 1); }
   };
 
   const loadScheduled = useCallback(async () => {

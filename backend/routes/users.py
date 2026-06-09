@@ -1053,13 +1053,17 @@ async def my_wallet(authorization: Optional[str] = Header(None)):
     me = await get_current_user(authorization)
     uid = me["user_id"]
     rows = await db.earnings.find({"user_id": uid}, {"_id": 0}).sort("created_at", -1).limit(500).to_list(500)
-    tips_total = sum(r["amount"] for r in rows if r.get("kind") == "tip")
-    subs_total = sum(r["amount"] for r in rows if r.get("kind") == "subscription")
-    ads_total = sum(r["amount"] for r in rows if r.get("kind") in ("ad_revenue", "views"))
+    # Coerce amounts defensively — a single malformed/None earnings amount must
+    # not 500 the whole wallet.
+    def _amt(r) -> float:
+        return float(r.get("amount", 0) or 0)
+    tips_total = sum(_amt(r) for r in rows if r.get("kind") == "tip")
+    subs_total = sum(_amt(r) for r in rows if r.get("kind") == "subscription")
+    ads_total = sum(_amt(r) for r in rows if r.get("kind") in ("ad_revenue", "views"))
     tips_count = sum(1 for r in rows if r.get("kind") == "tip")
     active_subscribers = await db.subscriptions.count_documents({"creator_id": uid, "status": "active"})
     recent = [
-        WalletTxn(id=r["id"], kind=r.get("kind", "tip"), amount=r["amount"],
+        WalletTxn(id=r["id"], kind=r.get("kind", "tip"), amount=_amt(r),
                   from_user_id=r.get("from_user_id", ""), from_name=r.get("from_name", "Someone"),
                   source=r.get("source", "test"), message=r.get("message", ""), created_at=r["created_at"])
         for r in rows[:30]

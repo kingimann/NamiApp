@@ -132,8 +132,10 @@ export default function FeedScreen() {
       try {
         const data = await api.homeFeed();
         const have = new Set(postsRef.current.map((p) => p.id));
-        let n = 0;
-        for (const p of data) { if (have.has(p.id)) break; n++; }
+        // Count every post we don't already have — not just the unbroken prefix
+        // of new ids, which miscounts when the feed reorders or inserts a
+        // pinned/promoted post above existing ones.
+        const n = data.reduce((acc, p) => acc + (have.has(p.id) ? 0 : 1), 0);
         setNewCount(n);
       } catch {}
     }, 25000);

@@ -11,6 +11,7 @@ import csv
 import html
 import io
 import json
+import math
 import os
 import re
 import time
@@ -524,6 +525,10 @@ async def form_checkout(request: Request, body: FormSubmit, form: str = Query(..
             amt = round(float((body.values or {}).get(pay["id"]) or 0), 2)
         except (TypeError, ValueError):
             amt = 0.0
+        # Open amounts are buyer-supplied — reject non-finite / absurd values
+        # (e.g. "1e9") before building a Stripe line item.
+        if not math.isfinite(amt) or amt > 100000:
+            raise HTTPException(status_code=400, detail="Enter a valid amount.")
     else:
         amt = round(float(pay.get("amount") or 0), 2)
     if amt < 0.50:

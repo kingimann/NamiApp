@@ -39,6 +39,9 @@ _ISO_DT_RE = re.compile(r"^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}")
 _ARRAY_FIELDS = {
     "participant_ids", "deleted_by", "hashtags", "place_ids",
     "pinned_post_ids", "auth_providers", "member_ids",
+    # Developer-webhook subscriptions: filtering by a single event must use
+    # array containment, not text equality (otherwise no webhook ever matches).
+    "events",
 }
 
 # Fields known to hold datetimes — cast to ::timestamptz in comparisons.
@@ -46,6 +49,16 @@ _DATE_FIELDS = {
     "created_at", "updated_at", "expires_at", "last_message_at",
     "locked_until", "decided_at", "joined_at", "viewed_at",
     "fetched_at", "ends_at", "edited_at",
+}
+
+# Fields known to hold numbers — sorted numerically, not as text. Without this a
+# JSONB text sort makes "9" > "10" (breaks roadside call numbers, top-post and
+# price rankings, leaderboards, etc.).
+_NUMERIC_FIELDS = {
+    "call_number", "likes_count", "dislikes_count", "comments_count",
+    "replies_count", "reposts_count", "views_count", "reactions_total",
+    "bookmarks_count", "shares_count", "price", "amount", "best", "score",
+    "member_count", "subscriber_count", "follower_count", "profile_views",
 }
 
 
@@ -238,6 +251,10 @@ class Collection:
         leaf = key.split(".")[-1]
         return leaf in _DATE_FIELDS or key in _DATE_FIELDS
 
+    def _is_numeric_field(self, key: str) -> bool:
+        leaf = key.split(".")[-1]
+        return leaf in _NUMERIC_FIELDS or key in _NUMERIC_FIELDS
+
     def _sql_text(self, path: str) -> str:
         """Return SQL expression that extracts a text value."""
         parts = path.split(".")
@@ -394,6 +411,14 @@ class Collection:
             if self._is_date_field(field):
                 parts.append(
                     f"({self._sql_text(field)})::timestamptz {dir_sql} NULLS LAST"
+                )
+            elif self._is_numeric_field(field):
+                # Guard the cast so a stray non-numeric value sorts last rather
+                # than erroring the whole query.
+                txt = self._sql_text(field)
+                parts.append(
+                    f"(CASE WHEN {txt} ~ '^-?[0-9]+(\\.[0-9]+)?$' "
+                    f"THEN ({txt})::float8 ELSE NULL END) {dir_sql} NULLS LAST"
                 )
             else:
                 parts.append(f"{self._sql_text(field)} {dir_sql} NULLS LAST")
