@@ -2,8 +2,10 @@
 
 The backend is a **FastAPI** app that stores everything in **PostgreSQL**
 (see `backend/db.py` — a Mongo-style wrapper over a JSONB table per
-collection). Render can host both the database and the API for free and
-redeploys automatically on every push. Total time: ~15 minutes, mostly waiting.
+collection). Render hosts the API (and the web build) for free and redeploys
+automatically on every push; the database is a separate **external Postgres you
+control** (a free [Neon](https://neon.com) or Supabase instance works well).
+Total time: ~15 minutes, mostly waiting.
 
 > Heads up: this project no longer uses Replit or MongoDB. The Replit config
 > files have been removed and the old Mongo Atlas instructions are gone — the
@@ -19,8 +21,26 @@ git add .
 git commit -m "Deploy to Render"
 git push -u origin main
 ```
-The `render.yaml` at the repo root tells Render exactly how to deploy: it
-provisions a Postgres database **and** the API service together.
+The `render.yaml` at the repo root tells Render exactly how to deploy the API
+and the web service. The database lives outside Render — see Step 2a.
+
+---
+
+## Step 2a — Create your Postgres (Neon), ~3 min
+
+`render.yaml` points `DATABASE_URL` at an external Postgres (Render's own free
+Postgres expires after 30 days, so the managed `databases:` block is left
+commented out). Any provider works; [Neon](https://neon.com) has a free tier
+that doesn't expire:
+
+1. Sign up at https://neon.com → **Create project**.
+2. Copy the **direct** (non-pooled) connection string — it looks like
+   `postgresql://user:password@ep-xxx.aws.neon.tech/dbname?sslmode=require`.
+   Keep the `?sslmode=require` on the end.
+3. Hold onto it for Step 2 — you'll paste it as `DATABASE_URL`.
+
+(Supabase: Project → Settings → Database → Connection string → URI, direct/
+non-pooled. The tables are created automatically on first use — no migration.)
 
 ---
 
@@ -28,23 +48,21 @@ provisions a Postgres database **and** the API service together.
 
 1. Go to https://render.com and sign up with your GitHub account.
 2. **New + → Blueprint**.
-3. Pick your repo. Render reads `render.yaml` and shows three resources:
-   - `okayspace-db` — a free Postgres database
-   - `okayspace` — the Docker web service (the API)
+3. Pick your repo. Render reads `render.yaml` and shows two services:
+   - `okayspace-v0vx` — the Docker web service (the API)
    - `okayspace-web` — a static site (the Expo app exported for the web)
-4. It will prompt for a few values:
-   - `FSQ_API_KEY` (backend) → leave blank (only needed for Foursquare matching).
+4. It will prompt for the `sync: false` values (Render never reads these from
+   git). The important ones:
+   - `DATABASE_URL` (backend) → paste your external Postgres DSN from Step 2a.
+     **Required** — the API has no data without it.
    - `EXPO_PUBLIC_BACKEND_URL` (web) → the API's URL. If you don't know it yet,
      it's `https://okayspace-v0vx.onrender.com` (Render names it after the
      service). You can also leave it blank now and set it after the first
      deploy, then re-deploy the static site — see the note in Step 2b.
    - `EXPO_PUBLIC_MAPBOX_TOKEN` (web) → a Mapbox **public** token (for maps).
-
-   You do **not** need to enter a database URL — Render creates the Postgres
-   instance and injects its connection string into the API as `DATABASE_URL`
-   automatically (that's the `fromDatabase` block in `render.yaml`).
-5. Click **Apply**. Render creates the database, builds the Docker image and the
-   web bundle, and deploys. Watch the API logs for `Uvicorn running`.
+   - `FSQ_API_KEY` and other backend keys → optional, leave blank to skip.
+5. Click **Apply**. Render builds the Docker image and the web bundle, then
+   deploys. Watch the API logs for `Uvicorn running`.
 6. Render gives you a backend URL like `https://okayspace-v0vx.onrender.com` and a
    web URL like `https://okayspace.ca`.
 
@@ -63,12 +81,10 @@ deploy**. The web app will then talk to your API.
 `{"status":"ok"}`. The tables are created automatically on first use, so there
 is no migration step.
 
-> Free-plan notes:
-> - The web service spins down after ~15 min idle, so the first request after a
->   nap takes ~30s to wake. Upgrade to the $7/mo plan to keep it always-on.
-> - The **free Postgres database expires after 30 days.** For anything
->   long-lived, upgrade the database to a paid tier (or point `DATABASE_URL` at
->   another Postgres provider such as Neon or Supabase — see below).
+> Free-plan note: the web service spins down after ~15 min idle, so the first
+> request after a nap takes ~30s to wake. Upgrade to the $7/mo plan to keep it
+> always-on. (Your database is external, so it isn't affected by Render's free
+> tier — pick a provider whose free tier doesn't expire, like Neon.)
 
 ---
 
@@ -116,12 +132,13 @@ A successful response returns a `session_token` and your user object.
 
 ---
 
-## Using a different Postgres (Neon, Supabase, your own)
+## Letting Render manage the database instead
 
-If you'd rather manage the database yourself, delete the `databases:` block in
-`render.yaml`, then in the Render dashboard set `DATABASE_URL` to your own
-Postgres connection string (the `postgresql://user:pass@host/db` form that
-`asyncpg` accepts). Everything else stays the same.
+The default is an external Postgres (Step 2a). If you'd rather Render host it,
+**uncomment** the `databases:` block in `render.yaml` and change the backend's
+`DATABASE_URL` from `sync: false` back to a `fromDatabase` reference — Render
+then creates the instance and injects the connection string automatically. Note
+its free Postgres expires after 30 days, so this suits short-lived demos only.
 
 ---
 
@@ -129,7 +146,7 @@ Postgres connection string (the `postgresql://user:pass@host/db` form that
 
 | Variable        | Required | Purpose                                                        |
 |-----------------|----------|----------------------------------------------------------------|
-| `DATABASE_URL`  | yes      | Postgres DSN. Provided automatically by the Render Blueprint.  |
+| `DATABASE_URL`  | yes      | External Postgres DSN (`asyncpg`). Set it in the dashboard (`sync: false`). |
 | `CORS_ORIGINS`  | no       | Comma-separated allowed origins, or `*` (default).             |
 | `FSQ_API_KEY`   | no       | Foursquare key for place matching. Safe to leave blank.        |
 | `PORT`          | no       | Set by the host; the server binds to it (defaults to 8080).    |
