@@ -75,12 +75,12 @@ Generate API keys in the app: **Settings → Developer API → Generate**. Keys 
 shown once; store them securely. Revoke anytime from the same screen.
 
 ```bash
-curl https://okayspace-v0vx.onrender.com/api/posts/feed \
+curl https://okayspace-v0vx.onrender.com/api/feed/home \
   -H "Authorization: Bearer $OKAYSPACE_KEY"
 ```
 
 ```js
-const res = await fetch("https://okayspace-v0vx.onrender.com/api/posts/feed", {
+const res = await fetch("https://okayspace-v0vx.onrender.com/api/feed/home", {
   headers: { Authorization: `Bearer ${process.env.OKAYSPACE_KEY}` },
 });
 const feed = await res.json();
@@ -89,7 +89,7 @@ const feed = await res.json();
 ```python
 import requests
 r = requests.get(
-    "https://okayspace-v0vx.onrender.com/api/posts/feed",
+    "https://okayspace-v0vx.onrender.com/api/feed/home",
     headers={"Authorization": f"Bearer {OKAYSPACE_KEY}"},
 )
 feed = r.json()
@@ -204,7 +204,7 @@ curl -X POST $API/auth/login -H 'Content-Type: application/json' \
 # → { session_token, user }
 
 # Authenticated read
-curl $API/posts/feed -H "Authorization: Bearer $TOKEN"
+curl $API/feed/home -H "Authorization: Bearer $TOKEN"
 
 # Create a post (text + audience)
 curl -X POST $API/posts -H "Authorization: Bearer $TOKEN" \
@@ -250,7 +250,7 @@ class OkaySpace {
       {'Authorization': 'Bearer $token', 'Content-Type': 'application/json'};
 
   Future<List<dynamic>> feed() async {
-    final r = await http.get(Uri.parse('$api/posts/feed'), headers: _auth);
+    final r = await http.get(Uri.parse('$api/feed/home'), headers: _auth);
     return jsonDecode(r.body) as List<dynamic>;
   }
 

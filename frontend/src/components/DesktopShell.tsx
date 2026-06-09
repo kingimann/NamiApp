@@ -198,7 +198,8 @@ export default function DesktopShell({ children }: { children: React.ReactNode }
 const styles = StyleSheet.create({
   row: { flex: 1, flexDirection: "row", backgroundColor: theme.bg, justifyContent: "center" },
   rail: {
-    width: RAIL_W, paddingHorizontal: 12, paddingVertical: 16,
+    width: RAIL_W, flexGrow: 0, flexShrink: 0, flexBasis: RAIL_W,
+    paddingHorizontal: 12, paddingVertical: 16,
     borderRightWidth: StyleSheet.hairlineWidth, borderRightColor: theme.border,
     backgroundColor: theme.bg,
   },
@@ -221,9 +222,12 @@ const styles = StyleSheet.create({
     borderRightWidth: StyleSheet.hairlineWidth, borderRightColor: theme.border,
     borderLeftWidth: StyleSheet.hairlineWidth, borderLeftColor: theme.border,
   },
-  // Right rail — same width as the left nav rail.
+  // Right rail — same width as the left nav rail. A ScrollView defaults to
+  // flex-grow, which let it expand wider than the left View; pin it like the
+  // rail so the two stay identical.
   right: {
-    width: RAIL_W, paddingHorizontal: 12,
+    width: RAIL_W, flexGrow: 0, flexShrink: 0, flexBasis: RAIL_W,
+    paddingHorizontal: 12,
     borderLeftWidth: StyleSheet.hairlineWidth, borderLeftColor: theme.border,
     backgroundColor: theme.bg,
   },
