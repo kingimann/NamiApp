@@ -268,7 +268,7 @@ export default function SellerProfileScreen() {
         <View style={styles.backdrop}>
           <TouchableOpacity style={StyleSheet.absoluteFill} activeOpacity={1} onPress={() => !saving && setWriteOpen(false)} />
           <View style={[styles.sheet, { paddingBottom: insets.bottom + 20 }]}>
-            <View style={styles.handle} />
+            <View style={styles.sheetHandle} />
             <Text style={styles.sheetTitle}>Rate this trade</Text>
             {REVIEW_CATEGORIES.map((c) => (
               <View key={c.key} style={styles.catRow}>
@@ -403,7 +403,7 @@ const styles = StyleSheet.create({
 
   backdrop: { flex: 1, backgroundColor: "rgba(0,0,0,0.5)", justifyContent: "flex-end" },
   sheet: { backgroundColor: theme.surface, borderTopLeftRadius: 22, borderTopRightRadius: 22, paddingTop: 12, paddingHorizontal: 18, borderTopWidth: 1, borderColor: theme.border },
-  handle: { alignSelf: "center", width: 40, height: 4, borderRadius: 2, backgroundColor: theme.borderStrong, marginBottom: 14 },
+  sheetHandle: { alignSelf: "center", width: 40, height: 4, borderRadius: 2, backgroundColor: theme.borderStrong, marginBottom: 14 },
   sheetTitle: { color: theme.textPrimary, fontSize: 18, fontWeight: "800", textAlign: "center", marginBottom: 14 },
   starPick: { flexDirection: "row", justifyContent: "center", gap: 8, marginBottom: 16 },
   catRow: { flexDirection: "row", alignItems: "center", justifyContent: "space-between", marginBottom: 12 },

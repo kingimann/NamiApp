@@ -148,6 +148,7 @@ export default function CommunityScreen() {
               onDislike={onDislike}
               onRepost={onRepost}
               onBookmark={onBookmark}
+              onReply={(p) => setCommentsPost(p)}
               onComments={(p) => setCommentsPost(p)}
             />)
           )}

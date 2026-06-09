@@ -306,7 +306,7 @@ export default function AdminRoadsideCallsScreen() {
               )}
               {!!c.helper && <Text style={styles.detail}>🦺 Helper: {c.helper.name}{c.helper.phone ? ` · ${c.helper.phone}` : ""}</Text>}
               <Text style={styles.detailMuted}>Created {fmt(c.created_at)}{c.accepted_at ? ` · Accepted ${fmt(c.accepted_at)}` : ""}{c.completed_at ? ` · Done ${fmt(c.completed_at)}` : ""}</Text>
-              {(c.total || 0) > 0 && <Text style={styles.detailMuted}>{c.payment_method} · ${"" + c.total.toFixed(2)}{c.settled ? " · settled" : c.held ? " · held" : ""}</Text>}
+              {(c.total || 0) > 0 && <Text style={styles.detailMuted}>{c.payment_method} · ${"" + (c.total || 0).toFixed(2)}{c.settled ? " · settled" : c.held ? " · held" : ""}</Text>}
             </View>
           ))
         )}
