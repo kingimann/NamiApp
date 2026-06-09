@@ -1072,6 +1072,7 @@ export type User = {
   twofa_enabled?: boolean;
   sms_notifications?: boolean;
   bio?: string;
+  status?: string | null;
   headline?: string | null;
   location?: string | null;
   pronouns?: string | null;
@@ -1107,6 +1108,7 @@ export type User = {
 };
 export type ProfilePatch = {
   name?: string; bio?: string; picture?: string;
+  status?: string | null;
   headline?: string | null;
   location?: string | null; pronouns?: string | null; birthday?: string | null;
   socials?: Record<string, string>;
@@ -1265,6 +1267,7 @@ export type PublicUser = {
   username?: string | null;
   picture?: string | null;
   bio?: string;
+  status?: string | null;
   headline?: string | null;
   location?: string | null;
   pronouns?: string | null;

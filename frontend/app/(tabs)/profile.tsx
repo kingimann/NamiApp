@@ -17,6 +17,7 @@ import {
   ACCENT_COLORS, resolveAccent, isValidHex, accentGradient,
   normalizeLinkUrl, prettyLinkLabel,
   AVATAR_FRAMES, PROFILE_BACKGROUNDS, frameColors, backgroundColors,
+  THEME_PRESETS,
 } from "@/src/lib/profileCustomize";
 import { AvatarFrame, ProfileBackground } from "@/src/components/ProfileDecor";
 import { consumeEditProfileIntent } from "@/src/lib/editProfileIntent";
@@ -29,7 +30,7 @@ import BirthdayPicker from "@/src/components/BirthdayPicker";
 import { SOCIAL_PLATFORMS, SOCIAL_BY_KEY, socialUrl, fmtBirthday } from "@/src/lib/socials";
 import AdSlot from "@/src/components/AdSlot";
 import { interleaveAds, isAd } from "@/src/lib/ads";
-import { DEFAULT_AVATARS } from "@/src/lib/avatars";
+import { AVATAR_STYLES, avatarsForStyle } from "@/src/lib/avatars";
 
 const DEFAULT_AVATAR =
   "https://images.unsplash.com/photo-1544005313-94ddf0286df2?crop=entropy&cs=srgb&fm=jpg&ixid=M3w4NTYxOTJ8MHwxfHNlYXJjaHwxfHxwb3J0cmFpdCUyMHBlcnNvbnxlbnwwfHx8fDE3ODA1NTgzMjh8MA&ixlib=rb-4.1.0&q=85";
@@ -60,6 +61,7 @@ export default function ProfileScreen() {
   const [editPronouns, setEditPronouns] = useState("");
   const [editBirthday, setEditBirthday] = useState("");
   const [editSocials, setEditSocials] = useState<Record<string, string>>({});
+  const [editStatus, setEditStatus] = useState("");
   const [editHeadline, setEditHeadline] = useState("");
   const [editAccent, setEditAccent] = useState("");
   const [editInterests, setEditInterests] = useState<string[]>([]);
@@ -74,6 +76,8 @@ export default function ProfileScreen() {
   const [uploadingAvatar, setUploadingAvatar] = useState(false);
   const [uploadingCover, setUploadingCover] = useState(false);
   const [avatarPickerOpen, setAvatarPickerOpen] = useState(false);
+  const [avatarStyle, setAvatarStyle] = useState(AVATAR_STYLES[0].key);
+  const [avatarSalt, setAvatarSalt] = useState(0);
   const [myPosts, setMyPosts] = useState<Post[]>([]);
   const [replies, setReplies] = useState<Post[] | null>(null);
   const [reposts, setReposts] = useState<Post[] | null>(null);
@@ -257,6 +261,7 @@ export default function ProfileScreen() {
     setEditPronouns(user?.pronouns || "");
     setEditBirthday(user?.birthday || "");
     setEditSocials({ ...(user?.socials || {}) });
+    setEditStatus(user?.status || "");
     setEditHeadline(user?.headline || "");
     setEditAccent(user?.accent_color || "");
     setEditInterests([...(user?.interests || [])]);
@@ -356,6 +361,7 @@ export default function ProfileScreen() {
         name: editName, bio: editBio,
         location: editLocation, pronouns: editPronouns, birthday: editBirthday,
         socials: editSocials,
+        status: editStatus,
         headline: editHeadline,
         accent_color: editAccent && isValidHex(editAccent) ? editAccent : "",
         interests: editInterests,
@@ -449,6 +455,11 @@ export default function ProfileScreen() {
             <Text style={styles.name} numberOfLines={1}>{user?.name || "Explorer"}</Text>
             {!!user?.username && (
               <Text style={[styles.handle, { color: accent }]} numberOfLines={1}>@{user.username}</Text>
+            )}
+            {!!user?.status && (
+              <View style={[styles.statusPillP, { borderColor: accent + "55" }]}>
+                <Text style={styles.statusPillText} numberOfLines={1}>{user.status}</Text>
+              </View>
             )}
             {!!user?.headline && <Text style={styles.headline} numberOfLines={2}>{user.headline}</Text>}
             {!!user?.bio && <Text style={styles.bio}>{user.bio}</Text>}
@@ -718,23 +729,45 @@ export default function ProfileScreen() {
       <Modal visible={avatarPickerOpen} transparent animationType="slide" onRequestClose={() => setAvatarPickerOpen(false)}>
         <View style={styles.modalBackdrop}>
           <TouchableOpacity style={StyleSheet.absoluteFill} onPress={() => setAvatarPickerOpen(false)} />
-          <View style={[styles.modalSheet, { paddingBottom: insets.bottom + 24 }]}>
+          <View style={[styles.modalSheet, { paddingBottom: insets.bottom + 24, maxHeight: "86%" }]}>
             <View style={styles.sheetHandle} />
-            <Text style={[styles.modalTitle, { marginBottom: 2 }]}>Profile picture</Text>
-            <Text style={styles.avPickerSub}>Pick a default avatar or upload your own.</Text>
-            <View style={styles.avGrid}>
-              {DEFAULT_AVATARS.map((url) => {
-                const selected = user?.picture === url;
+            <View style={styles.avHeaderRow}>
+              <Text style={[styles.modalTitle, { marginBottom: 0 }]}>Profile picture</Text>
+              <TouchableOpacity style={styles.shuffleBtn} onPress={() => setAvatarSalt((n) => n + 1)} testID="avatar-shuffle">
+                <Ionicons name="shuffle" size={16} color={theme.primary} />
+                <Text style={styles.shuffleText}>Shuffle</Text>
+              </TouchableOpacity>
+            </View>
+            <Text style={styles.avPickerSub}>Pick a style, choose an avatar, or upload your own.</Text>
+
+            {/* Style selector */}
+            <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={{ gap: 8, paddingVertical: 2 }} style={{ flexGrow: 0, marginBottom: 12 }}>
+              {AVATAR_STYLES.map((s) => {
+                const on = avatarStyle === s.key;
                 return (
-                  <TouchableOpacity key={url} onPress={() => pickDefaultAvatar(url)} style={[styles.avCell, selected && styles.avCellOn]} testID={`avatar-${url}`}>
-                    <Image source={{ uri: url }} style={styles.avImg} />
-                    {selected ? (
-                      <View style={styles.avCheck}><Ionicons name="checkmark" size={14} color="#fff" /></View>
-                    ) : null}
+                  <TouchableOpacity key={s.key} style={[styles.styleChip, on && styles.styleChipOn]} onPress={() => setAvatarStyle(s.key)} testID={`avatar-style-${s.key}`}>
+                    <Text style={[styles.styleChipText, on && { color: "#fff" }]}>{s.label}</Text>
                   </TouchableOpacity>
                 );
               })}
-            </View>
+            </ScrollView>
+
+            <ScrollView style={{ flexShrink: 1 }} showsVerticalScrollIndicator={false}>
+              <View style={styles.avGrid}>
+                {avatarsForStyle(avatarStyle, 24, avatarSalt).map((url) => {
+                  const selected = user?.picture === url;
+                  return (
+                    <TouchableOpacity key={url} onPress={() => pickDefaultAvatar(url)} style={[styles.avCell, selected && styles.avCellOn]} testID={`avatar-${url}`}>
+                      <Image source={{ uri: url }} style={styles.avImg} />
+                      {selected ? (
+                        <View style={styles.avCheck}><Ionicons name="checkmark" size={14} color="#fff" /></View>
+                      ) : null}
+                    </TouchableOpacity>
+                  );
+                })}
+              </View>
+            </ScrollView>
+
             <TouchableOpacity style={styles.avUploadBtn} onPress={uploadPhoto} testID="avatar-upload">
               <Ionicons name="image-outline" size={18} color="#fff" />
               <Text style={styles.avUploadText}>Upload a photo</Text>
@@ -828,9 +861,49 @@ export default function ProfileScreen() {
               testID="edit-headline"
             />
             <Text style={styles.helper}>{editHeadline.length}/60</Text>
+
+            <Text style={styles.label}>Status</Text>
+            <TextInput
+              style={styles.input}
+              value={editStatus}
+              onChangeText={setEditStatus}
+              placeholder="🎯 Focusing · 🎮 Gaming · 🌴 On vacation"
+              placeholderTextColor={theme.textMuted}
+              maxLength={50}
+              testID="edit-status"
+            />
+            <Text style={styles.helper}>{editStatus.length}/50</Text>
             </>)}
 
             {editTab === "look" && (<>
+            <Text style={styles.label}>Theme presets</Text>
+            <Text style={styles.helper2}>One tap to set a coordinated accent, background & frame.</Text>
+            <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={{ gap: 10, paddingVertical: 2 }}>
+              {THEME_PRESETS.map((p) => {
+                const on = (editAccent || "") === p.accent && editBg === p.background && editFrame === p.frame;
+                return (
+                  <TouchableOpacity
+                    key={p.key}
+                    style={[styles.pickItem, on && styles.pickItemOn]}
+                    onPress={() => { setEditAccent(p.accent); setEditBg(p.background); setEditFrame(p.frame); }}
+                    testID={`theme-${p.key}`}
+                  >
+                    <View>
+                      <LinearGradient
+                        colors={(backgroundColors(p.background).length >= 2 ? backgroundColors(p.background) : [theme.surfaceAlt, theme.surface]) as any}
+                        start={{ x: 0, y: 0 }} end={{ x: 1, y: 1 }}
+                        style={styles.themeSwatch}
+                      >
+                        <View style={[styles.themeDot, { backgroundColor: resolveAccent(p.accent) }]} />
+                      </LinearGradient>
+                      {on ? <View style={styles.checkBadge}><Ionicons name="checkmark" size={12} color="#fff" /></View> : null}
+                    </View>
+                    <Text style={[styles.frameLabel, on && { color: theme.primary, fontWeight: "800" }]}>{p.label}</Text>
+                  </TouchableOpacity>
+                );
+              })}
+            </ScrollView>
+
             <Text style={styles.label}>Accent color</Text>
             <View style={styles.swatchRow}>
               {ACCENT_COLORS.map((c) => {
@@ -1099,7 +1172,13 @@ const styles = StyleSheet.create({
     backgroundColor: theme.surface,
   },
   avatar: { width: 96, height: 96, borderRadius: 48, backgroundColor: theme.surfaceAlt },
-  avPickerSub: { color: theme.textMuted, fontSize: 13, marginTop: 2, marginBottom: 14 },
+  avPickerSub: { color: theme.textMuted, fontSize: 13, marginTop: 4, marginBottom: 14 },
+  avHeaderRow: { flexDirection: "row", alignItems: "center", justifyContent: "space-between" },
+  shuffleBtn: { flexDirection: "row", alignItems: "center", gap: 5, backgroundColor: theme.surfaceAlt, borderWidth: 1, borderColor: theme.border, borderRadius: 20, paddingHorizontal: 12, paddingVertical: 7 },
+  shuffleText: { color: theme.primary, fontSize: 13, fontWeight: "800" },
+  styleChip: { paddingHorizontal: 14, paddingVertical: 8, borderRadius: 18, backgroundColor: theme.surface, borderWidth: 1, borderColor: theme.border },
+  styleChipOn: { backgroundColor: theme.primary, borderColor: theme.primary },
+  styleChipText: { color: theme.textSecondary, fontSize: 13, fontWeight: "700" },
   avGrid: { flexDirection: "row", flexWrap: "wrap", gap: 12, justifyContent: "center" },
   avCell: { width: 64, height: 64, borderRadius: 32, borderWidth: 2, borderColor: "transparent", overflow: "hidden", backgroundColor: theme.surfaceAlt },
   avCellOn: { borderColor: theme.primary },
@@ -1258,6 +1337,8 @@ const styles = StyleSheet.create({
     backgroundColor: "rgba(0,0,0,0.45)", alignItems: "center", justifyContent: "center",
   },
   headline: { color: theme.textSecondary, fontSize: 14, fontWeight: "600", marginTop: 6, textAlign: "center", paddingHorizontal: 8 },
+  statusPillP: { marginTop: 8, borderWidth: 1, borderRadius: 16, paddingHorizontal: 12, paddingVertical: 6, backgroundColor: theme.surfaceAlt, maxWidth: "90%" },
+  statusPillText: { color: theme.textPrimary, fontSize: 13, fontWeight: "600" },
   interestWrap: { flexDirection: "row", flexWrap: "wrap", justifyContent: "center", gap: 7, marginTop: 12 },
   interestChip: { borderWidth: 1, borderRadius: 14, paddingHorizontal: 11, paddingVertical: 5 },
   interestText: { fontSize: 12.5, fontWeight: "700" },
@@ -1301,6 +1382,8 @@ const styles = StyleSheet.create({
   frameLabel: { color: theme.textMuted, fontSize: 11, fontWeight: "600", marginTop: 5 },
   bgGrid: { flexDirection: "row", flexWrap: "wrap", gap: 8 },
   bgCell: { width: 66, height: 44, borderRadius: 10 },
+  themeSwatch: { width: 56, height: 56, borderRadius: 28, alignItems: "center", justifyContent: "center" },
+  themeDot: { width: 22, height: 22, borderRadius: 11, borderWidth: 2, borderColor: "rgba(255,255,255,0.85)" },
   // Shared selectable tile (frames + backgrounds): a highlighted ring + filled
   // check badge make the current selection unmistakable.
   pickItem: { alignItems: "center", padding: 6, borderRadius: 14, borderWidth: 2, borderColor: "transparent" },
