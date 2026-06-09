@@ -12,13 +12,8 @@ export default function Root({ children }: PropsWithChildren) {
           name="viewport"
           content="width=device-width, initial-scale=1, maximum-scale=1, minimum-scale=1, user-scalable=no, viewport-fit=cover, shrink-to-fit=no, interactive-widget=resizes-content"
         />
-        {/* Make the web build installable + open standalone, like a native app. */}
-        <link rel="manifest" href="/manifest.json" />
+        {/* Plain website — no PWA install / standalone "app" treatment on PC. */}
         <meta name="theme-color" content="#0B141A" />
-        <meta name="mobile-web-app-capable" content="yes" />
-        <meta name="apple-mobile-web-app-capable" content="yes" />
-        <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
-        <meta name="apple-mobile-web-app-title" content="OkaySpace" />
         <link rel="apple-touch-icon" href="/icon.png" />
         {/*
           Disable body scrolling on web to make ScrollView components work correctly.
@@ -48,18 +43,19 @@ export default function Root({ children }: PropsWithChildren) {
               /* ---- Native-app feel in the browser ---- */
               html { background: #000; -webkit-text-size-adjust: 100%; text-size-adjust: 100%; }
               body { background: #0B141A; -webkit-font-smoothing: antialiased; -moz-osx-font-smoothing: grayscale; }
-              /* No text selection or long-press callout (feels like an app, not a page).
-                 Inputs and anything React Native marks selectable stay selectable. */
-              * { -webkit-tap-highlight-color: transparent; -webkit-touch-callout: none;
-                  -webkit-user-select: none; -moz-user-select: none; -ms-user-select: none; user-select: none; }
-              input, textarea, [contenteditable="true"], [data-selectable="true"] {
-                  -webkit-user-select: text; -moz-user-select: text; -ms-user-select: text; user-select: text; -webkit-touch-callout: default; }
-              /* Hide scrollbars everywhere — app screens scroll internally. */
-              * { scrollbar-width: none; -ms-overflow-style: none; -webkit-overflow-scrolling: touch; }
-              *::-webkit-scrollbar { display: none; width: 0; height: 0; }
-              /* No image drag ghost / blue focus ring on tappables. */
-              img, a { -webkit-user-drag: none; user-drag: none; }
-              :focus { outline: none; }
+              /* App-like touch behaviours (no text selection, hidden scrollbars,
+                 no long-press callout / image drag) apply ONLY to touch devices.
+                 On desktop (fine pointer) it stays a normal website: text is
+                 selectable, scrollbars show, and images/links behave normally. */
+              @media (pointer: coarse) {
+                * { -webkit-tap-highlight-color: transparent; -webkit-touch-callout: none;
+                    -webkit-user-select: none; -moz-user-select: none; -ms-user-select: none; user-select: none; }
+                input, textarea, [contenteditable="true"], [data-selectable="true"] {
+                    -webkit-user-select: text; -moz-user-select: text; -ms-user-select: text; user-select: text; -webkit-touch-callout: default; }
+                * { scrollbar-width: none; -ms-overflow-style: none; -webkit-overflow-scrolling: touch; }
+                *::-webkit-scrollbar { display: none; width: 0; height: 0; }
+                img, a { -webkit-user-drag: none; user-drag: none; }
+              }
 
               /* Branded launch screen shown while the app boots (and on PWA cold start). */
               #nami-splash {

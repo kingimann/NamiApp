@@ -16,8 +16,8 @@ import { api, LeaderboardEntry } from "@/src/api/client";
 const DESKTOP_BP = 900;
 const WIDE_BP = 1180;
 const RAIL_W = 244;
-const RIGHT_W = 320;
-const CONTENT_MAX = 680;
+const RIGHT_W = 280;
+const CONTENT_MAX = 760;
 
 type Item = {
   label: string;
