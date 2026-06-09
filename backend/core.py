@@ -456,10 +456,8 @@ def _needs_policy_agreement(d: dict) -> bool:
 
 
 # ── Snapscore-style activity points ─────────────────────────────────────────
-# Users earn points for being active and creating content. Tunable here.
-ACTIVE_POINTS_PER_TICK = 1   # awarded per presence heartbeat (rate-limited)
-ACTIVE_TICK_SECONDS = 45     # min gap between awarded ticks (anti-farm)
-ACTIVE_POINTS_DAILY_CAP = 300  # max activity (heartbeat) points earnable per day
+# Users earn points for real activity — creating content and engaging — never
+# just for being online. Tunable here.
 POINTS_PER_POST = 5
 POINTS_PER_STORY = 3
 POINTS_PER_MESSAGE = 1

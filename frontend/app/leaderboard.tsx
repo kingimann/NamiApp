@@ -56,7 +56,7 @@ export default function LeaderboardScreen() {
           contentContainerStyle={{ padding: 14, paddingBottom: insets.bottom + 24, gap: 8 }}
           refreshControl={<RefreshControl refreshing={refreshing} onRefresh={() => { setRefreshing(true); load(); }} tintColor={theme.primary} colors={[theme.primary]} />}
           ListEmptyComponent={<Text style={styles.empty}>No scores yet — be the first to earn points!</Text>}
-          ListHeaderComponent={<Text style={styles.sub}>Top members by activity points. Earn points by being active, posting, and connecting.</Text>}
+          ListHeaderComponent={<Text style={styles.sub}>Top members by activity points. Earn points by posting, sharing stories, messaging, and connecting.</Text>}
           renderItem={({ item }) => {
             const medal = item.rank <= 3 ? MEDAL[item.rank - 1] : null;
             return (
