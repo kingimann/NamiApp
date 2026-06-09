@@ -231,7 +231,7 @@ export default function PostCard({
           <Text style={styles.repostBannerText} numberOfLines={1}>Pinned</Text>
         </View>
       )}
-      <View style={styles.cardTop}>
+      <View style={styles.row}>
         <TouchableOpacity
           style={styles.avatar}
           onPress={openAuthorProfile}
@@ -246,8 +246,10 @@ export default function PostCard({
             </Text>
           )}
         </TouchableOpacity>
-        <View style={{ flex: 1 }}>
-          <View style={{ flexDirection: "row", alignItems: "center", gap: 6 }}>
+        <View style={styles.col}>
+          <View style={styles.headerRow}>
+          <View style={{ flex: 1 }}>
+          <View style={{ flexDirection: "row", alignItems: "center", gap: 6, flexWrap: "wrap" }}>
             <TouchableOpacity
               onPress={openAuthorProfile}
               hitSlop={{ top: 6, bottom: 6, left: 4, right: 4 }}
@@ -449,6 +451,8 @@ export default function PostCard({
             </View>
           )
         )}
+      </View>
+        </View>
       </View>
 
       {shareCopied && (
@@ -754,18 +758,23 @@ const styles = StyleSheet.create({
   reportThanks: { color: theme.textPrimary, fontSize: 16, fontWeight: "700", marginTop: 10 },
   reportDone: { marginTop: 16, backgroundColor: theme.primary, borderRadius: 12, paddingVertical: 12, paddingHorizontal: 40 },
   reportDoneText: { color: "#fff", fontWeight: "800", fontSize: 14 },
+  // X-style: a flat full-width row separated by a hairline divider (no rounded
+  // card / gaps). Avatar sits in a left gutter; everything else is a right column.
   card: {
-    borderRadius: 18,
-    padding: 14, gap: 8,
-    ...GLASS,
+    backgroundColor: theme.bg,
+    paddingHorizontal: 16, paddingTop: 12, paddingBottom: 4, gap: 6,
+    borderBottomWidth: StyleSheet.hairlineWidth, borderBottomColor: theme.border,
   },
+  row: { flexDirection: "row", alignItems: "flex-start", gap: 12 },
+  col: { flex: 1, gap: 4, minWidth: 0 },
+  headerRow: { flexDirection: "row", alignItems: "center", gap: 6 },
   repostBanner: {
-    flexDirection: "row", alignItems: "center", gap: 6, marginBottom: -2,
+    flexDirection: "row", alignItems: "center", gap: 6, marginBottom: -2, marginLeft: 52,
   },
   repostBannerText: { color: theme.textMuted, fontSize: 12, fontWeight: "600", flex: 1 },
   cardTop: { flexDirection: "row", alignItems: "center", gap: 10 },
   avatar: {
-    width: 38, height: 38, borderRadius: 19, overflow: "hidden",
+    width: 44, height: 44, borderRadius: 22, overflow: "hidden",
     backgroundColor: theme.primary,
     alignItems: "center", justifyContent: "center",
   },
@@ -800,13 +809,12 @@ const styles = StyleSheet.create({
   factcheckTitle: { color: theme.primary, fontSize: 12.5, fontWeight: "800" },
   factcheckText: { color: theme.textPrimary, fontSize: 13.5, lineHeight: 18.5 },
   factcheckMore: { color: theme.textMuted, fontSize: 11.5, fontWeight: "600", marginTop: 6 },
+  // X-style: actions spread across the column width (no top divider).
   actionsRow: {
-    flexDirection: "row", alignItems: "center", flexWrap: "wrap",
-    columnGap: 18, rowGap: 6,
-    paddingTop: 9, marginTop: 4,
-    borderTopWidth: StyleSheet.hairlineWidth, borderTopColor: theme.border,
+    flexDirection: "row", alignItems: "center", justifyContent: "space-between",
+    maxWidth: 420, marginTop: 8,
   },
-  actionBtn: { flexDirection: "row", alignItems: "center", gap: 5 },
+  actionBtn: { flexDirection: "row", alignItems: "center", gap: 6 },
   copiedPill: { position: "absolute", alignSelf: "center", bottom: 16, flexDirection: "row", alignItems: "center", gap: 6, backgroundColor: "rgba(0,0,0,0.85)", borderRadius: 999, paddingHorizontal: 14, paddingVertical: 8 },
   copiedText: { color: "#fff", fontSize: 13, fontWeight: "700" },
   actionText: { color: theme.textSecondary, fontSize: 12, fontWeight: "600" },
