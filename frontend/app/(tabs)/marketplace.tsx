@@ -6,7 +6,7 @@ import {
 } from "react-native";
 import { SafeAreaView, useSafeAreaInsets } from "react-native-safe-area-context";
 import { Ionicons } from "@/src/platform/icons";
-import { useFocusEffect, useRouter, useLocalSearchParams } from "expo-router";
+import { useFocusEffect, useRouter, useLocalSearchParams } from "@/src/platform/navigation";
 import * as ImagePicker from "@/src/platform/image-picker";
 import { pickImages } from "@/src/utils/thumbnail";
 import * as Location from "expo-location";

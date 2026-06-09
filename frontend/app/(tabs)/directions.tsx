@@ -5,7 +5,7 @@ import {
 } from "react-native";
 import { SafeAreaView, useSafeAreaInsets } from "react-native-safe-area-context";
 import { Ionicons } from "@/src/platform/icons";
-import { useLocalSearchParams, useRouter } from "expo-router";
+import { useLocalSearchParams, useRouter } from "@/src/platform/navigation";
 import { safeBack } from "@/src/utils/nav";
 import * as Location from "expo-location";
 import * as Speech from "@/src/platform/speech";

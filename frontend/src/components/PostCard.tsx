@@ -3,7 +3,7 @@ import {
   View, Text, StyleSheet, TouchableOpacity, Image, Modal, Pressable, ActivityIndicator, Share, ScrollView, Animated, Platform,
 } from "react-native";
 import { Ionicons } from "@/src/platform/icons";
-import { useRouter } from "expo-router";
+import { useRouter } from "@/src/platform/navigation";
 import { api, Post, PostAnalytics } from "@/src/api/client";
 import { theme } from "@/src/theme";
 import MediaGrid from "./MediaGrid";

@@ -4,7 +4,7 @@ import {
 } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
 import { Ionicons } from "@/src/platform/icons";
-import { Stack, useRouter } from "expo-router";
+import { Stack, useRouter } from "@/src/platform/navigation";
 import { safeBack } from "@/src/utils/nav";
 import { useSidebarMenu, SIDEBAR_CATALOG, SidebarItem, MAX_ITEMS } from "@/src/context/SidebarMenuContext";
 import { theme } from "@/src/theme";

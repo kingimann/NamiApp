@@ -8,7 +8,7 @@ import { Ionicons } from "@/src/platform/icons";
 import { LinearGradient } from "@/src/platform/linear-gradient";
 import * as ImagePicker from "@/src/platform/image-picker";
 import { assetToUri } from "@/src/utils/thumbnail";
-import { useFocusEffect, useLocalSearchParams, useRouter } from "expo-router";
+import { useFocusEffect, useLocalSearchParams, useRouter } from "@/src/platform/navigation";
 import { useAuth } from "@/src/context/AuthContext";
 import { api, Post, mediaUri } from "@/src/api/client";
 import { theme } from "@/src/theme";

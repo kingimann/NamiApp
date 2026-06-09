@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import { Animated, Easing } from "react-native";
-import { useFocusEffect } from "expo-router";
+import { useFocusEffect } from "@/src/platform/navigation";
 
 /**
  * Drives a floating frosted top bar that slides up + fades out when the user

@@ -6,7 +6,7 @@ import {
 import { SafeAreaView, useSafeAreaInsets } from "react-native-safe-area-context";
 import { Ionicons } from "@/src/platform/icons";
 import * as ImagePicker from "@/src/platform/image-picker";
-import { Stack, useFocusEffect, useLocalSearchParams } from "expo-router";
+import { Stack, useFocusEffect, useLocalSearchParams } from "@/src/platform/navigation";
 import SignaturePad from "@/src/components/SignaturePad";
 import DatePickerField from "@/src/components/DatePickerField";
 import { forwardGeocode } from "@/src/api/mapbox";

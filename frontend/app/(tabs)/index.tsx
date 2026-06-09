@@ -25,7 +25,7 @@ import {
 import { SafeAreaView, useSafeAreaInsets } from "react-native-safe-area-context";
 import { Ionicons } from "@/src/platform/icons";
 import * as Location from "expo-location";
-import { useRouter, useFocusEffect } from "expo-router";
+import { useRouter, useFocusEffect } from "@/src/platform/navigation";
 import { useNavBar } from "@/src/context/NavBarContext";
 import { SidebarMenuButton } from "@/src/components/LeftSidebar";
 import {

@@ -4,7 +4,7 @@
 // iOS, and needs the project's EAS credentials).
 import { useEffect, useRef } from "react";
 import { Platform } from "react-native";
-import { router } from "expo-router";
+import { router } from "@/src/platform/navigation";
 import Constants from "@/src/platform/constants";
 import * as Device from "@/src/platform/device";
 import * as Notifications from "@/src/platform/notifications";

@@ -4,7 +4,7 @@ import {
 } from "react-native";
 import { SafeAreaView, useSafeAreaInsets } from "react-native-safe-area-context";
 import { Ionicons } from "@/src/platform/icons";
-import { Stack, useFocusEffect, useRouter } from "expo-router";
+import { Stack, useFocusEffect, useRouter } from "@/src/platform/navigation";
 import { safeBack } from "@/src/utils/nav";
 import * as ImagePicker from "@/src/platform/image-picker";
 import { api } from "@/src/api/client";

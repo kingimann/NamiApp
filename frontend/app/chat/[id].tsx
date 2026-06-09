@@ -18,7 +18,7 @@ import {
   RecordingPresets,
   setAudioModeAsync,
 } from "@/src/platform/audio";
-import { useLocalSearchParams, useRouter, useFocusEffect } from "expo-router";
+import { useLocalSearchParams, useRouter, useFocusEffect } from "@/src/platform/navigation";
 import { safeBack } from "@/src/utils/nav";
 import { api, Message, Post, PublicUser, CustomEmoji, FormDef, ScheduledMessage, mediaUri } from "@/src/api/client";
 import MediaGrid from "@/src/components/MediaGrid";

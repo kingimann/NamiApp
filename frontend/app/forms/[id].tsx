@@ -6,7 +6,7 @@ import {
 import { SafeAreaView, useSafeAreaInsets } from "react-native-safe-area-context";
 import { Ionicons } from "@/src/platform/icons";
 import * as Clipboard from "@/src/platform/clipboard";
-import { Stack, useFocusEffect, useLocalSearchParams, useRouter } from "expo-router";
+import { Stack, useFocusEffect, useLocalSearchParams, useRouter } from "@/src/platform/navigation";
 import { safeBack } from "@/src/utils/nav";
 import { api, FormDef, FormField, FormFieldType, FormSubmission } from "@/src/api/client";
 import { useConfirm } from "@/src/context/ConfirmContext";

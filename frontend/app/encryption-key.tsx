@@ -4,7 +4,7 @@ import {
 } from "react-native";
 import { SafeAreaView, useSafeAreaInsets } from "react-native-safe-area-context";
 import { Ionicons } from "@/src/platform/icons";
-import { Stack, useRouter } from "expo-router";
+import { Stack, useRouter } from "@/src/platform/navigation";
 import { safeBack } from "@/src/utils/nav";
 import { backupKey, restoreKey, hasBackup } from "@/src/utils/e2e";
 import { theme } from "@/src/theme";

@@ -4,7 +4,7 @@ import {
 } from "react-native";
 import { SafeAreaView, useSafeAreaInsets } from "react-native-safe-area-context";
 import { Ionicons } from "@/src/platform/icons";
-import { Stack, useLocalSearchParams, useRouter } from "expo-router";
+import { Stack, useLocalSearchParams, useRouter } from "@/src/platform/navigation";
 import { safeBack } from "@/src/utils/nav";
 import { api, PublicUser } from "@/src/api/client";
 import { useAuth } from "@/src/context/AuthContext";

@@ -3,7 +3,7 @@ import {
   View, Text, StyleSheet, ScrollView, TouchableOpacity, Image, Alert, ActivityIndicator,
 } from "react-native";
 import { Ionicons } from "@/src/platform/icons";
-import { useFocusEffect, useRouter } from "expo-router";
+import { useFocusEffect, useRouter } from "@/src/platform/navigation";
 import * as ImagePicker from "@/src/platform/image-picker";
 import { cloudinaryEnabled, uploadToCloudinary } from "@/src/api/cloudinary";
 import { api, StoryTrayItem } from "@/src/api/client";

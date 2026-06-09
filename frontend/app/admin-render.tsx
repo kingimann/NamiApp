@@ -4,7 +4,7 @@ import {
 } from "react-native";
 import { SafeAreaView, useSafeAreaInsets } from "react-native-safe-area-context";
 import { Ionicons } from "@/src/platform/icons";
-import { Stack, useFocusEffect } from "expo-router";
+import { Stack, useFocusEffect } from "@/src/platform/navigation";
 import { safeBack } from "@/src/utils/nav";
 import { api, RenderService, RenderEnvVar, RenderDeployRec } from "@/src/api/client";
 import { useConfirm } from "@/src/context/ConfirmContext";

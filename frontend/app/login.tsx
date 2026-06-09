@@ -5,7 +5,7 @@ import {
 } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
 import { Ionicons } from "@/src/platform/icons";
-import { useRouter } from "expo-router";
+import { useRouter } from "@/src/platform/navigation";
 import { theme } from "@/src/theme";
 import { GLASS } from "@/src/lib/glass";
 import { api } from "@/src/api/client";

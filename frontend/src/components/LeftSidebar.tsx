@@ -5,7 +5,7 @@ import {
 } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { Ionicons } from "@/src/platform/icons";
-import { useRouter, useFocusEffect } from "expo-router";
+import { useRouter, useFocusEffect } from "@/src/platform/navigation";
 import { useSidebar } from "@/src/context/SidebarContext";
 import { useSidebarMenu } from "@/src/context/SidebarMenuContext";
 import { useAuth } from "@/src/context/AuthContext";

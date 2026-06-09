@@ -1,4 +1,4 @@
-import { Stack, usePathname, useRouter } from "expo-router";
+import { Stack, usePathname, useRouter } from "@/src/platform/navigation";
 import * as SplashScreen from "@/src/platform/splash-screen";
 import { useEffect } from "react";
 import { StatusBar } from "@/src/platform/status-bar";

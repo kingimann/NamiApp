@@ -6,7 +6,7 @@ import {
 import { SafeAreaView, useSafeAreaInsets } from "react-native-safe-area-context";
 import { Ionicons } from "@/src/platform/icons";
 import * as Clipboard from "@/src/platform/clipboard";
-import { Stack, useFocusEffect, useRouter, useLocalSearchParams } from "expo-router";
+import { Stack, useFocusEffect, useRouter, useLocalSearchParams } from "@/src/platform/navigation";
 import { safeBack } from "@/src/utils/nav";
 import { api, WalletSummary, WalletTxn, WalletBalance, Topup } from "@/src/api/client";
 import { useAuth } from "@/src/context/AuthContext";
