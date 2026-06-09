@@ -658,6 +658,13 @@ async def send_message(
                 link_prev = await fetch_link_preview(url)
             except Exception:
                 link_prev = None
+    poll_question = None
+    poll_options: list = []
+    if body.type == "poll":
+        poll_question = (body.poll_question or "").strip()[:200]
+        poll_options = [o.strip()[:80] for o in (body.poll_options or []) if o and o.strip()][:6]
+        if not poll_question or len(poll_options) < 2:
+            raise HTTPException(status_code=400, detail="A poll needs a question and at least 2 options")
     now = datetime.now(timezone.utc)
     dsec = int(conv.get("disappearing_seconds") or 0)
     expires_at = now + timedelta(seconds=dsec) if dsec > 0 else None
@@ -688,6 +695,9 @@ async def send_message(
         "form_title": form_title,
         "amount": tip_amount,
         "link_preview": link_prev,
+        "poll_question": poll_question,
+        "poll_options": poll_options,
+        "poll_votes": {},
         "reactions": {},
         "reply_to_id": reply_to_id,
         "deleted": False,
@@ -875,6 +885,35 @@ async def summarize_conversation_route(
     if not summary:
         raise HTTPException(status_code=502, detail="Couldn't generate a summary, try again")
     return {"summary": summary}
+
+
+class PollVoteBody(BaseModel):
+    option: int
+
+
+@router.post("/conversations/{conv_id}/messages/{msg_id}/vote", response_model=Message)
+async def vote_poll(conv_id: str, msg_id: str, body: PollVoteBody, authorization: Optional[str] = Header(None)):
+    """Cast (or change/clear) your vote on a poll message. Voting the same
+    option again clears your vote."""
+    user = await get_current_user(authorization)
+    uid = user["user_id"]
+    conv = await db.conversations.find_one({"id": conv_id}, {"_id": 0})
+    if not conv or uid not in conv["participant_ids"]:
+        raise HTTPException(status_code=404, detail="Conversation not found")
+    m = await db.messages.find_one({"id": msg_id, "conversation_id": conv_id}, {"_id": 0})
+    if not m or m.get("type") != "poll" or m.get("deleted"):
+        raise HTTPException(status_code=404, detail="Poll not found")
+    opts = m.get("poll_options") or []
+    if not (0 <= int(body.option) < len(opts)):
+        raise HTTPException(status_code=400, detail="Invalid option")
+    votes = dict(m.get("poll_votes") or {})
+    if votes.get(uid) == int(body.option):
+        votes.pop(uid, None)            # toggle off
+    else:
+        votes[uid] = int(body.option)
+    await db.messages.update_one({"id": msg_id, "conversation_id": conv_id}, {"$set": {"poll_votes": votes}})
+    m2 = await db.messages.find_one({"id": msg_id, "conversation_id": conv_id}, {"_id": 0})
+    return Message(**_decrypt_msg(m2))
 
 
 @router.get("/conversations/{conv_id}/pinned", response_model=List[Message])

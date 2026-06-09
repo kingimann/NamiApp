@@ -132,6 +132,10 @@ export default function ChatScreen() {
   const [gifOpen, setGifOpen] = useState(false);
   const [contactOpen, setContactOpen] = useState(false);
   const [formOpen, setFormOpen] = useState(false);
+  const [pollOpen, setPollOpen] = useState(false);
+  const [pollQ, setPollQ] = useState("");
+  const [pollOpts, setPollOpts] = useState<string[]>(["", ""]);
+  const [pollSending, setPollSending] = useState(false);
   const [unlockOpen, setUnlockOpen] = useState(false);
   const [tipOpen, setTipOpen] = useState(false);
   const [optionsOpen, setOptionsOpen] = useState(false);
@@ -715,6 +719,46 @@ export default function ChatScreen() {
     try {
       const msg = await api.sendMessage(id, { type: "form", form_id: f.id });
       setMessages((m) => [...m, msg]);
+    } catch {}
+  };
+
+  const openPoll = () => {
+    setPollQ("");
+    setPollOpts(["", ""]);
+    setPollOpen(true);
+  };
+
+  const sendPoll = async () => {
+    if (!id) return;
+    const q = pollQ.trim();
+    const opts = pollOpts.map((o) => o.trim()).filter(Boolean).slice(0, 6);
+    if (!q || opts.length < 2) return;
+    setPollSending(true);
+    try {
+      const msg = await api.sendMessage(id, { type: "poll", poll_question: q, poll_options: opts });
+      setMessages((m) => [...m, msg]);
+      setPollOpen(false);
+    } catch {} finally {
+      setPollSending(false);
+    }
+  };
+
+  const votePollMessage = async (item: Message, option: number) => {
+    if (!id) return;
+    // Optimistic toggle so the bars react instantly.
+    const uid = user?.user_id;
+    setMessages((ms) => ms.map((m) => {
+      if (m.id !== item.id) return m;
+      const votes = { ...(m.poll_votes || {}) };
+      if (uid) {
+        if (votes[uid] === option) delete votes[uid];
+        else votes[uid] = option;
+      }
+      return { ...m, poll_votes: votes };
+    }));
+    try {
+      const updated = await api.votePollMessage(id, item.id, option);
+      setMessages((ms) => ms.map((m) => (m.id === item.id ? updated : m)));
     } catch {}
   };
 
@@ -1401,6 +1445,51 @@ export default function ChatScreen() {
                           )}
                         </View>
                       </View>
+                    ) : item.type === "poll" ? (
+                      (() => {
+                        const opts = item.poll_options || [];
+                        const votes = item.poll_votes || {};
+                        const counts = opts.map((_, i) => Object.values(votes).filter((v) => v === i).length);
+                        const total = counts.reduce((a, b) => a + b, 0);
+                        const myVote = user?.user_id ? votes[user.user_id] : undefined;
+                        return (
+                          <View style={styles.pollCard}>
+                            <View style={styles.pollHead}>
+                              <Ionicons name="stats-chart" size={15} color={mine ? "#fff" : theme.primary} />
+                              <Text style={[styles.pollQuestion, mine && { color: "#fff" }]} numberOfLines={4}>
+                                {item.poll_question || "Poll"}
+                              </Text>
+                            </View>
+                            {opts.map((opt, i) => {
+                              const pct = total > 0 ? Math.round((counts[i] / total) * 100) : 0;
+                              const picked = myVote === i;
+                              return (
+                                <TouchableOpacity
+                                  key={i}
+                                  activeOpacity={0.8}
+                                  style={styles.pollOpt}
+                                  onPress={() => votePollMessage(item, i)}
+                                  testID={`poll-opt-${item.id}-${i}`}
+                                >
+                                  <View style={[styles.pollBar, mine ? styles.pollBarMine : styles.pollBarOther, { width: `${pct}%` }]} />
+                                  <View style={styles.pollOptRow}>
+                                    <Ionicons
+                                      name={picked ? "checkmark-circle" : "ellipse-outline"}
+                                      size={16}
+                                      color={mine ? "#fff" : picked ? theme.primary : theme.textMuted}
+                                    />
+                                    <Text style={[styles.pollOptText, mine && { color: "#fff" }]} numberOfLines={2}>{opt}</Text>
+                                    <Text style={[styles.pollPct, mine && { color: "rgba(255,255,255,0.85)" }]}>{pct}%</Text>
+                                  </View>
+                                </TouchableOpacity>
+                              );
+                            })}
+                            <Text style={[styles.pollTotal, mine && { color: "rgba(255,255,255,0.7)" }]}>
+                              {total} {total === 1 ? "vote" : "votes"}
+                            </Text>
+                          </View>
+                        );
+                      })()
                     ) : item.type === "form" ? (
                       <TouchableOpacity
                         style={styles.formCard}
@@ -1478,6 +1567,7 @@ export default function ChatScreen() {
                     { key: "file", label: "File", icon: "document", color: "#F59E0B", onPress: () => { setAttachOpen(false); pickFile(); } },
                     { key: "contact", label: "Contact", icon: "person", color: "#3B82F6", onPress: () => { setAttachOpen(false); setContactOpen(true); } },
                     { key: "form", label: "Form", icon: "document-text", color: "#0EA5A0", onPress: () => { setAttachOpen(false); setFormOpen(true); } },
+                    { key: "poll", label: "Poll", icon: "stats-chart", color: "#6366F1", onPress: () => { setAttachOpen(false); openPoll(); } },
                     ...(peer ? [{ key: "tip", label: "Send tip", icon: "cash", color: theme.primary, onPress: () => { setAttachOpen(false); setTipOpen(true); } }] : []),
                   ].map((t: any) => (
                     <TouchableOpacity key={t.key} style={styles.attachTile} onPress={t.onPress} disabled={sending} testID={`attach-${t.key}`}>
@@ -1627,6 +1717,60 @@ export default function ChatScreen() {
       <GifPickerSheet visible={gifOpen} onClose={() => setGifOpen(false)} onPick={sendGif} />
       <ContactPickerSheet visible={contactOpen} onClose={() => setContactOpen(false)} onPick={sendContact} />
       <FormPickerSheet visible={formOpen} onClose={() => setFormOpen(false)} onPick={sendForm} />
+      <Modal visible={pollOpen} transparent animationType="slide" onRequestClose={() => setPollOpen(false)}>
+        <View style={styles.pollSheetWrap}>
+          <TouchableOpacity style={StyleSheet.absoluteFill} activeOpacity={1} onPress={() => setPollOpen(false)} testID="poll-backdrop" />
+          <View style={[styles.pollSheet, { paddingBottom: insets.bottom + 18 }]}>
+            <View style={styles.attachHandle} />
+            <Text style={styles.pollSheetTitle}>Create poll</Text>
+            <TextInput
+              style={styles.pollInput}
+              placeholder="Ask a question…"
+              placeholderTextColor={theme.textMuted}
+              value={pollQ}
+              onChangeText={setPollQ}
+              maxLength={200}
+              testID="poll-question"
+            />
+            {pollOpts.map((opt, i) => (
+              <View key={i} style={styles.pollInputRow}>
+                <TextInput
+                  style={[styles.pollInput, { flex: 1, marginBottom: 0 }]}
+                  placeholder={`Option ${i + 1}`}
+                  placeholderTextColor={theme.textMuted}
+                  value={opt}
+                  onChangeText={(v) => setPollOpts((o) => o.map((x, j) => (j === i ? v : x)))}
+                  maxLength={100}
+                  testID={`poll-option-${i}`}
+                />
+                {pollOpts.length > 2 && (
+                  <TouchableOpacity
+                    onPress={() => setPollOpts((o) => o.filter((_, j) => j !== i))}
+                    hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
+                    testID={`poll-remove-${i}`}
+                  >
+                    <Ionicons name="close-circle" size={22} color={theme.textMuted} />
+                  </TouchableOpacity>
+                )}
+              </View>
+            ))}
+            {pollOpts.length < 6 && (
+              <TouchableOpacity style={styles.pollAddOpt} onPress={() => setPollOpts((o) => [...o, ""])} testID="poll-add-option">
+                <Ionicons name="add-circle-outline" size={18} color={theme.primary} />
+                <Text style={[styles.pollAddOptText, { color: theme.primary }]}>Add option</Text>
+              </TouchableOpacity>
+            )}
+            <TouchableOpacity
+              style={[styles.pollSendBtn, { backgroundColor: theme.primary }, (pollSending || !pollQ.trim() || pollOpts.filter((o) => o.trim()).length < 2) && { opacity: 0.5 }]}
+              onPress={sendPoll}
+              disabled={pollSending || !pollQ.trim() || pollOpts.filter((o) => o.trim()).length < 2}
+              testID="poll-send"
+            >
+              {pollSending ? <ActivityIndicator size="small" color="#fff" /> : <Text style={styles.pollSendText}>Send poll</Text>}
+            </TouchableOpacity>
+          </View>
+        </View>
+      </Modal>
       <UnlockChatSheet
         visible={unlockOpen}
         onClose={() => setUnlockOpen(false)}
@@ -1889,6 +2033,28 @@ const styles = StyleSheet.create({
   formIcon: { width: 38, height: 38, borderRadius: 11, backgroundColor: "#0EA5A0", alignItems: "center", justifyContent: "center" },
   formTitle: { color: theme.textPrimary, fontSize: 14, fontWeight: "800" },
   formSub: { color: theme.textMuted, fontSize: 12, marginTop: 1 },
+  // Poll bubble
+  pollCard: { width: 240, gap: 7 },
+  pollHead: { flexDirection: "row", alignItems: "flex-start", gap: 6, marginBottom: 2 },
+  pollQuestion: { flex: 1, color: theme.textPrimary, fontSize: 14, fontWeight: "800" },
+  pollOpt: { borderRadius: 10, overflow: "hidden", backgroundColor: "rgba(127,127,127,0.14)", justifyContent: "center", minHeight: 38 },
+  pollBar: { position: "absolute", left: 0, top: 0, bottom: 0, borderRadius: 10 },
+  pollBarMine: { backgroundColor: "rgba(255,255,255,0.26)" },
+  pollBarOther: { backgroundColor: "rgba(99,102,241,0.22)" },
+  pollOptRow: { flexDirection: "row", alignItems: "center", gap: 8, paddingHorizontal: 10, paddingVertical: 9 },
+  pollOptText: { flex: 1, color: theme.textPrimary, fontSize: 13, fontWeight: "600" },
+  pollPct: { color: theme.textMuted, fontSize: 12, fontWeight: "700" },
+  pollTotal: { color: theme.textMuted, fontSize: 11, marginTop: 1 },
+  // Poll composer sheet
+  pollSheetWrap: { flex: 1, justifyContent: "flex-end", backgroundColor: "rgba(0,0,0,0.45)" },
+  pollSheet: { backgroundColor: theme.surface, borderTopLeftRadius: 22, borderTopRightRadius: 22, paddingHorizontal: 18, paddingTop: 8 },
+  pollSheetTitle: { color: theme.textPrimary, fontSize: 17, fontWeight: "800", marginBottom: 14 },
+  pollInput: { backgroundColor: theme.surfaceAlt, borderRadius: 12, borderWidth: 1, borderColor: theme.border, color: theme.textPrimary, fontSize: 15, paddingHorizontal: 14, paddingVertical: 11, marginBottom: 10 },
+  pollInputRow: { flexDirection: "row", alignItems: "center", gap: 8, marginBottom: 10 },
+  pollAddOpt: { flexDirection: "row", alignItems: "center", gap: 6, paddingVertical: 6, marginBottom: 8 },
+  pollAddOptText: { fontSize: 14, fontWeight: "700" },
+  pollSendBtn: { borderRadius: 14, alignItems: "center", justifyContent: "center", paddingVertical: 14, marginTop: 6 },
+  pollSendText: { color: "#fff", fontSize: 16, fontWeight: "800" },
   placeHeader: { flexDirection: "row", alignItems: "center", gap: 6, marginBottom: 4 },
   placeName: { color: theme.textPrimary, fontSize: 14, fontWeight: "700", flex: 1 },
   placeAddr: { color: theme.textSecondary, fontSize: 12 },

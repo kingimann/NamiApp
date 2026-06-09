@@ -570,6 +570,10 @@ export const api = {
     request<Message>(`/conversations/${conv_id}/messages/${msg_id}/react`, {
       method: "POST", body: JSON.stringify({ emoji }),
     }),
+  votePollMessage: (conv_id: string, msg_id: string, option: number) =>
+    request<Message>(`/conversations/${conv_id}/messages/${msg_id}/vote`, {
+      method: "POST", body: JSON.stringify({ option }),
+    }),
   // Custom emojis (global registry, used as :shortcode: in chat).
   listCustomEmojis: () => request<CustomEmoji[]>("/emojis"),
   createCustomEmoji: (shortcode: string, image_base64: string) =>
@@ -1308,7 +1312,7 @@ export type FsqSearchResult = {
   rating?: number | null;
   price?: number | null;
 };
-export type MsgType = "text" | "place" | "media" | "voice" | "post" | "gif" | "file" | "contact" | "tip" | "form";
+export type MsgType = "text" | "place" | "media" | "voice" | "post" | "gif" | "file" | "contact" | "tip" | "form" | "poll";
 export type Message = {
   id: string; conversation_id: string; sender_id: string;
   type: MsgType; text?: string;
@@ -1335,6 +1339,9 @@ export type Message = {
   delivered_by?: string[];
   expires_at?: string | null;
   pinned?: boolean;
+  poll_question?: string | null;
+  poll_options?: string[];
+  poll_votes?: Record<string, number>;  // { user_id: option_index }
   created_at: string;
 };
 export type CustomEmoji = { id: string; shortcode: string; image_base64: string; owner_id: string; created_at: string };
@@ -1351,6 +1358,8 @@ export type MessageCreate = {
   file_base64?: string; file_name?: string; file_size?: number; file_mime?: string;
   contact_user_id?: string; contact_name?: string; contact_picture?: string;
   form_id?: string;
+  poll_question?: string;
+  poll_options?: string[];
   reply_to?: string;
 };
 export type ConversationView = {

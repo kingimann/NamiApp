@@ -270,8 +270,10 @@ class Review(BaseModel):
 
 
 class MessageCreate(BaseModel):
-    type: Literal["text", "place", "media", "voice", "post", "gif", "file", "contact", "tip", "form"] = "text"
+    type: Literal["text", "place", "media", "voice", "post", "gif", "file", "contact", "tip", "form", "poll"] = "text"
     text: Optional[str] = ""
+    poll_question: Optional[str] = None      # type == "poll"
+    poll_options: Optional[List[str]] = None # type == "poll"
     amount: Optional[float] = None           # type == "tip"
     place_name: Optional[str] = None
     place_address: Optional[str] = None
@@ -345,6 +347,9 @@ class Message(BaseModel):
     form_title: Optional[str] = None         # denormalized title of the shared form
     amount: Optional[float] = None           # type == "tip"
     link_preview: Optional[dict] = None      # OpenGraph preview for links in text
+    poll_question: Optional[str] = None      # type == "poll"
+    poll_options: List[str] = []             # type == "poll"
+    poll_votes: dict = {}                    # {user_id: option_index}
     deleted: bool = False                    # soft-deleted tombstone
     reactions: dict = {}              # {user_id: emoji}
     reply_to_id: Optional[str] = None        # id of the message this replies to
