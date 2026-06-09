@@ -470,7 +470,15 @@ async def create_post(body: PostCreate, authorization: Optional[str] = Header(No
         banned = comm.get("banned_keywords") or []
         if banned and not is_admin(user):
             haystack = f"{title or ''} {text or ''}".lower()
-            if any(w and w in haystack for w in banned):
+            # Word-boundary match so "ass" doesn't block "class"; multi-word
+            # phrases fall back to a plain substring test.
+            def _blocked(w: str) -> bool:
+                if not w:
+                    return False
+                if re.search(r"\s", w):
+                    return w in haystack
+                return re.search(r"\b" + re.escape(w) + r"\b", haystack) is not None
+            if any(_blocked(w) for w in banned):
                 raise HTTPException(status_code=400, detail={
                     "code": "blocked_keyword",
                     "message": "Your post contains a word that's not allowed in this community.",

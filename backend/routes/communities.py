@@ -31,7 +31,7 @@ async def _hydrate_community(doc: dict, viewer_id: Optional[str]) -> Community:
         )
     member_count = await db.community_members.count_documents({"community_id": doc["id"]})
     role = member.get("role") if member else None
-    can_mod = role in ("owner", "mod")
+    can_mod = role in ("owner", "mod") or (viewer_id is not None and doc.get("owner_id") == viewer_id)
     is_fav = False
     if viewer_id:
         is_fav = bool(await db.community_favorites.find_one(
@@ -316,12 +316,14 @@ async def community_top(name: str, authorization: Optional[str] = Header(None)):
     if ids:
         urows = await db.users.find(
             {"user_id": {"$in": ids}},
-            {"_id": 0, "user_id": 1, "name": 1, "username": 1, "picture": 1, "verified": 1, "avatar_frame": 1},
+            {"_id": 0, "user_id": 1, "name": 1, "username": 1, "picture": 1, "verified": 1, "avatar_frame": 1, "banned": 1},
         ).to_list(len(ids))
         users = {u["user_id"]: u for u in urows}
     leaders = []
     for r in rows:
         u = users.get(r["user_id"], {})
+        if u.get("banned"):
+            continue
         leaders.append({
             "rank": len(leaders) + 1,
             "user_id": r["user_id"],
@@ -471,7 +473,13 @@ async def community_posts(
     docs = await db.posts.find(q, {"_id": 0}).sort("created_at", -1).limit(400).to_list(400)
 
     def votes(d: dict) -> int:
-        return int(d.get("likes_count", 0) or 0) - int(d.get("dislikes_count", 0) or 0)
+        # Net score from the reaction tally: upvotes (👍) minus downvotes (👎).
+        # (likes_count mirrors ALL reactions, so it can't represent a downvote.)
+        r = d.get("reactions") or {}
+        try:
+            return int(r.get("👍", 0) or 0) - int(r.get("👎", 0) or 0)
+        except Exception:
+            return int(d.get("likes_count", 0) or 0)
 
     def age_hours(d: dict) -> float:
         try:
