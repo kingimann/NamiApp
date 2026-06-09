@@ -49,7 +49,7 @@ const GROUPS: Group[] = [
   {
     title: "Posts & Feed", icon: "newspaper",
     endpoints: [
-      { method: "GET", path: "/posts/feed", desc: "Home feed of posts (paginated).", auth: true },
+      { method: "GET", path: "/feed/home", desc: "Home feed of posts (paginated).", auth: true },
       { method: "POST", path: "/posts", desc: "Create a post. Supports text, media[], poll, parent_id (reply), quote_of, community_id.", auth: true, body: `{"text","media":[{"type","url"}]}` },
       { method: "GET", path: "/posts/{id}", desc: "Fetch a single post with its replies.", auth: true },
       { method: "DELETE", path: "/posts/{id}", desc: "Delete one of your posts.", auth: true },
@@ -67,7 +67,7 @@ const GROUPS: Group[] = [
     title: "Users & Social", icon: "people",
     endpoints: [
       { method: "GET", path: "/users/search?q=", desc: "Search users by name or username.", auth: true },
-      { method: "GET", path: "/users/{user_id}/posts", desc: "List a user's posts.", auth: true },
+      { method: "GET", path: "/posts/user/{user_id}", desc: "List a user's posts.", auth: true },
       { method: "POST", path: "/users/{user_id}/follow", desc: "Toggle follow on a user.", auth: true },
       { method: "POST", path: "/friends/request/{user_id}", desc: "Send a friend request.", auth: true },
       { method: "POST", path: "/friends/accept/{user_id}", desc: "Accept a friend request.", auth: true },
@@ -191,8 +191,8 @@ const GROUPS: Group[] = [
   {
     title: "Places & Directions", icon: "map",
     endpoints: [
-      { method: "GET", path: "/places/search?q=", desc: "Search saved/known places.", auth: true },
       { method: "GET", path: "/places", desc: "List your saved places.", auth: true },
+      { method: "POST", path: "/places", desc: "Save a place.", auth: true, body: `{"title","latitude","longitude","category"}` },
       { method: "POST", path: "/eta", desc: "Create a shareable live-ETA link.", auth: true, body: `{"destination_name","eta_minutes"}` },
       { method: "POST", path: "/eta/{id}/update", desc: "Push a live location update to an ETA share.", auth: true },
       { method: "GET", path: "/public/eta/{share_id}", desc: "Public ETA status (no auth).", auth: false },
@@ -265,10 +265,10 @@ const GROUPS: Group[] = [
 
 type Lang = "curl" | "js" | "python" | "dart";
 const SAMPLE: Record<Lang, (base: string) => string> = {
-  curl: (b) => `curl ${b}/posts/feed \\\n  -H "Authorization: Bearer $OKAYSPACE_KEY"`,
-  js: (b) => `const res = await fetch("${b}/posts/feed", {\n  headers: { Authorization: \`Bearer \${process.env.OKAYSPACE_KEY}\` },\n});\nconst feed = await res.json();`,
-  python: (b) => `import requests\nr = requests.get(\n  "${b}/posts/feed",\n  headers={"Authorization": f"Bearer {OKAYSPACE_KEY}"},\n)\nfeed = r.json()`,
-  dart: (b) => `import 'package:http/http.dart' as http;\nimport 'dart:convert';\n\nfinal res = await http.get(\n  Uri.parse("${b}/posts/feed"),\n  headers: {"Authorization": "Bearer $OKAYSPACE_KEY"},\n);\nfinal feed = jsonDecode(res.body);`,
+  curl: (b) => `curl ${b}/feed/home \\\n  -H "Authorization: Bearer $OKAYSPACE_KEY"`,
+  js: (b) => `const res = await fetch("${b}/feed/home", {\n  headers: { Authorization: \`Bearer \${process.env.OKAYSPACE_KEY}\` },\n});\nconst feed = await res.json();`,
+  python: (b) => `import requests\nr = requests.get(\n  "${b}/feed/home",\n  headers={"Authorization": f"Bearer {OKAYSPACE_KEY}"},\n)\nfeed = r.json()`,
+  dart: (b) => `import 'package:http/http.dart' as http;\nimport 'dart:convert';\n\nfinal res = await http.get(\n  Uri.parse("${b}/feed/home"),\n  headers: {"Authorization": "Bearer $OKAYSPACE_KEY"},\n);\nfinal feed = jsonDecode(res.body);`,
 };
 const LANG_LABEL: Record<Lang, string> = { curl: "cURL", js: "JavaScript", python: "Python", dart: "Dart / Flutter" };
 
