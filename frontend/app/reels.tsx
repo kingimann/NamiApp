@@ -706,6 +706,10 @@ function AdReel({ ad, active, muted, screenW, screenH, onSkip }: {
   );
 }
 
+// Stable reference — a new viewabilityConfig object each render makes
+// VirtualizedList throw "Changing viewabilityConfig on the fly is not supported".
+const VIEWABILITY_CONFIG = { itemVisiblePercentThreshold: 60 };
+
 export default function ReelsScreen() {
   const router = useRouter();
   const insets = useSafeAreaInsets();
@@ -873,7 +877,7 @@ export default function ReelsScreen() {
           snapToAlignment="start"
           decelerationRate="fast"
           onViewableItemsChanged={onViewable}
-          viewabilityConfig={{ itemVisiblePercentThreshold: 60 }}
+          viewabilityConfig={VIEWABILITY_CONFIG}
           refreshControl={
             <RefreshControl
               refreshing={refreshing}
