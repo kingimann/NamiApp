@@ -118,6 +118,10 @@ export default function MapScreen() {
   // if the user taps the search field).
   const { setTabBarHidden, tabBarHidden, setFabHidden } = useNavBar();
   const [mapActive, setMapActive] = useState(false);
+  // Tab screens stay mounted, so the heavy Mapbox WebView would keep running
+  // (and reacting to window resizes) underneath other tabs like the feed. Only
+  // render it while the Map tab is actually focused.
+  const [screenFocused, setScreenFocused] = useState(false);
   const searchFocusedRef = useRef(false);
   const idleTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
   const searchHide = useRef(new Animated.Value(0)).current; // 0 = shown, 1 = hidden
@@ -147,11 +151,13 @@ export default function MapScreen() {
   // the global nav-restore ＋ while the map is focused and bring it back on blur.
   useFocusEffect(useCallback(() => {
     setFabHidden(true);
+    setScreenFocused(true);
     return () => {
       if (idleTimer.current) clearTimeout(idleTimer.current);
       setMapActive(false);
       setTabBarHidden(false);
       setFabHidden(false);
+      setScreenFocused(false);
     };
   }, [setTabBarHidden, setFabHidden]));
   useEffect(() => () => {
@@ -682,13 +688,15 @@ export default function MapScreen() {
 
   return (
     <View style={styles.root} testID="map-screen">
-      <MapboxWebView
-        ref={mapRef}
-        initialCenter={initialCenter}
-        initialZoom={1.7}
-        initialStyle={initialStyleUrl}
-        onEvent={onMapEvent}
-      />
+      {screenFocused && (
+        <MapboxWebView
+          ref={mapRef}
+          initialCenter={initialCenter}
+          initialZoom={1.7}
+          initialStyle={initialStyleUrl}
+          onEvent={onMapEvent}
+        />
+      )}
 
       {/* Top: search + categories */}
       <Animated.View
