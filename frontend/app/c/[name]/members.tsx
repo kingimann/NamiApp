@@ -90,7 +90,7 @@ export default function CommunityMembersScreen() {
             <TouchableOpacity
               style={styles.row}
               activeOpacity={0.85}
-              onPress={() => { if (item.username) router.push({ pathname: "/user/[name]", params: { name: item.username } }); }}
+              onPress={() => router.push(item.username ? { pathname: "/[username]", params: { username: item.username } } : { pathname: "/user/[name]", params: { name: item.name } })}
             >
               <Text style={styles.rank}>{item.rank}</Text>
               <AvatarFrame frame={item.avatar_frame} size={42} ring={2}>
@@ -117,7 +117,7 @@ export default function CommunityMembersScreen() {
             <TouchableOpacity
               style={styles.row}
               activeOpacity={0.85}
-              onPress={() => { if (item.username) router.push({ pathname: "/user/[name]", params: { name: item.username } }); }}
+              onPress={() => router.push(item.username ? { pathname: "/[username]", params: { username: item.username } } : { pathname: "/user/[name]", params: { name: item.name } })}
             >
               <AvatarFrame frame={item.avatar_frame} size={42} ring={2}>
                 <Image source={{ uri: item.picture || undefined }} style={styles.avatar} />
