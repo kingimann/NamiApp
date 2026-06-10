@@ -20,6 +20,7 @@ import MobileFrame from "@/src/components/MobileFrame";
 import DesktopShell from "@/src/components/DesktopShell";
 import WebPullToRefresh from "@/src/components/WebPullToRefresh";
 import AppErrorBoundary from "@/src/components/AppErrorBoundary";
+import { installWebAlertShim } from "@/src/lib/webAlertShim";
 import LeftSidebar from "@/src/components/LeftSidebar";
 import LiquidTabBar from "@/src/components/LiquidTabBar";
 import UsernameGate from "@/src/components/UsernameGate";
@@ -41,6 +42,9 @@ if (Platform.OS === "web" && typeof console !== "undefined") {
   console.warn = wrap(console.warn.bind(console));
   console.error = wrap(console.error.bind(console));
 }
+
+// Make Alert.alert confirmations actually work on web (RN-Web ignores buttons).
+installWebAlertShim();
 
 SplashScreen.preventAutoHideAsync();
 
