@@ -76,7 +76,7 @@ export default function MyListingsScreen() {
           </View>
         </TouchableOpacity>
         <View style={styles.actions}>
-          <TouchableOpacity style={styles.actionBtn} onPress={() => router.push({ pathname: "/(tabs)/marketplace", params: { edit: item.id } })} testID={`my-listing-edit-${item.id}`}>
+          <TouchableOpacity style={styles.actionBtn} onPress={() => router.push({ pathname: "/marketplace", params: { edit: item.id } })} testID={`my-listing-edit-${item.id}`}>
             <Ionicons name="create-outline" size={18} color={theme.primary} />
             <Text style={styles.actionText}>Edit</Text>
           </TouchableOpacity>
@@ -97,11 +97,11 @@ export default function MyListingsScreen() {
     <SafeAreaView edges={["top"]} style={styles.root} testID="my-listings-screen">
       <Stack.Screen options={{ headerShown: false }} />
       <View style={styles.header}>
-        <TouchableOpacity onPress={() => safeBack("/(tabs)/marketplace")} style={styles.iconBtn} testID="my-listings-back">
+        <TouchableOpacity onPress={() => safeBack("/marketplace")} style={styles.iconBtn} testID="my-listings-back">
           <Ionicons name="chevron-back" size={24} color={theme.textPrimary} />
         </TouchableOpacity>
         <Text style={styles.headerTitle}>My listings</Text>
-        <TouchableOpacity onPress={() => router.push("/(tabs)/marketplace")} style={styles.iconBtn} testID="my-listings-new">
+        <TouchableOpacity onPress={() => router.push("/marketplace")} style={styles.iconBtn} testID="my-listings-new">
           <Ionicons name="add" size={26} color={theme.primary} />
         </TouchableOpacity>
       </View>
@@ -134,7 +134,7 @@ export default function MyListingsScreen() {
               <View style={styles.emptyIcon}><Ionicons name="pricetags-outline" size={30} color={theme.textMuted} /></View>
               <Text style={styles.emptyTitle}>No listings yet</Text>
               <Text style={styles.emptySub}>Items you post on Marketplace show up here.</Text>
-              <TouchableOpacity style={styles.emptyBtn} onPress={() => router.push("/(tabs)/marketplace")} testID="my-listings-create">
+              <TouchableOpacity style={styles.emptyBtn} onPress={() => router.push("/marketplace")} testID="my-listings-create">
                 <Text style={styles.emptyBtnText}>Create a listing</Text>
               </TouchableOpacity>
             </View>

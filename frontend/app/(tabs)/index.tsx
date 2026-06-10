@@ -594,7 +594,7 @@ export default function MapScreen() {
   const directionsTo = () => {
     if (!selected) return;
     router.push({
-      pathname: "/(tabs)/directions",
+      pathname: "/directions",
       params: {
         destLng: String(selected.longitude),
         destLat: String(selected.latitude),
@@ -625,7 +625,7 @@ export default function MapScreen() {
     setShowResults(false);
     Keyboard.dismiss();
     router.push({
-      pathname: "/(tabs)/directions",
+      pathname: "/directions",
       params: { destLng: String(lng), destLat: String(lat), destName: name },
     });
   };

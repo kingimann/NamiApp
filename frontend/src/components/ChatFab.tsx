@@ -35,7 +35,7 @@ export default function ChatFab() {
   return (
     <BouncyPressable
       style={[styles.fab, side === "right" ? { right: 18, bottom: 90 } : { left: 18, bottom: 20 }]}
-      onPress={() => router.push("/(tabs)/messages")}
+      onPress={() => router.push("/messages")}
       onLongPress={flip}
       delayLongPress={350}
       testID="chat-fab"

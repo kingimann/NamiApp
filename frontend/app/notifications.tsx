@@ -137,7 +137,7 @@ export default function NotificationsScreen() {
     } else if ((n.type === "tag" || n.type === "factcheck" || n.type === "community_pin") && n.post_id) {
       router.push({ pathname: "/post/[id]", params: { id: n.post_id } });
     } else if (n.post_id) {
-      router.push({ pathname: "/(tabs)/feed" });
+      router.push({ pathname: "/feed" });
     }
   };
 
@@ -203,7 +203,7 @@ export default function NotificationsScreen() {
         ]}
       >
       <View style={styles.header}>
-        <TouchableOpacity onPress={() => safeBack("/(tabs)/feed")} style={styles.backBtn} testID="notifications-back">
+        <TouchableOpacity onPress={() => safeBack("/feed")} style={styles.backBtn} testID="notifications-back">
           <Ionicons name="chevron-back" size={24} color={theme.textPrimary} />
         </TouchableOpacity>
         <Text style={styles.title}>Notifications</Text>

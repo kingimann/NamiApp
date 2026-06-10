@@ -351,7 +351,7 @@ export default function WalletScreen() {
     <SafeAreaView edges={["top"]} style={styles.root} testID="wallet-screen">
       <Stack.Screen options={{ headerShown: false }} />
       <View style={styles.header}>
-        <TouchableOpacity onPress={() => { if (router.canGoBack()) safeBack(); else router.replace("/(tabs)/profile"); }} style={styles.iconBtn} testID="wallet-back">
+        <TouchableOpacity onPress={() => { if (router.canGoBack()) safeBack(); else router.replace("/profile"); }} style={styles.iconBtn} testID="wallet-back">
           <Ionicons name="chevron-back" size={24} color={theme.textPrimary} />
         </TouchableOpacity>
         <Text style={styles.title}>Wallet</Text>

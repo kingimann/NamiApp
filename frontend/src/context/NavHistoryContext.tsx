@@ -46,7 +46,7 @@ export function NavHistoryProvider({ children }: { children: React.ReactNode }) 
 
   const goBack = useCallback(() => {
     if (router.canGoBack()) router.back();
-    else router.replace("/(tabs)/feed");
+    else router.replace("/feed");
   }, [router]);
 
   const goForward = useCallback(() => {

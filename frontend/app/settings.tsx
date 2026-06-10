@@ -108,7 +108,7 @@ export default function SettingsScreen() {
         <FadeIn>
         <PressableScale
           style={styles.account}
-          onPress={() => router.push("/(tabs)/profile")}
+          onPress={() => router.push("/profile")}
           testID="settings-account"
         >
           <Image source={{ uri: user?.picture || DEFAULT_AVATAR }} style={styles.accAvatar} />
@@ -122,7 +122,7 @@ export default function SettingsScreen() {
 
         <Text style={styles.groupTitle}>Account</Text>
         <View style={styles.group}>
-          <Row icon="create-outline" label="Edit profile" color="#00A884" onPress={() => { requestEditProfile(); router.push("/(tabs)/profile"); }} />
+          <Row icon="create-outline" label="Edit profile" color="#00A884" onPress={() => { requestEditProfile(); router.push("/profile"); }} />
           <Row icon="shield-checkmark-outline" label="Account & security" color="#22C55E" onPress={() => router.push("/account")} />
           <Row icon="lock-closed-outline" label="Privacy" color="#14B8A6" onPress={() => router.push("/privacy")} />
           <Row icon="notifications-outline" label="Notifications" color="#EF4444" onPress={() => router.push("/notifications")} />
@@ -148,7 +148,7 @@ export default function SettingsScreen() {
         <Text style={styles.groupTitle}>Your content</Text>
         <View style={styles.group}>
           <Row icon="bookmark-outline" label="Bookmarks" color={theme.primary} onPress={() => router.push("/bookmarks")} />
-          <Row icon="location-outline" label="Saved places" color="#22C55E" onPress={() => router.push("/(tabs)/favorites")} />
+          <Row icon="location-outline" label="Saved places" color="#22C55E" onPress={() => router.push("/favorites")} />
           <Row icon="people-outline" label="Connections" color="#7C3AED" onPress={() => router.push({ pathname: "/connections", params: { userId: user?.user_id || "", name: user?.name || "You", tab: "followers" } })} />
           <Row icon="people-circle-outline" label="Circles" color="#0EA5E9" onPress={() => router.push("/circles")} />
           <Row icon="document-text-outline" label="Forms" color="#8B5CF6" onPress={() => router.push("/forms")} />

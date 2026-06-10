@@ -16,12 +16,12 @@ export type SidebarItem = {
 
 export const SIDEBAR_CATALOG: SidebarItem[] = [
   { id: "reels", label: "Reels", icon: "videocam", route: "/reels", color: "#EC4899" },
-  { id: "groups", label: "Groups", icon: "people", route: "/(tabs)/groups", color: "#7C3AED" },
+  { id: "groups", label: "Groups", icon: "people", route: "/groups", color: "#7C3AED" },
   { id: "communities", label: "Communities", icon: "chatbubbles", route: "/communities", color: "#EF4444" },
-  { id: "marketplace", label: "Marketplace", icon: "storefront", route: "/(tabs)/marketplace", color: "#F59E0B" },
+  { id: "marketplace", label: "Marketplace", icon: "storefront", route: "/marketplace", color: "#F59E0B" },
   { id: "settings", label: "Settings", icon: "settings", route: "/settings", color: "#64748B" },
   { id: "wallet", label: "Wallet", icon: "wallet", route: "/wallet", color: "#10B981" },
-  { id: "feed", label: "Feed", icon: "home", route: "/(tabs)/feed", color: "#3B82F6" },
+  { id: "feed", label: "Feed", icon: "home", route: "/feed", color: "#3B82F6" },
   { id: "map", label: "Map", icon: "map", route: "/(tabs)", color: "#14B8A6" },
 ];
 
