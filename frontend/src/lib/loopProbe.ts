@@ -17,13 +17,42 @@ const events: Record<string, { t: number; keys: string[] }[]> = {};
 const reported = new Set<string>();
 const summary: string[] = [];
 
+// ── Full-page-reload detector ────────────────────────────────────────────────
+// Distinguishes a FULL PAGE RELOAD loop (the page actually navigates/reloads,
+// which wipes the tab title and JS memory each cycle) from a re-render loop.
+// sessionStorage survives same-tab reloads, so a reload loop makes this counter
+// grow across loads; a re-render loop leaves it at 1. Runs once at module load.
+if (Platform.OS === "web" && typeof window !== "undefined") {
+  try {
+    const now = Date.now();
+    const KEY = "__oks_pageloads";
+    let arr: number[] = [];
+    try { arr = JSON.parse(sessionStorage.getItem(KEY) || "[]"); } catch { arr = []; }
+    arr.push(now);
+    arr = arr.filter((t) => now - t < 6000);
+    try { sessionStorage.setItem(KEY, JSON.stringify(arr)); } catch { /* ignore */ }
+    if (arr.length >= 3) {
+      const msg = `⚠ FULL RELOAD ×${arr.length}/6s`;
+      const stamp = () => { try { document.title = msg; } catch { /* ignore */ } };
+      stamp();
+      // Re-assert after the app sets its own title, so the warning stays visible.
+      setTimeout(stamp, 400);
+      setTimeout(stamp, 1000);
+      try {
+        // eslint-disable-next-line no-console
+        console.error(`[FULL PAGE RELOAD LOOP] page reloaded ${arr.length}× in 6s — this is a navigation/reload loop, not a re-render loop.`);
+      } catch { /* ignore */ }
+    }
+  } catch { /* ignore */ }
+}
+
 export function loopTick(name: string, changedKeys?: string[]): void {
   if (Platform.OS !== "web") return;
   const now = Date.now();
   const arr = events[name] || (events[name] = []);
   arr.push({ t: now, keys: changedKeys && changedKeys.length ? changedKeys : ["(parent)"] });
   while (arr.length && now - arr[0].t > 1000) arr.shift();
-  if (arr.length >= 40 && !reported.has(name)) {
+  if (arr.length >= 24 && !reported.has(name)) {
     reported.add(name);
     const tally: Record<string, number> = {};
     for (const e of arr) for (const k of e.keys) tally[k] = (tally[k] || 0) + 1;
