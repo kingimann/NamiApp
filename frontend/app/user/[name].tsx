@@ -1,6 +1,6 @@
 import React, { useCallback, useEffect, useRef, useState } from "react";
 import {
-  View, Text, StyleSheet, FlatList, TouchableOpacity, Image, ActivityIndicator, RefreshControl, Linking, Modal,
+  View, Text, StyleSheet, FlatList, TouchableOpacity, Image, ActivityIndicator, RefreshControl, Linking, Modal, Platform,
 } from "react-native";
 import { SafeAreaView, useSafeAreaInsets } from "react-native-safe-area-context";
 import { Ionicons } from "@expo/vector-icons";
@@ -159,6 +159,21 @@ export default function UserProfileScreen() {
   }, [name, me]);
 
   useFocusEffect(useCallback(() => { load(); }, [load]));
+
+  // On web, once the profile resolves, rewrite the address bar to the clean
+  // vanity URL (okayspace.ca/<username>) so every profile link — wherever it was
+  // opened from — shows the handle instead of /user/<display-name>. Cosmetic
+  // only: history.replaceState doesn't re-navigate or refetch.
+  useEffect(() => {
+    if (Platform.OS !== "web" || typeof window === "undefined") return;
+    const uname = user?.username;
+    if (!uname) return;
+    const want = "/" + encodeURIComponent(uname);
+    if (window.location.pathname !== want) {
+      try { window.history.replaceState(window.history.state, "", want); } catch {}
+    }
+  }, [user?.username]);
+
   const onRefresh = () => { setRefreshing(true); load(); };
 
   const patchPost = (id: string, fn: (p: Post) => Post) => {
