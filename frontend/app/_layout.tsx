@@ -26,6 +26,22 @@ import UsernameGate from "@/src/components/UsernameGate";
 import PolicyGate from "@/src/components/PolicyGate";
 import PushManager from "@/src/components/PushManager";
 
+// Silence two harmless, noisy web-only console messages so genuine errors
+// aren't buried: "useNativeDriver is not supported" (React Native Web logs it
+// for every Animated call and transparently falls back to JS animation) and
+// "Cannot record touch end without a touch start" (its touch responder).
+// Matched by exact text, so nothing else is hidden.
+if (Platform.OS === "web" && typeof console !== "undefined") {
+  const NOISE = ["useNativeDriver", "Cannot record touch end"];
+  const wrap = (orig: (...a: any[]) => void) => (...args: any[]) => {
+    const first = typeof args[0] === "string" ? args[0] : "";
+    if (NOISE.some((n) => first.includes(n))) return;
+    orig(...args);
+  };
+  console.warn = wrap(console.warn.bind(console));
+  console.error = wrap(console.error.bind(console));
+}
+
 SplashScreen.preventAutoHideAsync();
 
 function AuthedSidebar() {
