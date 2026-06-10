@@ -44,6 +44,13 @@ const GLASS: any =
 
 type Tab = "home" | "explore";
 
+// Stable FlatList view-tracking config. It MUST be a constant reference — a new
+// object each render makes VirtualizedList throw "Changing viewabilityConfig on
+// the fly is not supported", and the router's error boundary then reloads the
+// route → re-render → new object → throw → reload, in a loop. (Profile has no
+// view-tracking, which is why it never reloaded.)
+const VIEWABILITY_CONFIG = { itemVisiblePercentThreshold: 60, minimumViewTime: 600 };
+
 export default function FeedScreen() {
   const { user } = useAuth();
   const router = useRouter();
@@ -342,7 +349,7 @@ export default function FeedScreen() {
           data={interleaveAds(posts)}
           keyExtractor={(i) => (isAd(i) ? `ad-${i.__ad}` : i.id)}
           onViewableItemsChanged={onViewable}
-          viewabilityConfig={{ itemVisiblePercentThreshold: 60, minimumViewTime: 600 }}
+          viewabilityConfig={VIEWABILITY_CONFIG}
           onScroll={onScroll}
           scrollEventThrottle={16}
           contentContainerStyle={{ paddingHorizontal: 12, paddingTop: topBarH + 6, paddingBottom: insets.bottom + 100, gap: 9 }}
