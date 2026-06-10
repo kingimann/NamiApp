@@ -25,6 +25,8 @@ import { Platform } from "react-native";
 import { BASE_URL } from "@/src/api/client";
 
 const STORAGE_KEY = "okayspace_web_build";
+const RELOAD_AT_KEY = "okayspace_web_build_reloaded_at";
+const RELOAD_BUDGET_MS = 60_000; // never auto-reload more than once a minute
 
 function isWeb(): boolean {
   return (
@@ -99,6 +101,22 @@ export async function checkWebUpdate(): Promise<void> {
     // Store the new token FIRST so a re-served stale shell can't loop.
     try {
       localStorage.setItem(STORAGE_KEY, server);
+    } catch {
+      /* ignore */
+    }
+    // Reload budget: refuse to auto-reload more than once a minute. If the token
+    // ever "flaps" (e.g. a stale service worker serving a cached app-config, or a
+    // rolling multi-instance deploy answering with two different commits), this
+    // hard-caps reloads so the page can never spin in a refresh loop.
+    let last = 0;
+    try {
+      last = parseInt(localStorage.getItem(RELOAD_AT_KEY) || "0", 10) || 0;
+    } catch {
+      /* ignore */
+    }
+    if (Date.now() - last < RELOAD_BUDGET_MS) return;
+    try {
+      localStorage.setItem(RELOAD_AT_KEY, String(Date.now()));
     } catch {
       /* ignore */
     }
