@@ -226,11 +226,11 @@ export default function MyMarketplaceScreen() {
     <SafeAreaView edges={["top"]} style={styles.root} testID="my-marketplace-screen">
       <Stack.Screen options={{ headerShown: false }} />
       <View style={styles.header}>
-        <TouchableOpacity onPress={() => safeBack("/(tabs)/marketplace")} style={styles.iconBtn} testID="mm-back">
+        <TouchableOpacity onPress={() => safeBack("/marketplace")} style={styles.iconBtn} testID="mm-back">
           <Ionicons name="chevron-back" size={24} color={theme.textPrimary} />
         </TouchableOpacity>
         <Text style={styles.headerTitle}>My Marketplace</Text>
-        <TouchableOpacity onPress={() => router.push("/(tabs)/marketplace")} style={styles.iconBtn} testID="mm-new">
+        <TouchableOpacity onPress={() => router.push("/marketplace")} style={styles.iconBtn} testID="mm-new">
           <Ionicons name="add" size={26} color={theme.primary} />
         </TouchableOpacity>
       </View>
@@ -265,7 +265,7 @@ export default function MyMarketplaceScreen() {
                   {tab === "saved" ? "Tap the bookmark on any listing to keep it here." : "Items you post on Marketplace show up here."}
                 </Text>
                 {tab !== "saved" && (
-                  <TouchableOpacity style={styles.emptyBtn} onPress={() => router.push("/(tabs)/marketplace")} testID="mm-create">
+                  <TouchableOpacity style={styles.emptyBtn} onPress={() => router.push("/marketplace")} testID="mm-create">
                     <Text style={styles.emptyBtnText}>Create a listing</Text>
                   </TouchableOpacity>
                 )}

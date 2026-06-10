@@ -144,7 +144,7 @@ export default function ListingDetailScreen() {
             <TouchableOpacity onPress={onShareListing} style={styles.iconBtn} testID="listing-share">
               <Ionicons name="share-outline" size={20} color={theme.textPrimary} />
             </TouchableOpacity>
-            <TouchableOpacity onPress={() => router.push({ pathname: "/(tabs)/marketplace", params: { edit: listing!.id } })} style={styles.iconBtn} testID="listing-edit">
+            <TouchableOpacity onPress={() => router.push({ pathname: "/marketplace", params: { edit: listing!.id } })} style={styles.iconBtn} testID="listing-edit">
               <Ionicons name="create-outline" size={21} color={theme.primary} />
             </TouchableOpacity>
             <TouchableOpacity onPress={remove} style={styles.iconBtn} testID="listing-delete">

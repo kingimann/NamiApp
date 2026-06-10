@@ -6,7 +6,7 @@ import { router } from "expo-router";
  * when the navigation history is empty — which happens on a cold-start deep
  * link, a directly-opened web URL, or after `router.replace` reset the stack.
  */
-export function safeBack(fallback: string = "/(tabs)/feed") {
+export function safeBack(fallback: string = "/feed") {
   try {
     // expo-router's imperative router exposes canGoBack() on the singleton.
     if ((router as any).canGoBack && (router as any).canGoBack()) {

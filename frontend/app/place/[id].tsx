@@ -99,7 +99,7 @@ export default function BusinessProfileScreen() {
   const myReview = reviews.find((r) => r.user_id === user?.user_id) || null;
 
   const directions = () =>
-    router.push({ pathname: "/(tabs)/directions", params: { destLng: String(lng), destLat: String(lat), destName: name } });
+    router.push({ pathname: "/directions", params: { destLng: String(lng), destLat: String(lat), destName: name } });
 
   const call = () => { if (profile?.phone) Linking.openURL(`tel:${profile.phone}`).catch(() => {}); };
   const openWebsite = () => { if (profile?.website) Linking.openURL(profile.website).catch(() => {}); };

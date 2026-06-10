@@ -113,7 +113,7 @@ export default function LeftSidebar() {
           {/* Header — profile */}
           <TouchableOpacity
             style={styles.profileBlock}
-            onPress={() => go("/(tabs)/profile")}
+            onPress={() => go("/profile")}
             activeOpacity={0.85}
             testID="side-profile"
           >

@@ -181,7 +181,7 @@ export default function DocumentsScreen() {
           {/* Update your info */}
           <Text style={styles.sectionLabel}>Update your information</Text>
           <View style={styles.group}>
-            <LinkRow icon="person-outline" label="Edit profile" onPress={() => router.push("/(tabs)/profile")} />
+            <LinkRow icon="person-outline" label="Edit profile" onPress={() => router.push("/profile")} />
             <LinkRow icon="settings-outline" label="Account & login" onPress={() => router.push("/account")} />
             <LinkRow icon="wallet-outline" label="Wallet & payouts" onPress={() => router.push("/wallet")} />
             <LinkRow icon="lock-closed-outline" label="Privacy" onPress={() => router.push("/privacy")} last />

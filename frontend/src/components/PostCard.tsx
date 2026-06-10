@@ -139,7 +139,7 @@ export default function PostCard({
   // would 404 for you).
   const openAuthorProfile = (e?: any) => {
     e?.stopPropagation?.();
-    if (viewerId && display.author?.user_id === viewerId) { router.push("/(tabs)/profile"); return; }
+    if (viewerId && display.author?.user_id === viewerId) { router.push("/profile"); return; }
     const name = display.author?.name;
     if (name) router.push({ pathname: "/user/[name]", params: { name } });
   };
