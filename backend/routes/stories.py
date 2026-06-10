@@ -90,12 +90,19 @@ async def stories_tray(authorization: Optional[str] = Header(None)):
         by_user.setdefault(d["user_id"], []).append(d)
     # Compute viewed state per user
     out: list[StoryTrayItem] = []
+    # Batch the per-author lookups into two queries (was 2 per author): one for
+    # all authors, one for all of my views across every story shown.
+    uids = list(by_user.keys())
+    udocs = await db.users.find({"user_id": {"$in": uids}}, {"_id": 0}).to_list(len(uids) or 1)
+    umap = {u["user_id"]: u for u in udocs}
+    all_ids = [s["id"] for items in by_user.values() for s in items]
+    my_views = await db.story_views.find(
+        {"story_id": {"$in": all_ids}, "viewer_id": user["user_id"]}, {"_id": 0, "story_id": 1},
+    ).to_list(len(all_ids) or 1)
+    viewed_ids = {v["story_id"] for v in my_views}
     for uid, items in by_user.items():
-        u = await db.users.find_one({"user_id": uid}, {"_id": 0}) or {}
-        ids = [s["id"] for s in items]
-        viewed_count = await db.story_views.count_documents(
-            {"story_id": {"$in": ids}, "viewer_id": user["user_id"]}
-        )
+        u = umap.get(uid) or {}
+        viewed_count = sum(1 for s in items if s["id"] in viewed_ids)
         out.append(StoryTrayItem(
             user_id=uid,
             user_name=u.get("name", "Unknown"),
@@ -164,8 +171,11 @@ async def list_story_viewers(story_id: str, authorization: Optional[str] = Heade
         {"story_id": story_id}, {"_id": 0},
     ).sort("viewed_at", -1).limit(500).to_list(500)
     out: list[StoryViewer] = []
+    vids = [r["viewer_id"] for r in rows]
+    udocs = await db.users.find({"user_id": {"$in": vids}}, {"_id": 0}).to_list(len(vids) or 1)
+    umap = {u["user_id"]: u for u in udocs}
     for r in rows:
-        u = await db.users.find_one({"user_id": r["viewer_id"]}, {"_id": 0}) or {}
+        u = umap.get(r["viewer_id"]) or {}
         out.append(StoryViewer(
             user_id=r["viewer_id"],
             name=u.get("name", "Unknown"),

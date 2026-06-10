@@ -393,8 +393,11 @@ async def list_join_requests(
         {"group_id": group_id, "status": "pending"}, {"_id": 0}
     ).sort("created_at", 1).to_list(200)
     out = []
+    uids = [r["user_id"] for r in rows]
+    udocs = await db.users.find({"user_id": {"$in": uids}}, {"_id": 0}).to_list(len(uids) or 1)
+    umap = {u["user_id"]: u for u in udocs}
     for r in rows:
-        u = await db.users.find_one({"user_id": r["user_id"]}, {"_id": 0})
+        u = umap.get(r["user_id"])
         if not u:
             continue
         out.append({
@@ -508,8 +511,11 @@ async def list_group_members(group_id: str, authorization: Optional[str] = Heade
         .sort("joined_at", 1).limit(200).to_list(200)
     )
     out = []
+    uids = [r["user_id"] for r in rows]
+    udocs = await db.users.find({"user_id": {"$in": uids}}, {"_id": 0}).to_list(len(uids) or 1)
+    umap = {u["user_id"]: u for u in udocs}
     for r in rows:
-        u = await db.users.find_one({"user_id": r["user_id"]}, {"_id": 0})
+        u = umap.get(r["user_id"])
         if not u:
             continue
         out.append({
