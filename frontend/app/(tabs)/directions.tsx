@@ -1085,7 +1085,7 @@ export default function DirectionsScreen() {
         {/* ───────── Bottom panel ───────── */}
         {/* Pre-nav: route summary + start button. Nav-mode: footer with ETA/dist + end button. */}
         <View
-          onLayout={(e) => setCardH(e.nativeEvent.layout.height)}
+          onLayout={(e) => { const h = e.nativeEvent.layout.height; setCardH((prev) => (Math.abs(prev - h) > 1 ? h : prev)); }}
           style={[
             styles.bottomCard,
             { paddingBottom: navMode ? 16 : 18 },

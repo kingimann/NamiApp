@@ -17,9 +17,17 @@ import { useFocusEffect } from "expo-router";
  */
 export function useFloatingHeader(defaultHeight = 70) {
   const [topHidden, setTopHidden] = useState(false);
-  const [topBarH, setTopBarH] = useState(defaultHeight);
+  const [topBarH, setTopBarHState] = useState(defaultHeight);
   const topHide = useRef(new Animated.Value(0)).current;
   const lastScrollY = useRef(0);
+
+  // Guard against sub-pixel onLayout churn. On web, ResizeObserver (plus a
+  // frosted-glass backdrop) re-fires onLayout with tiny height deltas; an
+  // unguarded setState there re-renders → re-measures → setState → an infinite
+  // loop. Ignore changes under 1px so it settles after the first real measure.
+  const setTopBarH = useCallback((h: number) => {
+    setTopBarHState((prev) => (Math.abs(prev - h) > 1 ? h : prev));
+  }, []);
 
   const onScroll = useCallback((e: any) => {
     const y = e?.nativeEvent?.contentOffset?.y ?? 0;

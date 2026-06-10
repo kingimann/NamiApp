@@ -363,7 +363,7 @@ export default function MarketplaceScreen() {
       {/* Floating frosted top bar — hides on scroll-down, returns on scroll-up,
           mirroring the feed + the bottom LiquidTabBar. */}
       <Animated.View
-        onLayout={(e) => setTopBarH(e.nativeEvent.layout.height)}
+        onLayout={(e) => { const h = e.nativeEvent.layout.height; setTopBarH((prev) => (Math.abs(prev - h) > 1 ? h : prev)); }}
         pointerEvents={topHidden ? "none" : "box-none"}
         style={[
           styles.topBar,
