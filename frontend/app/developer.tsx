@@ -598,6 +598,118 @@ const GROUPS: Group[] = [
       { method: "DELETE", path: "/push/register", desc: "Unregister a device push token.", auth: true },
     ],
   },
+  {
+    title: "Admin · users & moderation", icon: "shield",
+    endpoints: [
+      { method: "GET", path: "/admin/users", desc: "List/search every user on the site (?q, ?limit, ?offset). Admin only.", auth: true },
+      { method: "GET", path: "/admin/audit", desc: "Recent moderation/admin actions (audit log). Admin only.", auth: true },
+      { method: "PATCH", path: "/admin/users/{id}", desc: "Toggle a user's verified badge and set their site role (user/mod/admin). Admin only.", auth: true, body: `{"verified":true,"role":"mod"}` },
+      { method: "POST", path: "/admin/users/{id}/ban", desc: "Ban a user. Admin only.", auth: true, body: `{"reason"}` },
+      { method: "POST", path: "/admin/users/{id}/unban", desc: "Lift a ban. Admin only.", auth: true },
+      { method: "POST", path: "/admin/users/{id}/suspend", desc: "Temporarily suspend a user. Admin only.", auth: true, body: `{"until","reason"}` },
+      { method: "POST", path: "/admin/users/{id}/restrictions", desc: "Turn a user's messaging, marketplace or newsfeed on/off. Admin only.", auth: true, body: `{"messaging":false,"marketplace":false,"newsfeed":false}` },
+      { method: "DELETE", path: "/admin/users/{id}", desc: "Permanently delete a user AND all their data (posts, reactions, wallet…). Admin only.", auth: true },
+      { method: "POST", path: "/admin/badges", desc: "Create a profile badge. Admin only.", auth: true, body: `{"name","icon","color"}` },
+      { method: "DELETE", path: "/admin/badges/{id}", desc: "Delete a badge. Admin only.", auth: true },
+      { method: "POST", path: "/admin/users/{id}/badge", desc: "Award/revoke a badge on a user. Admin only.", auth: true, body: `{"badge_id","grant":true}` },
+    ],
+  },
+  {
+    title: "Admin · wallet & transactions", icon: "cash",
+    endpoints: [
+      { method: "POST", path: "/admin/users/{id}/wallet", desc: "Set a user's wallet balance (USD) to an exact amount. Admin only.", auth: true, body: `{"balance":42.00}` },
+      { method: "GET", path: "/admin/users/{id}/transactions", desc: "List a user's editable transactions. Admin only.", auth: true },
+      { method: "POST", path: "/admin/users/{id}/transaction", desc: "Re-add a lost transaction to a user's history. Admin only.", auth: true, body: `{"amount","name","note","date"}` },
+      { method: "PATCH", path: "/admin/users/{id}/transaction", desc: "Edit a transaction's amount, name, note or date/time. Admin only.", auth: true, body: `{"id","amount","name","note","date"}` },
+      { method: "DELETE", path: "/admin/users/{id}/transaction", desc: "Delete a transaction, optionally reversing its wallet effect (?reverse=true). Admin only.", auth: true },
+    ],
+  },
+  {
+    title: "Admin · platform & finance", icon: "stats-chart",
+    endpoints: [
+      { method: "GET", path: "/admin/revenue", desc: "Platform revenue from in-app fees (ledger). Admin only.", auth: true },
+      { method: "GET", path: "/admin/ad-revenue", desc: "Platform-wide ad revenue dashboard. Admin only.", auth: true },
+      { method: "GET", path: "/admin/fees", desc: "Read the current fee schedule. Admin only.", auth: true },
+      { method: "POST", path: "/admin/fees", desc: "Update the fee schedule. Admin only.", auth: true, body: `{"marketplace_pct","tip_pct","payout_flat",...}` },
+      { method: "GET", path: "/admin/test-payments", desc: "Is Stripe test-mode on? Admin only.", auth: true },
+      { method: "POST", path: "/admin/test-payments", desc: "Toggle Stripe test-mode. Admin only.", auth: true, body: `{"enabled":true}` },
+      { method: "GET", path: "/admin/mobile-only", desc: "Is the web app gated to mobile-only? Admin only.", auth: true },
+      { method: "POST", path: "/admin/mobile-only", desc: "Toggle the mobile-only gate. Admin only.", auth: true, body: `{"enabled":true}` },
+      { method: "GET", path: "/admin/integrations", desc: "Which third-party services (Stripe, FSQ, TransitLand…) are configured. Admin only.", auth: true },
+      { method: "GET", path: "/admin/support/tickets", desc: "Every support ticket across all users. Admin only.", auth: true },
+      { method: "GET", path: "/admin/bot/posts", desc: "Sponsored posts available for bot-testing. Admin only.", auth: true },
+      { method: "POST", path: "/admin/bot/run", desc: "Simulate views/clicks/likes on a sponsored post to test wallet spend. Admin only.", auth: true, body: `{"post_id","views","clicks"}` },
+      { method: "POST", path: "/admin/reset/money", desc: "Wipe all wallet/money data (earnings, tips, subs, payouts, transfers). Admin only.", auth: true },
+      { method: "POST", path: "/admin/reset/analytics", desc: "Zero ad + view analytics (impressions, clicks, spend, views). Admin only.", auth: true },
+    ],
+  },
+  {
+    title: "Admin · roadside ops", icon: "construct",
+    endpoints: [
+      { method: "GET", path: "/admin/roadside/verifications", desc: "Pending roadside helper verifications. Admin only.", auth: true },
+      { method: "POST", path: "/admin/roadside/verifications/{id}/decision", desc: "Approve/reject a helper verification. Admin only.", auth: true, body: `{"approved":true,"reason"}` },
+      { method: "GET", path: "/roadside/admin/calls", desc: "List roadside calls (?date=YYYY-MM-DD for one day). Admin only.", auth: true },
+      { method: "POST", path: "/roadside/admin/calls", desc: "Create a call (test or real) with a daily call number. Admin only.", auth: true, body: `{"date","note"}` },
+      { method: "DELETE", path: "/roadside/admin/calls/{id}", desc: "Permanently erase one call. Admin only.", auth: true },
+      { method: "DELETE", path: "/roadside/admin/calls", desc: "Bulk-erase calls (?all=true or ?date=). Admin only.", auth: true },
+    ],
+  },
+  {
+    title: "Admin · infrastructure (Render)", icon: "server",
+    endpoints: [
+      { method: "GET", path: "/admin/render/services", desc: "List the project's Render services. Admin only.", auth: true },
+      { method: "GET", path: "/admin/render/services/{id}/deploys", desc: "Deploy history for a service. Admin only.", auth: true },
+      { method: "POST", path: "/admin/render/services/{id}/deploys", desc: "Trigger a new deploy (?clearCache). Admin only.", auth: true },
+      { method: "POST", path: "/admin/render/services/{id}/restart", desc: "Restart a service. Admin only.", auth: true },
+      { method: "POST", path: "/admin/render/services/{id}/suspend", desc: "Suspend a service. Admin only.", auth: true },
+      { method: "POST", path: "/admin/render/services/{id}/resume", desc: "Resume a suspended service. Admin only.", auth: true },
+      { method: "GET", path: "/admin/render/services/{id}/env-vars", desc: "List a service's environment variables. Admin only.", auth: true },
+      { method: "PUT", path: "/admin/render/services/{id}/env-vars/{key}", desc: "Set/update one env var (triggers redeploy). Admin only.", auth: true, body: `{"value"}` },
+      { method: "DELETE", path: "/admin/render/services/{id}/env-vars/{key}", desc: "Delete one env var. Admin only.", auth: true },
+    ],
+  },
+];
+
+// Every webhook event type a developer can subscribe to (mirrors GET /webhooks/events).
+const WEBHOOK_EVENTS_REF: { id: string; desc: string }[] = [
+  { id: "follow", desc: "Someone followed you" },
+  { id: "friend_request", desc: "You received a friend request" },
+  { id: "friend_accept", desc: "Your friend request was accepted" },
+  { id: "poke", desc: "Someone poked you" },
+  { id: "like", desc: "Someone liked your post" },
+  { id: "reply", desc: "Someone replied to your post" },
+  { id: "repost", desc: "Someone reposted your post" },
+  { id: "tag", desc: "You were tagged or mentioned" },
+  { id: "message", desc: "You received a direct message" },
+  { id: "group_message", desc: "New message in a group you're in" },
+  { id: "group_invite", desc: "You were invited to a group" },
+  { id: "story_reply", desc: "Someone replied to your story" },
+  { id: "tip", desc: "You received a tip" },
+  { id: "subscribe", desc: "Someone subscribed to you" },
+  { id: "payout", desc: "A payout was processed" },
+  { id: "wallet_topup", desc: "Your wallet was topped up" },
+  { id: "roadside", desc: "A roadside assistance update" },
+  { id: "support", desc: "A support ticket update" },
+  { id: "call", desc: "An incoming call" },
+  { id: "moderation", desc: "A moderation action affected your content" },
+  { id: "form.submission", desc: "A custom form received a submission (full payload included)" },
+];
+
+// The error `code` returned with each HTTP status (in {"error":{"code","message"}}).
+const ERROR_CODES_REF: { status: string; code: string; desc: string }[] = [
+  { status: "400", code: "bad_request", desc: "Malformed request" },
+  { status: "401", code: "unauthorized", desc: "Missing/invalid token" },
+  { status: "402", code: "payment_required", desc: "Plan/credit needed" },
+  { status: "403", code: "forbidden", desc: "Not allowed (incl. write_not_allowed for read-only keys)" },
+  { status: "404", code: "not_found", desc: "No such resource" },
+  { status: "405", code: "method_not_allowed", desc: "Wrong HTTP method" },
+  { status: "409", code: "conflict", desc: "Duplicate / state conflict" },
+  { status: "413", code: "payload_too_large", desc: "Body/media too big" },
+  { status: "415", code: "unsupported_media_type", desc: "Bad Content-Type" },
+  { status: "422", code: "validation_error", desc: "Field validation failed (see error.fields[])" },
+  { status: "429", code: "rate_limited", desc: "Throttled — back off and retry" },
+  { status: "500", code: "server_error", desc: "Something broke our end" },
+  { status: "503", code: "unavailable", desc: "Temporarily down — retry" },
 ];
 
 type Lang = "curl" | "js" | "python" | "dart";
@@ -805,6 +917,85 @@ for (final d in transit['departures']) {
   print('\${d['route']} → \${d['headsign']} in \${d['minutes']} min'
         '\${d['realtime'] ? ' (live)' : ''}');
 }`;
+
+const SWIFT_CLIENT = `// Swift / iOS — no dependencies, async/await. Drop in and go.
+import Foundation
+
+struct OkaySpaceError: Error { let code: String; let message: String }
+
+actor OkaySpace {
+    let base = "${API_BASE}"
+    let key: String
+    init(_ key: String) { self.key = key }
+
+    func get(_ path: String) async throws -> Any {
+        try await send("GET", path, nil)
+    }
+    func post(_ path: String, _ body: [String: Any]? = nil) async throws -> Any {
+        try await send("POST", path, body)
+    }
+    private func send(_ method: String, _ path: String, _ body: [String: Any]?) async throws -> Any {
+        var req = URLRequest(url: URL(string: base + path)!)
+        req.httpMethod = method
+        req.setValue("Bearer \\(key)", forHTTPHeaderField: "Authorization")
+        req.setValue("application/json", forHTTPHeaderField: "Content-Type")
+        if let body { req.httpBody = try JSONSerialization.data(withJSONObject: body) }
+        let (data, resp) = try await URLSession.shared.data(for: req)
+        let json = try JSONSerialization.jsonObject(with: data)
+        if let http = resp as? HTTPURLResponse, http.statusCode >= 400 {
+            let err = (json as? [String: Any])?["error"] as? [String: Any]
+            throw OkaySpaceError(code: err?["code"] as? String ?? "error",
+                                 message: err?["message"] as? String ?? "Request failed")
+        }
+        return json
+    }
+}
+
+// Usage
+let api = OkaySpace("YOUR_API_KEY")
+let feed = try await api.get("/feed/home")
+_ = try await api.post("/posts", ["text": "Hello from Swift 🍎"])`;
+
+const KOTLIN_CLIENT = `// Kotlin / Android — OkHttp + org.json. Coroutine-friendly.
+// build.gradle → implementation("com.squareup.okhttp3:okhttp:4.12.0")
+import okhttp3.*
+import okhttp3.MediaType.Companion.toMediaType
+import okhttp3.RequestBody.Companion.toRequestBody
+import org.json.JSONObject
+
+class OkaySpaceException(val code: String, message: String) : Exception(message)
+
+class OkaySpace(private val key: String) {
+    private val base = "${API_BASE}"
+    private val http = OkHttpClient()
+    private val JSON = "application/json".toMediaType()
+
+    fun get(path: String): JSONObject = send("GET", path, null)
+    fun post(path: String, body: JSONObject? = null): JSONObject = send("POST", path, body)
+
+    private fun send(method: String, path: String, body: JSONObject?): JSONObject {
+        val req = Request.Builder()
+            .url(base + path)
+            .header("Authorization", "Bearer $key")
+            .method(method, body?.toString()?.toRequestBody(JSON)
+                ?: if (method == "GET") null else "".toRequestBody(JSON))
+            .build()
+        http.newCall(req).execute().use { resp ->
+            val json = JSONObject(resp.body?.string() ?: "{}")
+            if (!resp.isSuccessful) {
+                val err = json.optJSONObject("error") ?: JSONObject()
+                throw OkaySpaceException(err.optString("code", "error"),
+                                         err.optString("message", "Request failed"))
+            }
+            return json
+        }
+    }
+}
+
+// Usage (call off the main thread — e.g. Dispatchers.IO)
+val api = OkaySpace("YOUR_API_KEY")
+val feed = api.get("/feed/home")
+api.post("/posts", JSONObject().put("text", "Hello from Kotlin 🤖"))`;
 
 const CONTENT_SNIPPET = `<!-- Embed a OkaySpace post, profile, listing, guide, or community -->
 <!-- swap data-post for data-profile / data-listing / data-guide / data-community -->
@@ -1443,6 +1634,20 @@ export default function DeveloperScreen() {
           Packages: <Text style={styles.codeInline}>http</Text> or <Text style={styles.codeInline}>dio</Text> (REST), <Text style={styles.codeInline}>web_socket_channel</Text> (realtime), <Text style={styles.codeInline}>flutter_secure_storage</Text> (keys), <Text style={styles.codeInline}>webview_flutter</Text> (embeds). For a fully-typed client, use the dart-dio codegen above.
         </Text>
 
+        {/* Swift / iOS */}
+        <Text style={[styles.groupTitle, { marginTop: 22 }]}>Swift & iOS</Text>
+        <Text style={styles.body}>A zero-dependency async/await client — the Bearer auth and `{"{"}error{"}"}` envelope handled. Tap to copy.</Text>
+        <TouchableOpacity style={styles.codeBlock} onPress={() => copy(SWIFT_CLIENT, "Swift client")} activeOpacity={0.7}>
+          <Text style={styles.codeBlockText} selectable>{SWIFT_CLIENT}</Text>
+        </TouchableOpacity>
+
+        {/* Kotlin / Android */}
+        <Text style={[styles.groupTitle, { marginTop: 22 }]}>Kotlin & Android</Text>
+        <Text style={styles.body}>An OkHttp client with the same error handling. Call it off the main thread (e.g. `Dispatchers.IO`).</Text>
+        <TouchableOpacity style={styles.codeBlock} onPress={() => copy(KOTLIN_CLIENT, "Kotlin client")} activeOpacity={0.7}>
+          <Text style={styles.codeBlockText} selectable>{KOTLIN_CLIENT}</Text>
+        </TouchableOpacity>
+
         {/* Conventions */}
         <Text style={styles.groupTitle}>Conventions</Text>
         <View style={styles.convCard}>
@@ -1452,6 +1657,38 @@ export default function DeveloperScreen() {
           <Text style={styles.convItem}><Text style={styles.convKey}>Idempotency </Text>Send an `Idempotency-Key` header (any unique value) on writes (POST/PUT/PATCH/DELETE). Retries with the same key replay the first response (header `Idempotent-Replay: true`) — safe against double-submits.</Text>
           <Text style={styles.convItem}><Text style={styles.convKey}>Errors </Text>Every non-2xx reply uses one shape: `{"{"}"error":{"{"}"code","message"{"}"}{"}"}` (also mirrored under `detail`). e.g. 401 unauthorized, 403 forbidden, 404 not_found, 413 payload_too_large, 422 validation_error, 429 rate_limited.</Text>
           <Text style={styles.convItem}><Text style={styles.convKey}>Rate limits </Text>Fair-use; heavy automated traffic may be throttled (429).</Text>
+        </View>
+
+        {/* Scopes & access */}
+        <Text style={styles.groupTitle}>Scopes & access</Text>
+        <View style={styles.convCard}>
+          <Text style={styles.convItem}><Text style={styles.convKey}>API key scopes </Text>`read` keys may call GET/HEAD only; `write` keys (Pro+) can POST/PUT/PATCH/DELETE. A write on a read key returns 403 `write_not_allowed`.</Text>
+          <Text style={styles.convItem}><Text style={styles.convKey}>OAuth scopes </Text>“Login with OkaySpace” tokens support `profile` (id, name, username, picture) and `email`. Request them space-separated on /oauth/authorize.</Text>
+          <Text style={styles.convItem}><Text style={styles.convKey}>Admin endpoints </Text>The `/admin/*` and `/roadside/admin/*` routes require an account with the `admin` site role and return 403 otherwise. They power the in-app admin console.</Text>
+          <Text style={styles.convItem}><Text style={styles.convKey}>Public endpoints </Text>Anything under `/pub/*`, `/public/*`, plus `/version`, `/v1/info`, `/policies` and auth bootstrap routes need no token (marked “public” below).</Text>
+        </View>
+
+        {/* Webhook event types */}
+        <Text style={styles.groupTitle}>Webhook event types</Text>
+        <Text style={styles.body}>Subscribe to any subset when creating a webhook (omit to get them all). Live list: `GET /webhooks/events`. Each delivery is signed — verify the `X-OkaySpace-Signature` header.</Text>
+        <View style={[styles.convCard, { marginTop: 10 }]}>
+          {WEBHOOK_EVENTS_REF.map((e) => (
+            <Text key={e.id} style={styles.convItem}>
+              <Text style={styles.codeInline}>{e.id}</Text>  {e.desc}
+            </Text>
+          ))}
+        </View>
+
+        {/* Error codes */}
+        <Text style={styles.groupTitle}>Error codes</Text>
+        <Text style={styles.body}>Branch on the stable `error.code` string, not the prose message. 422s also include `error.fields[]` with per-field detail.</Text>
+        <View style={[styles.convCard, { marginTop: 10 }]}>
+          {ERROR_CODES_REF.map((e) => (
+            <Text key={e.code} style={styles.convItem}>
+              <Text style={styles.convKey}>{e.status} </Text>
+              <Text style={styles.codeInline}>{e.code}</Text>  {e.desc}
+            </Text>
+          ))}
         </View>
 
         {/* Endpoint reference */}
