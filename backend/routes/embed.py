@@ -375,6 +375,10 @@ async def public_profile_posts(request: Request, username: str,
         "user_id": u["user_id"], "parent_id": None,
         "repost_of": {"$in": [None, ""]},
         "group_id": {"$in": [None, ""]}, "community_id": {"$in": [None, ""]},
+        # Exclude subscriber-only posts in the query (not after slicing) so each
+        # page actually fills to `lim` and the cursor/has_more stay accurate.
+        # $in matches 0, null, and missing (older posts without the field).
+        "min_sub_tier": {"$in": [0, None]},
     }
     if cursor:
         try:
@@ -385,7 +389,7 @@ async def public_profile_posts(request: Request, username: str,
     rows = await db.posts.find(q, {"_id": 0}).sort("created_at", -1).limit(lim + 1).to_list(lim + 1)
     has_more = len(rows) > lim
     page = rows[:lim]
-    items = [_post_json(d, u) for d in page if int(d.get("min_sub_tier") or 0) == 0]
+    items = [_post_json(d, u) for d in page]
     next_cursor = None
     if has_more and page:
         nc = page[-1].get("created_at")

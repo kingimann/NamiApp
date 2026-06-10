@@ -36,7 +36,10 @@ def _payout_period_key(uid: str, freq: str, now: datetime) -> str:
         bucket = now.strftime("%Y-%m")
     elif freq == "biweekly":
         iso = now.isocalendar()
-        bucket = f"{iso[0]}-bw{iso[1] // 2}"
+        # Pair up ISO weeks 1&2, 3&4, … so each biweekly period maps to one
+        # bucket. `iso[1] // 2` would split weeks 1 and 2 (1//2=0, 2//2=1),
+        # leaving a 1-week period at the start of every year.
+        bucket = f"{iso[0]}-bw{(iso[1] - 1) // 2}"
     else:
         iso = now.isocalendar()
         bucket = f"{iso[0]}-w{iso[1]}"
