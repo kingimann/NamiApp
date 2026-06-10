@@ -98,7 +98,7 @@ const GROUPS: Group[] = [
       { method: "POST", path: "/friends/accept/{user_id}", desc: "Accept a friend request.", auth: true },
       { method: "POST", path: "/users/{user_id}/tip", desc: "Send a tip to a user.", auth: true, body: `{"amount","message"}` },
       { method: "POST", path: "/users/{user_id}/poke", desc: "Poke a user (Facebook-style).", auth: true },
-      { method: "GET", path: "/subscription-tiers", desc: "The three fixed subscription tiers.", auth: true },
+      { method: "GET", path: "/subscription-tiers", desc: "The three fixed subscription tiers.", auth: false },
       { method: "POST", path: "/users/{user_id}/subscribe", desc: "Subscribe to a user (choose a tier).", auth: true, body: `{"tier":"plus"}` },
       { method: "GET", path: "/wallet", desc: "Your wallet: earnings, subscribers, and money sent.", auth: true },
       { method: "GET", path: "/friends", desc: "Your friends list.", auth: true },
@@ -339,7 +339,7 @@ const GROUPS: Group[] = [
   {
     title: "Payments", icon: "card",
     endpoints: [
-      { method: "GET", path: "/payments/config", desc: "Whether real (Stripe) payments are enabled.", auth: true },
+      { method: "GET", path: "/payments/config", desc: "Whether real (Stripe) payments are enabled (+ fees, publishable key).", auth: false },
       { method: "POST", path: "/payments/payouts/setup", desc: "Start Stripe Connect payout onboarding.", auth: true },
       { method: "GET", path: "/payments/payouts/status", desc: "Your payout-account status.", auth: true },
       { method: "POST", path: "/payments/checkout", desc: "Create a checkout (tip / subscription / promote).", auth: true, body: `{"kind","creator_id","amount"}` },
