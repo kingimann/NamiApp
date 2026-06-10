@@ -15,7 +15,7 @@ import { theme } from "@/src/theme";
 const BASE = (process.env.EXPO_PUBLIC_BACKEND_URL as string) || "https://okayspace-v0vx.onrender.com";
 const API_BASE = `${BASE}/api/v1`;
 
-type Method = "GET" | "POST" | "PATCH" | "DELETE";
+type Method = "GET" | "POST" | "PUT" | "PATCH" | "DELETE";
 type Endpoint = { method: Method; path: string; desc: string; body?: string; auth?: boolean };
 type Group = { title: string; icon: keyof typeof import("@expo/vector-icons/build/Ionicons").default.glyphMap; endpoints: Endpoint[] };
 
@@ -507,7 +507,7 @@ const SAMPLE: Record<Lang, (base: string) => string> = {
 const LANG_LABEL: Record<Lang, string> = { curl: "cURL", js: "JavaScript", python: "Python", dart: "Dart / Flutter" };
 
 const METHOD_COLOR: Record<Method, string> = {
-  GET: "#22C55E", POST: "#0EA5E9", PATCH: "#EAB308", DELETE: "#F15C6D",
+  GET: "#22C55E", POST: "#0EA5E9", PUT: "#8B5CF6", PATCH: "#EAB308", DELETE: "#F15C6D",
 };
 
 // Drop-in embed examples for the "Embed & SDKs" section. Customizable via
