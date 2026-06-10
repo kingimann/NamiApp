@@ -1151,10 +1151,14 @@ async def _apply_reaction(post_id: str, user: dict, emoji: str) -> Post:
 
     existing = await db.post_reactions.find_one({"post_id": post_id, "user_id": uid}, {"_id": 0})
     if existing and existing.get("emoji") == emoji:
-        # Toggle off.
-        await db.post_reactions.delete_one({"post_id": post_id, "user_id": uid})
-        inc[f"reactions.{emoji}"] = inc.get(f"reactions.{emoji}", 0) - 1
-        inc["likes_count"] = inc.get("likes_count", 0) - 1
+        # Toggle off — only decrement if WE removed the row. Two concurrent
+        # same-user taps would both see `existing` and both decrement, drifting
+        # the tally (and likes_count) negative; gating on deleted_count makes the
+        # second tap a no-op.
+        res = await db.post_reactions.delete_one({"post_id": post_id, "user_id": uid})
+        if getattr(res, "deleted_count", 0) == 1:
+            inc[f"reactions.{emoji}"] = inc.get(f"reactions.{emoji}", 0) - 1
+            inc["likes_count"] = inc.get("likes_count", 0) - 1
     elif existing:
         # Switch reaction.
         await db.post_reactions.update_one(
@@ -1317,12 +1321,13 @@ async def toggle_bookmark(post_id: str, authorization: Optional[str] = Header(No
         {"post_id": post_id, "user_id": user["user_id"]}, {"_id": 0}
     )
     if existing:
-        await db.post_bookmarks.delete_one(
+        res = await db.post_bookmarks.delete_one(
             {"post_id": post_id, "user_id": user["user_id"]}
         )
-        await db.posts.update_one(
-            {"id": post_id}, {"$inc": {"bookmarks_count": -1}}
-        )
+        if getattr(res, "deleted_count", 0) == 1:  # only if we removed it
+            await db.posts.update_one(
+                {"id": post_id}, {"$inc": {"bookmarks_count": -1}}
+            )
     else:
         try:
             await db.post_bookmarks.insert_one({

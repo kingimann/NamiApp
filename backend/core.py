@@ -104,6 +104,11 @@ async def init_pool() -> None:
     _DEDUP_UNIQUE_INDEXES = [
         ("wallet_topups", "uniq_wallet_topups_session", "((doc ->> 'session_id'))", ["session_id"]),
         ("poll_votes", "uniq_poll_votes", "((doc ->> 'post_id'), (doc ->> 'user_id'))", ["post_id", "user_id"]),
+        # Emoji reactions: one row per (post, user). _apply_reaction relies on the
+        # DuplicateKeyError from this index to stop a concurrent double-tap from
+        # inserting two reaction rows and double-incrementing likes_count — without
+        # it that guard was dead code. Deduped first since rows may already exist.
+        ("post_reactions", "uniq_post_reactions", "((doc ->> 'post_id'), (doc ->> 'user_id'))", ["post_id", "user_id"]),
         ("conversations", "uniq_conversation_key", "((doc ->> 'key'))", ["key"]),
         ("reviews", "uniq_reviews_user_place", "((doc ->> 'user_id'), (doc ->> 'place_key'))", ["user_id", "place_key"]),
         ("ad_events", "uniq_ad_events_day", "((doc ->> 'post_id'), (doc ->> 'viewer_id'), (doc ->> 'kind'), (doc ->> 'day'))", ["post_id", "viewer_id", "kind", "day"]),
