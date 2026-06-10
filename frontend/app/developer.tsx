@@ -749,6 +749,23 @@ const METHOD_COLOR: Record<Method, string> = {
   GET: "#22C55E", POST: "#0EA5E9", PUT: "#8B5CF6", PATCH: "#EAB308", DELETE: "#F15C6D", WS: "#14B8A6",
 };
 
+// A ready-to-run snippet for a single endpoint (shown when a row is expanded).
+function endpointSnippet(e: Endpoint): string {
+  const url = `${API_BASE}${e.path}`;
+  if (e.method === "WS") {
+    const ws = API_BASE.replace(/^http/, "ws");
+    return `# WebSocket — e.g. with wscat (npm i -g wscat)\nwscat -c "${ws}${e.path}"`;
+  }
+  const lines = [`curl${e.method !== "GET" ? ` -X ${e.method}` : ""} "${url}"`];
+  if (e.auth !== false) lines.push(`  -H "Authorization: Bearer $OKAYSPACE_KEY"`);
+  // `body` is a JSON field hint for writes; query-style hints live in the path.
+  if (e.body && !e.body.trim().startsWith("?")) {
+    lines.push(`  -H "Content-Type: application/json"`);
+    lines.push(`  -d '${e.body}'`);
+  }
+  return lines.join(" \\\n");
+}
+
 // Drop-in embed examples for the "Embed & SDKs" section. Customizable via
 // data-* attributes (web) or query params (anywhere, incl. a Flutter WebView).
 const EMBED_SNIPPET = `<script async
@@ -1218,6 +1235,7 @@ export default function DeveloperScreen() {
   const [creating, setCreating] = useState(false);
   const [freshToken, setFreshToken] = useState<string | null>(null);
   const [openGroup, setOpenGroup] = useState<string | null>("Authentication");
+  const [openEp, setOpenEp] = useState<string | null>(null);
   const [epQuery, setEpQuery] = useState("");
   const [lang, setLang] = useState<Lang>("curl");
   const [plan, setPlan] = useState<Awaited<ReturnType<typeof api.getApiPlan>> | null>(null);
@@ -1967,17 +1985,43 @@ export default function DeveloperScreen() {
                   <Text style={styles.refCount}>{g.endpoints.length}</Text>
                   {!q && <Ionicons name={open ? "chevron-up" : "chevron-down"} size={16} color={theme.textMuted} />}
                 </TouchableOpacity>
-                {open && g.endpoints.map((e, i) => (
-                  <View key={i} style={styles.epRow}>
-                    <View style={styles.epLine}>
-                      <Text style={[styles.method, { color: METHOD_COLOR[e.method], borderColor: METHOD_COLOR[e.method] + "66" }]}>{e.method}</Text>
-                      <Text style={styles.epPath} selectable>{e.path}</Text>
-                      {e.auth === false && <Text style={styles.publicTag}>public</Text>}
+                {open && g.endpoints.map((e, i) => {
+                  const epKey = `${g.title}|${e.method} ${e.path}`;
+                  const epOpen = openEp === epKey;
+                  return (
+                    <View key={i} style={styles.epRow}>
+                      <TouchableOpacity
+                        onPress={() => setOpenEp(epOpen ? null : epKey)}
+                        activeOpacity={0.6}
+                        testID={`ep-row-${e.method}-${e.path}`}
+                      >
+                        <View style={styles.epLine}>
+                          <Text style={[styles.method, { color: METHOD_COLOR[e.method], borderColor: METHOD_COLOR[e.method] + "66" }]}>{e.method}</Text>
+                          <Text style={styles.epPath} selectable>{e.path}</Text>
+                          {e.auth === false && <Text style={styles.publicTag}>public</Text>}
+                          <Ionicons name={epOpen ? "chevron-up" : "chevron-down"} size={13} color={theme.textMuted} style={{ marginLeft: "auto" }} />
+                        </View>
+                        <Text style={styles.epDesc}>{e.desc}</Text>
+                        {!!e.body && <Text style={styles.epBody} selectable>body {e.body}</Text>}
+                      </TouchableOpacity>
+                      {epOpen && (
+                        <View style={styles.epTry}>
+                          <View style={styles.epTryHead}>
+                            <Text style={styles.epTryLabel}>{e.method === "WS" ? "Connect" : "Try it"}</Text>
+                            <TouchableOpacity onPress={() => copy(endpointSnippet(e), "Snippet")} hitSlop={8} style={styles.epCopyBtn}>
+                              <Ionicons name="copy-outline" size={13} color={theme.primary} />
+                              <Text style={styles.epCopyTxt}>Copy</Text>
+                            </TouchableOpacity>
+                          </View>
+                          <Text style={styles.epTryCode} selectable>{endpointSnippet(e)}</Text>
+                          {e.auth !== false && (
+                            <Text style={styles.epTryHint}>Set `OKAYSPACE_KEY` to a key from “Your API keys” above.</Text>
+                          )}
+                        </View>
+                      )}
                     </View>
-                    <Text style={styles.epDesc}>{e.desc}</Text>
-                    {!!e.body && <Text style={styles.epBody} selectable>body {e.body}</Text>}
-                  </View>
-                ))}
+                  );
+                })}
               </View>
             );
           });
@@ -2093,5 +2137,12 @@ const styles = StyleSheet.create({
   publicTag: { color: theme.textMuted, fontSize: 10, fontWeight: "700", textTransform: "uppercase", letterSpacing: 0.4, borderWidth: 1, borderColor: theme.border, borderRadius: 5, paddingHorizontal: 5, paddingVertical: 1 },
   epDesc: { color: theme.textSecondary, fontSize: 13, lineHeight: 18 },
   epBody: { color: theme.textMuted, fontSize: 12, fontFamily: Platform.OS === "ios" ? "Menlo" : "monospace" },
+  epTry: { marginTop: 8, backgroundColor: "#0E0E10", borderWidth: 1, borderColor: theme.border, borderRadius: 10, padding: 11, gap: 6 },
+  epTryHead: { flexDirection: "row", alignItems: "center", justifyContent: "space-between" },
+  epTryLabel: { color: theme.textMuted, fontSize: 10.5, fontWeight: "700", textTransform: "uppercase", letterSpacing: 0.5 },
+  epCopyBtn: { flexDirection: "row", alignItems: "center", gap: 4 },
+  epCopyTxt: { color: theme.primary, fontSize: 12, fontWeight: "600" },
+  epTryCode: { color: "#9FE7C8", fontSize: 12, lineHeight: 18, fontFamily: Platform.OS === "ios" ? "Menlo" : "monospace" },
+  epTryHint: { color: theme.textMuted, fontSize: 11, lineHeight: 15 },
   footer: { color: theme.textMuted, fontSize: 12, lineHeight: 18, marginTop: 24 },
 });
