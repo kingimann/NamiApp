@@ -21,7 +21,7 @@ import uuid
 from datetime import datetime, timezone
 from typing import Optional
 
-from fastapi import APIRouter, Header, HTTPException, Request
+from fastapi import APIRouter, Depends, Header, HTTPException, Request
 from pydantic import BaseModel, ConfigDict
 
 from core import db, get_current_user
@@ -225,11 +225,10 @@ class WebhookAck(_Out):
 # 1. POST /stripe/account — create/fetch the Express account + onboarding link
 # ---------------------------------------------------------------------------
 @router.post("/stripe/account", response_model=StripeAccountOut)
-async def stripe_account(authorization: Optional[str] = Header(None)):
+async def stripe_account(user: dict = Depends(get_current_user)):
     """Create (or reuse) the caller's Stripe Connect account and return its
     status plus a hosted onboarding link to finish (or update) setup."""
     _require_stripe()
-    user = await get_current_user(authorization)
     try:
         acct_id = await _ensure_connect_account(user)
         acct = stripe.Account.retrieve(acct_id)
@@ -264,11 +263,10 @@ def _web() -> str:
 # 2. GET /stripe/balance — the connected account's balance (replaces the ledger)
 # ---------------------------------------------------------------------------
 @router.get("/stripe/balance", response_model=StripeBalanceOut)
-async def stripe_balance(authorization: Optional[str] = Header(None)):
+async def stripe_balance(user: dict = Depends(get_current_user)):
     """The caller's spendable + pending Stripe balance. Returns `connected: false`
     (zeros) when they haven't started onboarding yet."""
     _require_stripe()
-    user = await get_current_user(authorization)
     acct_id = user.get("stripe_account_id")
     if not acct_id:
         return {"connected": False, "available": 0.0, "pending": 0.0, "currency": "usd", "by_currency": []}
@@ -314,7 +312,7 @@ class TransferBody(BaseModel):
 @router.post("/stripe/transfer", response_model=StripeTransferOut)
 async def stripe_transfer(
     body: TransferBody,
-    authorization: Optional[str] = Header(None),
+    sender: dict = Depends(get_current_user),
     idempotency_key: Optional[str] = Header(None),
 ):
     """Send money to another user. Stripe can't move funds connected→connected
@@ -324,7 +322,6 @@ async def stripe_transfer(
     _require_stripe()
     if await test_payments_on():
         raise HTTPException(status_code=400, detail={"code": "test_mode", "message": "Transfers aren't available in test mode."})
-    sender = await get_current_user(authorization)
     amount = round(float(body.amount or 0), 2)
     if amount <= 0:
         raise HTTPException(status_code=400, detail="Enter an amount to send")
@@ -417,7 +414,7 @@ class PayoutBody(BaseModel):
 @router.post("/stripe/payout", response_model=StripePayoutOut)
 async def stripe_payout(
     body: PayoutBody,
-    authorization: Optional[str] = Header(None),
+    user: dict = Depends(get_current_user),
     idempotency_key: Optional[str] = Header(None),
 ):
     """Pay the connected account's available Stripe balance out to the user's bank
@@ -426,7 +423,6 @@ async def stripe_payout(
     _require_stripe()
     if await test_payments_on():
         raise HTTPException(status_code=400, detail={"code": "test_mode", "message": "Payouts aren't available in test mode."})
-    user = await get_current_user(authorization)
     acct_id = user.get("stripe_account_id")
     if not acct_id:
         raise HTTPException(status_code=400, detail={"code": "no_account", "message": "Set up your Stripe account first."})
@@ -501,12 +497,11 @@ async def stripe_payout(
 async def stripe_transactions(
     limit: int = 25,
     starting_after: Optional[str] = None,
-    authorization: Optional[str] = Header(None),
+    user: dict = Depends(get_current_user),
 ):
     """The connected account's Stripe balance transactions (the Stripe-native
     replacement for the ledger's history). Cursor-paginated via `starting_after`."""
     _require_stripe()
-    user = await get_current_user(authorization)
     acct_id = user.get("stripe_account_id")
     if not acct_id:
         return {"connected": False, "transactions": [], "has_more": False}

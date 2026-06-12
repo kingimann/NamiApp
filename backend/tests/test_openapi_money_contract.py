@@ -9,6 +9,7 @@ generated OpenAPI — no running server or database required.
 """
 import pytest
 from fastapi import FastAPI
+from starlette.testclient import TestClient
 
 from routes import payments, money, stripe_connect
 
@@ -57,3 +58,25 @@ def test_money_endpoint_declares_200_schema(spec, path, method):
     assert resp is not None, f"{method.upper()} {path} has no 200 response"
     content = resp.get("content", {}).get("application/json", {})
     assert content.get("schema"), f"{method.upper()} {path} has no 200 JSON schema (response_model missing?)"
+
+
+# §3: auth resolves before body validation, so an unauthenticated call to a
+# protected money POST returns 401 (not a 422 that leaks the body schema). These
+# hit the no-token branch of get_current_user, which raises before any DB access.
+AUTH_BEFORE_VALIDATION_POSTS = ["/stripe/transfer", "/stripe/payout"]
+
+
+@pytest.fixture(scope="module")
+def client():
+    app = FastAPI()
+    app.include_router(stripe_connect.router)
+    return TestClient(app)
+
+
+@pytest.mark.parametrize("path", AUTH_BEFORE_VALIDATION_POSTS)
+def test_unauthenticated_money_post_is_401_not_422(client, path):
+    resp = client.post(path)  # no Authorization header, no body
+    assert resp.status_code == 401, (
+        f"{path} returned {resp.status_code}; auth must resolve before body "
+        "validation so unauthenticated calls 401 instead of 422"
+    )
