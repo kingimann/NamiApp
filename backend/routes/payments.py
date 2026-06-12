@@ -232,6 +232,69 @@ class CapabilitiesOut(BaseModel):
     cashout_fee: float
 
 
+class _MoneyOut(BaseModel):
+    # extra="allow": document the known shape without ever dropping a field.
+    model_config = ConfigDict(extra="allow")
+
+
+class SetupUrlOut(_MoneyOut):
+    url: str
+
+
+class PayoutStatusOut(_MoneyOut):
+    enabled: bool = False
+    connected: bool = False
+    payouts_enabled: bool = False
+    details_submitted: bool = False
+    charges_enabled: bool = False
+    id_verified: bool = False
+    hold_until: Optional[str] = None          # ISO-8601, or null
+    has_external_account: bool = False
+    has_debit_card: bool = False
+    debit_card: Optional[dict] = None          # {brand, last4}
+    bank_account: Optional[dict] = None         # {bank, last4}
+    account_id: Optional[str] = None
+    account_currency: Optional[str] = None
+    country: Optional[str] = None
+    capabilities: Optional[dict] = None
+    requirements_due: list = []
+    requirements_eventually: list = []
+    requirements_pending: list = []
+    disabled_reason: Optional[str] = None
+    platform: Optional[dict] = None             # platform-account blockers, when payouts are off
+
+
+class CheckoutOut(_MoneyOut):
+    id: str
+    url: Optional[str] = None                   # hosted checkout (null when embedded)
+    client_secret: Optional[str] = None         # embedded checkout (null when hosted)
+    embedded: bool = False
+
+
+class PayIntentOut(_MoneyOut):
+    kind: str                                   # tip | subscription | promote
+    client_secret: Optional[str] = None
+    intent_id: Optional[str] = None
+    subscription_id: Optional[str] = None
+    publishable_key: Optional[str] = None
+
+
+class PayIntentConfirmOut(_MoneyOut):
+    ok: bool
+    paid: bool
+    already: bool = False                       # true when a prior call already fulfilled it
+
+
+class CashoutOut(_MoneyOut):
+    ok: bool
+    amount: float                               # net paid to the card
+    gross: float
+    fee: float
+    currency: str
+    local_amount: float                         # amount in the account's settlement currency
+    balance: float                              # remaining wallet balance
+
+
 @router.get("/payments/config", response_model=PaymentsConfigOut)
 async def payments_config():
     """Tell the client whether real payments are available.
@@ -285,7 +348,7 @@ async def capabilities(authorization: Optional[str] = Header(None)):
     }
 
 
-@router.post("/payments/payouts/setup")
+@router.post("/payments/payouts/setup", response_model=SetupUrlOut)
 async def setup_payouts(authorization: Optional[str] = Header(None)):
     """Create (or reuse) the user's Stripe Connect account and return a hosted
     onboarding link where they choose how they want to get paid."""
@@ -305,7 +368,7 @@ async def setup_payouts(authorization: Optional[str] = Header(None)):
         raise HTTPException(status_code=400, detail={"code": "stripe_setup_failed", "message": f"Stripe payout setup failed: {msg}"})
 
 
-@router.get("/payments/payouts/status")
+@router.get("/payments/payouts/status", response_model=PayoutStatusOut)
 async def payouts_status(authorization: Optional[str] = Header(None)):
     """Current payout-account state for the creator's Wallet screen."""
     user = await get_current_user(authorization)
@@ -399,7 +462,7 @@ class CashoutBody(BaseModel):
     amount: Optional[float] = None   # None = cash out the whole balance
 
 
-@router.post("/payments/payouts/cashout")
+@router.post("/payments/payouts/cashout", response_model=CashoutOut)
 async def cashout_to_card(body: CashoutBody, authorization: Optional[str] = Header(None)):
     """Instant cash-out of the in-app wallet balance to the user's debit card
     (Stripe Instant Payouts, DoorDash-style). Moves platform funds to the user's
@@ -786,7 +849,7 @@ async def upload_verification_document(body: DocBody, authorization: Optional[st
     return {"ok": True, "payouts_enabled": bool(acct.get("payouts_enabled")), "needs_document": _doc_needed(reqs)}
 
 
-@router.post("/payments/checkout")
+@router.post("/payments/checkout", response_model=CheckoutOut)
 async def create_checkout(body: CheckoutCreate, authorization: Optional[str] = Header(None)):
     """Create a Stripe Checkout session and return a hosted checkout URL.
     - tip:          one-time destination charge to the creator's account
@@ -963,7 +1026,7 @@ async def _already_fulfilled(ref_id: str) -> bool:
         return True
 
 
-@router.post("/payments/pay-intent")
+@router.post("/payments/pay-intent", response_model=PayIntentOut)
 async def create_pay_intent(body: CheckoutCreate, authorization: Optional[str] = Header(None)):
     """Create a PaymentIntent (tip/promote) or Subscription (subscription) for an
     inline, in-app card form. Returns a client_secret the app confirms with the
@@ -1049,7 +1112,7 @@ class PayConfirm(BaseModel):
     subscription_id: Optional[str] = None
 
 
-@router.post("/payments/pay-intent/confirm")
+@router.post("/payments/pay-intent/confirm", response_model=PayIntentConfirmOut)
 async def confirm_pay_intent(body: PayConfirm, authorization: Optional[str] = Header(None)):
     """Fulfill an inline card payment after the card field confirms it (idempotent)."""
     _require_stripe()
