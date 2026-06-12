@@ -389,12 +389,19 @@ async def _check_and_bump_api_usage(user: dict, token: str) -> None:
     limit = int(plan.get("monthly_quota", 0)) + extra
     if used >= limit:
         resets_at = start_dt + timedelta(days=USAGE_PERIOD_DAYS)
+        # Standard throttle headers (§13) so SDKs back off without parsing the body.
+        retry_after = max(1, int((resets_at - now).total_seconds()))
         raise HTTPException(status_code=429, detail={
             "code": "quota_exceeded",
             "message": "Monthly request quota reached. Buy a pay-as-you-go pack or wait for the reset.",
             "used": used, "limit": limit,
             "resets_at": resets_at.isoformat(),
             "packs": [{"id": p["id"], "name": p["name"], "price": p["price"]} for p in API_OVERAGE_PACKS],
+        }, headers={
+            "Retry-After": str(retry_after),
+            "X-RateLimit-Limit": str(limit),
+            "X-RateLimit-Remaining": "0",
+            "X-RateLimit-Reset": str(int(resets_at.timestamp())),
         })
     try:
         await db.users.update_one({"user_id": user["user_id"]}, {"$inc": {"api_usage_count": 1}})
