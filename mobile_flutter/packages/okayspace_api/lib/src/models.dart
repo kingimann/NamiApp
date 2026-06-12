@@ -456,6 +456,28 @@ class WalletBalance {
   final String? currency;
 }
 
+/// A Stripe Checkout session from `POST /payments/checkout` (tip / subscription
+/// / promote / topup). Open [url] in a browser (hosted), or use [clientSecret]
+/// with Stripe's embedded checkout when [embedded] is true.
+class CheckoutSession {
+  CheckoutSession.fromJson(Map<String, dynamic> j)
+      : raw = j,
+        id = asStr(j['id']),
+        url = asStr(j['url']),
+        clientSecret = asStr(j['client_secret']),
+        embedded = asBool(j['embedded']);
+
+  final Map<String, dynamic> raw;
+  final String? id;
+
+  /// Hosted Stripe Checkout URL to open (null when [embedded]).
+  final String? url;
+
+  /// Client secret for Stripe's embedded checkout (null when hosted).
+  final String? clientSecret;
+  final bool embedded;
+}
+
 /// Onboarding/status of the caller's Stripe Connect account (`POST /stripe/account`).
 class StripeAccountStatus {
   StripeAccountStatus.fromJson(Map<String, dynamic> j)

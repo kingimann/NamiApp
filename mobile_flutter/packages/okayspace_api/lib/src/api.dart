@@ -208,6 +208,20 @@ class OkaySpaceApi {
   // live from Stripe. All require Stripe to be configured server-side (else 503).
   // ---------------------------------------------------------------------------
 
+  /// Add money to your own wallet via Stripe Checkout. Open the returned
+  /// [CheckoutSession.url] in a browser; the wallet is credited by the webhook
+  /// once payment completes (poll [getWalletBalance] or call [syncTopups]).
+  Future<CheckoutSession> walletTopup(double amount, {bool embedded = false}) async =>
+      CheckoutSession.fromJson(await raw.postJson('/payments/checkout',
+          body: {'kind': 'topup', 'amount': amount, 'embedded': embedded}));
+
+  /// Safety net: credit any paid top-up the webhook hasn't recorded yet. Call on
+  /// wallet open / when returning from checkout. Returns how much was credited.
+  Future<double> syncTopups() async {
+    final r = await raw.postJson('/wallet/topup/sync');
+    return asDouble(r['credited']);
+  }
+
   /// Create (or fetch) the caller's Stripe Connect account. Returns its status
   /// and, until onboarding is complete, an `onboardingUrl` to open.
   Future<StripeAccountStatus> stripeAccount() async =>
