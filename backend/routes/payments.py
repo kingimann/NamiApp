@@ -733,9 +733,42 @@ async def create_checkout(body: CheckoutCreate, authorization: Optional[str] = H
     """Create a Stripe Checkout session and return a hosted checkout URL.
     - tip:          one-time destination charge to the creator's account
     - subscription: auto-renewing monthly destination charge to the creator
-    - promote:      one-time charge to the platform (boost your own post)"""
+    - promote:      one-time charge to the platform (boost your own post)
+    - topup:        one-time charge that credits the buyer's own wallet"""
     _require_stripe()
     me = await get_current_user(authorization)
+
+    # ── Top-up: the buyer adds money to their OWN wallet (no creator/transfer) ──
+    # Mirrors /wallet/topup so thin clients (e.g. the Flutter app) can add money
+    # through the single checkout endpoint. The wallet_topup metadata is what the
+    # webhook keys on to credit the balance on success.
+    if body.kind == "topup":
+        amt = round(float(body.amount or 0), 2)
+        if amt <= 0:
+            raise HTTPException(status_code=400, detail="Amount must be greater than 0")
+        if amt > 10000:
+            raise HTTPException(status_code=400, detail="Maximum top-up is $10,000")
+        session = stripe.checkout.Session.create(
+            mode="payment",
+            line_items=[{
+                "price_data": {
+                    "currency": "usd",
+                    "product_data": {"name": "Wallet top-up"},
+                    "unit_amount": int(round(amt * 100)),
+                },
+                "quantity": 1,
+            }],
+            **_ui_kwargs(bool(body.embedded), "/wallet"),
+            metadata={"kind": "wallet_topup", "buyer_id": me["user_id"], "amount": str(amt)},
+        )
+        # Record as processing so it shows in top-up history (and /wallet/topup/sync
+        # can recover it) until the webhook credits or it expires.
+        await db.wallet_topups.insert_one({
+            "id": str(uuid.uuid4()), "user_id": me["user_id"], "amount": amt,
+            "source": "stripe", "session_id": session["id"], "status": "processing",
+            "created_at": datetime.now(timezone.utc),
+        })
+        return _checkout_response(session, bool(body.embedded))
 
     # ── Promote: pays the platform (no connected account / transfer) ──
     if body.kind == "promote":
