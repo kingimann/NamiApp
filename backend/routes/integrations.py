@@ -90,6 +90,30 @@ async def _check_foursquare() -> tuple[bool, str]:
         return False, f"Foursquare call failed: {str(e)[:120]}"
 
 
+async def _check_mapbox() -> tuple[bool, str]:
+    """Validate the backend Mapbox token against the geocoding endpoint the app
+    actually uses (server-side form geocoding). The client map UI uses a separate
+    build-time token, EXPO_PUBLIC_MAPBOX_TOKEN, which the server can't see."""
+    token = os.environ.get("MAPBOX_TOKEN", "")
+    if not token:
+        return False, "MAPBOX_TOKEN not set."
+    try:
+        async with httpx.AsyncClient(timeout=10) as c:
+            r = await c.get(
+                "https://api.mapbox.com/search/geocode/v6/forward",
+                params={"q": "coffee", "limit": "1", "access_token": token},
+            )
+        if r.status_code == 200:
+            n = len((r.json() or {}).get("features", []))
+            return True, f"OK — geocoding reachable ({n} result(s) for a test search)."
+        if r.status_code in (401, 403):
+            # Don't echo the upstream body — it can reflect the token.
+            return False, f"HTTP {r.status_code} — token rejected (check the token and its scopes)."
+        return False, f"HTTP {r.status_code}"
+    except Exception as e:
+        return False, f"Mapbox call failed: {str(e)[:120]}"
+
+
 async def _check_ollama() -> tuple[bool, str]:
     host = os.environ.get("OLLAMA_HOST", "")
     if not host:
@@ -216,6 +240,14 @@ _INTEGRATIONS = [
         "docs": "https://dashboard.nexmo.com/",
         "configured": lambda: bool(__import__("services.sms", fromlist=["active_provider"]).active_provider()),
         "live": _check_sms,
+    },
+    {
+        "key": "mapbox", "name": "Mapbox (maps, geocoding, directions)", "category": "Maps",
+        "required": False, "env": ["MAPBOX_TOKEN", "EXPO_PUBLIC_MAPBOX_TOKEN"],
+        "summary": "The base map, place search / geocoding, and turn-by-turn directions. The backend uses MAPBOX_TOKEN for server-side geocoding (e.g. public forms, so the token never reaches the client); the app bundles EXPO_PUBLIC_MAPBOX_TOKEN for the in-app map UI.",
+        "fix": "Create a token at mapbox.com (Account → Tokens). Set MAPBOX_TOKEN on the server for backend geocoding, and EXPO_PUBLIC_MAPBOX_TOKEN in your Expo/EAS build for the map.",
+        "docs": "https://account.mapbox.com/access-tokens/",
+        "configured": lambda: _present("MAPBOX_TOKEN"), "live": _check_mapbox,
     },
     {
         "key": "transitland", "name": "TransitLand (transit)", "category": "Maps",
