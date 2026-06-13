@@ -42,6 +42,16 @@ MONEY_ROUTES = [
     ("/wallet/activity", "get"),
     ("/wallet/topups", "get"),
     ("/payments/pay-wallet", "post"),
+    # P2P transfer flow (protected / Interac-style).
+    ("/money/send", "post"),
+    ("/money/transfers", "get"),
+    ("/money/transfers/history", "get"),
+    ("/money/transfers/{tid}/accept", "post"),
+    ("/money/transfers/{tid}/decline", "post"),
+    ("/money/transfers/{tid}/reverse", "post"),
+    # Payout methods item schema (instant_eligible) + immutable money audit log.
+    ("/payments/payouts/methods", "get"),
+    ("/admin/money-audit", "get"),
 ]
 
 
@@ -77,6 +87,7 @@ AUTH_BEFORE_VALIDATION_POSTS = [
     "/payments/checkout",
     "/payments/pay-intent",
     "/payments/payouts/cashout",
+    "/money/transfers/{tid}/accept",
 ]
 
 

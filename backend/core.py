@@ -254,6 +254,25 @@ MONETIZE_MIN_AGE_DAYS = int(os.environ.get("MONETIZE_MIN_AGE_DAYS", "60") or 60)
 MONEY_MAX_TOPUP = float(os.environ.get("MONEY_MAX_TOPUP", "1000") or 1000)   # wallet top-up
 MONEY_MAX_SEND = float(os.environ.get("MONEY_MAX_SEND", "2000") or 2000)     # send / transfer / pay
 
+# ── Per-request context (request-id + client IP) ─────────────────────────────
+# Populated by a middleware in server.py at the start of each request and read
+# by the money audit log so every mutation records who/when AND from where.
+# A ContextVar set before `call_next` is visible to the downstream handler.
+import contextvars as _contextvars
+
+_request_ctx: "_contextvars.ContextVar[dict]" = _contextvars.ContextVar("request_ctx", default={})
+
+
+def set_request_context(request_id: Optional[str] = None, ip: Optional[str] = None) -> None:
+    _request_ctx.set({"request_id": request_id, "ip": ip})
+
+
+def get_request_context() -> dict:
+    try:
+        return _request_ctx.get() or {}
+    except Exception:
+        return {}
+
 # Velocity limits (per user) — enforced server-side, returned as 429.
 SEND_MAX_PER_HOUR = int(os.environ.get("SEND_MAX_PER_HOUR", "10") or 10)
 SEND_MAX_PER_DAY = float(os.environ.get("SEND_MAX_PER_DAY", "2000") or 2000)   # $/24h across sends

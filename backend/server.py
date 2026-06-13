@@ -3,6 +3,7 @@ import hashlib
 import logging
 import os
 import time
+import uuid
 
 from fastapi import APIRouter, FastAPI, Request, WebSocket
 from fastapi.exceptions import RequestValidationError
@@ -154,6 +155,22 @@ def _err_body(status, code, message, extra=None):
     if extra:
         err.update(extra)
     return {"error": err, "detail": err}
+
+
+@app.middleware("http")
+async def request_context(request: _Req, call_next):
+    """Stamp each request with an id + the client IP and stash them in a
+    ContextVar so the money audit log can record who/when AND from where without
+    threading a Request through every handler. Trusts the first X-Forwarded-For
+    hop (Render/Cloudflare set it) and falls back to the socket peer."""
+    from core import set_request_context
+    rid = request.headers.get("x-request-id") or uuid.uuid4().hex
+    fwd = request.headers.get("x-forwarded-for", "")
+    ip = (fwd.split(",")[0].strip() if fwd else None) or (request.client.host if request.client else None)
+    set_request_context(request_id=rid, ip=ip)
+    resp = await call_next(request)
+    resp.headers.setdefault("X-Request-Id", rid)
+    return resp
 
 
 @app.middleware("http")
