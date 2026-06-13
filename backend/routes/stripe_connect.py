@@ -581,6 +581,23 @@ async def stripe_connect_webhook(request: Request):
                 {"stripe_payout_id": obj.get("id")},
                 {"$set": {"status": status, "updated_at": datetime.now(timezone.utc)}},
             )
+            if etype == "payout.paid":
+                # Tell the user the cash-out landed (in-app + push via emit_notification).
+                try:
+                    uid = (obj.get("metadata") or {}).get("user_id")
+                    if not uid:
+                        rec = await db.payouts.find_one({"stripe_payout_id": obj.get("id")}, {"_id": 0, "user_id": 1})
+                        uid = (rec or {}).get("user_id")
+                    if uid:
+                        ccy = (obj.get("currency") or "usd").lower()
+                        amt = _from_minor(int(obj.get("amount") or 0), ccy)
+                        from routes.notifications import emit_notification
+                        await emit_notification(
+                            user_id=uid, actor_id=None, ntype="payout",
+                            message=f"${amt:.2f} {ccy.upper()} landed in your account",
+                        )
+                except Exception:
+                    pass
         # transfer.created / balance.available need no action — balance & history
         # are read live from Stripe — but we ack them so Stripe stops retrying.
     except Exception:
