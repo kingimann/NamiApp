@@ -17,7 +17,7 @@ import re
 import time
 import uuid
 from datetime import datetime, timezone
-from typing import List, Optional
+from typing import Any, List, Optional
 
 import httpx
 
@@ -258,6 +258,20 @@ class SubmissionsOut(_FOut):
     submissions: list = []
     total: int = 0
     fields: list = []
+
+
+class FormOut(_FOut):
+    id: str
+    owner_id: Optional[str] = None
+    form_key: Optional[str] = None
+    title: Optional[str] = None
+    description: Optional[str] = None
+    submit_label: str = "Submit"
+    notify_email: Optional[str] = None
+    ai_validate: bool = False
+    fields: list = []
+    submissions: int = 0
+    created_at: Optional[Any] = None
 
 
 class GeocodeOut(_FOut):

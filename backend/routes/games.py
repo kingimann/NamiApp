@@ -10,7 +10,7 @@ Play surface: the app loads `/api/pub/game/{id}` in a WebView (native) / iframe
 (web); for inline-HTML games we inject the SDK automatically.
 """
 from datetime import datetime, timezone
-from typing import List, Optional
+from typing import Any, List, Optional
 from xml.sax.saxutils import quoteattr
 import uuid
 
@@ -47,9 +47,9 @@ class GameOut(BaseModel):
     thumbnail: Optional[str] = None
     owner_id: Optional[str] = None
     owner_name: Optional[str] = None
-    kind: str = "html"          # "url" | "html"
+    kind: str = "url"            # "url" | "html"
     plays: int = 0
-    created_at: Optional[datetime] = None
+    created_at: Optional[Any] = None
 
 
 class GamesListOut(BaseModel):

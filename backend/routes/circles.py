@@ -9,7 +9,7 @@ Circle document:
   { id, owner_id, name, member_ids: [...], created_at }
 """
 from datetime import datetime, timezone
-from typing import List, Optional
+from typing import Any, List, Optional
 import uuid
 
 from fastapi import APIRouter, Header, HTTPException
@@ -32,7 +32,7 @@ class CircleOut(BaseModel):
     name: str = ""
     member_count: int = 0
     member_ids: List[str] = []
-    created_at: Optional[datetime] = None
+    created_at: Optional[Any] = None
 
 
 class CircleCreate(BaseModel):
