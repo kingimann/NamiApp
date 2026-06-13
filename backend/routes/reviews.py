@@ -7,7 +7,7 @@ from fastapi import APIRouter, Header, HTTPException, Query
 from pydantic import BaseModel, ConfigDict
 
 from core import db, get_current_user
-from models import Review, ReviewCreate
+from models import Review, ReviewCreate, ReviewSummary
 
 router = APIRouter()
 
@@ -27,6 +27,27 @@ async def list_reviews_for_place(
     cursor = db.reviews.find({"place_key": place_key}, {"_id": 0}).sort("created_at", -1)
     docs = await cursor.to_list(200)
     return [Review(**d) for d in docs]
+
+
+@router.get("/reviews/summary", response_model=ReviewSummary)
+async def review_summary(
+    place_key: str = Query(...),
+    authorization: Optional[str] = Header(None),
+):
+    """Aggregate rating for a place: count, mean and a 1..5 histogram. Lets the
+    map/place card show "4.3 ★ (27)" without pulling every review."""
+    await get_current_user(authorization)
+    docs = await db.reviews.find({"place_key": place_key}, {"_id": 0, "rating": 1}).to_list(2000)
+    dist = {str(i): 0 for i in range(1, 6)}
+    total = 0
+    for d in docs:
+        r = int(d.get("rating") or 0)
+        if 1 <= r <= 5:
+            dist[str(r)] += 1
+            total += r
+    count = sum(dist.values())
+    average = round(total / count, 2) if count else 0.0
+    return ReviewSummary(place_key=place_key, count=count, average=average, distribution=dist)
 
 
 @router.post("/reviews", response_model=Review)

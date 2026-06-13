@@ -1,11 +1,13 @@
 """Behavioural tests for place reviews (routes.reviews).
 
-Pins: rating is bounded 1..5 (400 otherwise); a review is one-per-user-per-place
+Pins: rating is bounded 1..5 and coordinates to valid ranges at the model
+boundary (422 otherwise); a review is one-per-user-per-place
 (re-posting updates in place via upsert, never duplicates); list is filtered by
 place_key; delete is owner-scoped (404 otherwise).
 """
 import pytest
 from fastapi import HTTPException
+from pydantic import ValidationError
 
 from routes import reviews
 from models import ReviewCreate
@@ -29,11 +31,37 @@ def _body(rating=5, text="great", place="pk1"):
                         rating=rating, text=text)
 
 
+def test_rating_must_be_in_range():
+    # Bounds are enforced at the model boundary (HTTP 422), not in the handler.
+    for bad in (0, 6, -1):
+        with pytest.raises(ValidationError):
+            _body(rating=bad)
+
+
+def test_coordinates_must_be_in_range():
+    with pytest.raises(ValidationError):
+        ReviewCreate(place_key="p", place_name="x", longitude=200.0, latitude=2.0, rating=5)
+    with pytest.raises(ValidationError):
+        ReviewCreate(place_key="p", place_name="x", longitude=2.0, latitude=-91.0, rating=5)
+
+
 @pytest.mark.asyncio
-async def test_rating_must_be_in_range(env):
-    with pytest.raises(HTTPException) as ei:
-        await reviews.create_review(_body(rating=6))
-    assert ei.value.status_code == 400
+async def test_summary_aggregates_ratings(env):
+    await reviews.create_review(_body(rating=5, place="pk1"))
+    # A second user's review of the same place (inserted directly).
+    await env.reviews.insert_one(
+        {"id": "r2", "user_id": "u2", "place_key": "pk1", "rating": 3, "created_at": None})
+    out = await reviews.review_summary(place_key="pk1")
+    assert out.count == 2
+    assert out.average == 4.0
+    assert out.distribution == {"1": 0, "2": 0, "3": 1, "4": 0, "5": 1}
+
+
+@pytest.mark.asyncio
+async def test_summary_empty_place(env):
+    out = await reviews.review_summary(place_key="nope")
+    assert out.count == 0 and out.average == 0.0
+    assert out.distribution == {"1": 0, "2": 0, "3": 0, "4": 0, "5": 0}
 
 
 @pytest.mark.asyncio
