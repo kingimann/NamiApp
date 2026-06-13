@@ -730,6 +730,7 @@ class PostCreate(BaseModel):
     text: str = ""
     parent_id: Optional[str] = None
     quote_of: Optional[str] = None     # NEW: quote-repost target id
+    kind: Optional[Literal["post", "reel", "video"]] = None  # explicit media kind; derived from media+title when omitted
     place_name: Optional[str] = None
     place_longitude: Optional[float] = None
     place_latitude: Optional[float] = None
@@ -845,6 +846,7 @@ class Post(BaseModel):
     place_longitude: Optional[float] = None
     place_latitude: Optional[float] = None
     media: List[PostMedia] = []
+    kind: str = "post"                 # "post" | "reel" (untitled video) | "video" (titled video)
     tagged_users: List[TaggedUser] = []
     link_preview: Optional[LinkPreview] = None
     poll: Optional[Poll] = None
