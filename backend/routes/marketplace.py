@@ -523,6 +523,8 @@ async def patch_listing(
         patch["photo_base64"] = body.photo_base64
         patch["photos"] = [body.photo_base64] if body.photo_base64 else []
     if body.status is not None:
+        # status is constrained to {"active","sold"} by the model; "flagged" is
+        # moderation's call (see the re-moderation below), never client-set.
         patch["status"] = body.status
     if body.locality is not None:
         patch["locality"] = body.locality[:120]
@@ -556,10 +558,14 @@ async def patch_listing(
                 })
             patch["business_id"] = body.business_id
     # Re-moderate when the content (title/description/photos) changed — fixing a
-    # flagged listing republishes it; editing one into spam re-flags it. Skip if
-    # the caller is explicitly setting a status (e.g. marking sold).
+    # flagged listing republishes it; editing one into spam re-flags it. Also
+    # re-moderate when the owner tries to (re)activate, so a flagged listing
+    # can't be silently un-flagged by sending {status:"active"}. Marking SOLD
+    # never needs moderation, so it's the only status that skips this.
     content_changed = any(k in patch for k in ("title", "description", "photos"))
-    if content_changed and body.status is None and doc.get("status") in ("active", "flagged", None):
+    reactivating_flagged = body.status == "active" and doc.get("status") == "flagged"
+    if (content_changed or reactivating_flagged) and body.status != "sold" \
+            and doc.get("status") in ("active", "flagged", None):
         title = patch.get("title", doc.get("title", ""))
         desc = patch.get("description", doc.get("description", ""))
         photos = patch.get("photos", doc.get("photos") or [])
