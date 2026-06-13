@@ -585,8 +585,38 @@ async def patch_listing(
             )
     if patch:
         await db.listings.update_one({"id": listing_id}, {"$set": patch})
+    # Price-drop alert: if the price was lowered, tell everyone who saved this
+    # listing (only while it's still active — no ping on a sold/flagged edit).
+    old_price = round(float(doc.get("price", 0) or 0), 2)
+    new_price = patch.get("price")
+    if (new_price is not None and round(float(new_price), 2) < old_price
+            and patch.get("status", doc.get("status")) == "active"):
+        await _notify_price_drop(listing_id, doc.get("title") or "a listing",
+                                 old_price, round(float(new_price), 2), user["user_id"])
     updated = await db.listings.find_one({"id": listing_id}, {"_id": 0})
     return await _hydrate_listing(updated, viewer_id=user["user_id"], with_counts=True)
+
+
+async def _notify_price_drop(listing_id: str, title: str, old_price: float,
+                             new_price: float, owner_id: str) -> None:
+    """Notify savers (not the owner) that a saved listing's price dropped."""
+    savers = await db.listing_saves.find(
+        {"listing_id": listing_id}, {"_id": 0, "user_id": 1}).limit(500).to_list(500)
+    if not savers:
+        return
+    from routes.notifications import emit_notification
+    msg = f"Price dropped on “{title[:48]}” — now ${new_price:.2f} (was ${old_price:.2f})"
+    seen = set()
+    for s in savers:
+        uid = s.get("user_id")
+        if not uid or uid == owner_id or uid in seen:
+            continue
+        seen.add(uid)
+        try:
+            await emit_notification(user_id=uid, actor_id=owner_id,
+                                    ntype="marketplace", message=msg, post_id=listing_id)
+        except Exception:
+            pass
 
 
 @router.delete("/listings/{listing_id}", response_model=OkOut)
