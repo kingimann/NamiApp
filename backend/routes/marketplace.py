@@ -340,7 +340,7 @@ async def list_listings(
     condition: Optional[str] = Query(None),
     min_price: Optional[float] = Query(None),
     max_price: Optional[float] = Query(None),
-    sort: Optional[str] = Query("recent"),  # recent | price_low | price_high | nearby
+    sort: Optional[str] = Query("recent"),  # recent | price_low | price_high | popular | nearby
     lat: Optional[float] = Query(None),
     lng: Optional[float] = Query(None),
     radius_km: Optional[float] = Query(None),
@@ -372,6 +372,8 @@ async def list_listings(
         sort_field, sort_dir = "price", 1
     elif sort == "price_high":
         sort_field, sort_dir = "price", -1
+    elif sort == "popular":
+        sort_field, sort_dir = "views_count", -1
     # Pull a wider candidate set when filtering by distance, since many get
     # dropped for being out of range or having no coordinates.
     viewer_coords: Optional[Tuple[float, float]] = (
