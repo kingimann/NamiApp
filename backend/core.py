@@ -248,6 +248,11 @@ def account_age_days(d: dict) -> int:
 # ads, publisher sites, ad earnings) each require a minimum account age.
 MARKETPLACE_MIN_AGE_DAYS = int(os.environ.get("MARKETPLACE_MIN_AGE_DAYS", "30") or 30)
 MONETIZE_MIN_AGE_DAYS = int(os.environ.get("MONETIZE_MIN_AGE_DAYS", "60") or 60)
+
+# Per-transaction money caps (anti-abuse). A modified client bypasses its own
+# limits, so the server enforces these on every money-moving request.
+MONEY_MAX_TOPUP = float(os.environ.get("MONEY_MAX_TOPUP", "1000") or 1000)   # wallet top-up
+MONEY_MAX_SEND = float(os.environ.get("MONEY_MAX_SEND", "2000") or 2000)     # send / transfer / pay
 MIN_ACCOUNT_AGE_DAYS = MARKETPLACE_MIN_AGE_DAYS  # back-compat default
 
 

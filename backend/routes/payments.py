@@ -22,7 +22,7 @@ from pydantic import BaseModel, ConfigDict
 
 from core import (
     db, get_current_user, API_PLANS, API_PLANS_BY_ID, _active_plan,
-    API_OVERAGE_PACKS, API_OVERAGE_BY_ID, USAGE_PERIOD_DAYS, _norm_dt,
+    API_OVERAGE_PACKS, API_OVERAGE_BY_ID, USAGE_PERIOD_DAYS, _norm_dt, MONEY_MAX_TOPUP,
 )
 from db import DuplicateKeyError
 
@@ -1108,8 +1108,8 @@ async def create_checkout(body: CheckoutCreate, _auth_user: dict = Depends(get_c
         amt = round(float(body.amount or 0), 2)
         if amt <= 0:
             raise HTTPException(status_code=400, detail="Amount must be greater than 0")
-        if amt > 10000:
-            raise HTTPException(status_code=400, detail="Maximum top-up is $10,000")
+        if amt > MONEY_MAX_TOPUP:
+            raise HTTPException(status_code=400, detail=f"Maximum top-up is ${MONEY_MAX_TOPUP:,.0f}")
         session = stripe.checkout.Session.create(
             mode="payment",
             line_items=[{

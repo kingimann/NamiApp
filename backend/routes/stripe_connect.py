@@ -24,7 +24,7 @@ from typing import Optional
 from fastapi import APIRouter, Depends, Header, HTTPException, Request
 from pydantic import BaseModel, ConfigDict
 
-from core import db, get_current_user
+from core import db, get_current_user, MONEY_MAX_SEND
 from db import DuplicateKeyError
 from routes.payments import (
     stripe,
@@ -326,6 +326,8 @@ async def stripe_transfer(
     amount = round(float(body.amount or 0), 2)
     if amount <= 0:
         raise HTTPException(status_code=400, detail="Enter an amount to send")
+    if amount > MONEY_MAX_SEND:
+        raise HTTPException(status_code=400, detail={"code": "amount_too_large", "message": f"That's over the ${MONEY_MAX_SEND:,.0f} limit for a single transfer."})
     if body.to_user_id == sender["user_id"]:
         raise HTTPException(status_code=400, detail="You can't send money to yourself")
 
