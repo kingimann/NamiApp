@@ -309,12 +309,21 @@ async def _notify_tags(tagged_ids: list, actor_id: str, post_id: str, preview: s
         )
 
 
-async def _hydrate_post(doc: dict, viewer_id: Optional[str]) -> Post:
+async def _hydrate_post(
+    doc: dict, viewer_id: Optional[str], authors: Optional[dict] = None
+) -> Post:
     _community_name = None
     if doc.get("community_id"):
         _c = await db.communities.find_one({"id": doc["community_id"]}, {"_id": 0, "name": 1})
         _community_name = _c.get("name") if _c else None
-    author_doc = await db.users.find_one({"user_id": doc["user_id"]}, {"_id": 0})
+    # `authors` (user_id → user doc) is an optional prefetch from _hydrate_many so
+    # a feed page does one users query instead of one per post. Falls back to a
+    # direct lookup for anyone not in the map (e.g. a repost/quote original's
+    # author), so the result is identical either way.
+    if authors is not None and doc.get("user_id") in authors:
+        author_doc = authors[doc["user_id"]]
+    else:
+        author_doc = await db.users.find_one({"user_id": doc["user_id"]}, {"_id": 0})
     from core import _resolve_badges
     author = PostAuthor(
         user_id=doc["user_id"],
@@ -351,12 +360,12 @@ async def _hydrate_post(doc: dict, viewer_id: Optional[str]) -> Post:
     if doc.get("repost_of"):
         orig = await db.posts.find_one({"id": doc["repost_of"]}, {"_id": 0})
         if orig:
-            reposted_post = await _hydrate_post(orig, viewer_id)
+            reposted_post = await _hydrate_post(orig, viewer_id, authors)
     quoted_post: Optional[Post] = None
     if doc.get("quote_of"):
         orig = await db.posts.find_one({"id": doc["quote_of"]}, {"_id": 0})
         if orig:
-            quoted_post = await _hydrate_post(orig, viewer_id)
+            quoted_post = await _hydrate_post(orig, viewer_id, authors)
     poll_obj: Optional[Poll] = None
     if doc.get("poll"):
         votes_doc = await db.poll_votes.find(
@@ -437,8 +446,19 @@ async def _hydrate_many(docs: list, viewer_id: Optional[str]) -> list:
     """Hydrate a list of post docs concurrently. Each _hydrate_post makes several
     sequential DB round-trips; running a feed of ~100 posts one-at-a-time was the
     main feed-load latency. gather() preserves input order, so the ranked/sorted
-    order of `docs` is unchanged."""
-    return list(await asyncio.gather(*(_hydrate_post(d, viewer_id) for d in docs)))
+    order of `docs` is unchanged.
+
+    Authors are prefetched in a single `users` query (user_id IN …) and passed
+    down, so a feed page does one author lookup instead of one per post."""
+    author_ids = list({d.get("user_id") for d in docs if d.get("user_id")})
+    authors: dict = {}
+    if author_ids:
+        rows = await db.users.find(
+            {"user_id": {"$in": author_ids}}, {"_id": 0}
+        ).to_list(len(author_ids))
+        authors = {r["user_id"]: r for r in rows if r.get("user_id")}
+    return list(await asyncio.gather(
+        *(_hydrate_post(d, viewer_id, authors) for d in docs)))
 
 
 def _is_promoted(doc: dict) -> bool:
