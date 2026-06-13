@@ -462,12 +462,16 @@ async def list_messages(
     cleared_at = (conv.get("cleared_at") or {}).get(user["user_id"])
     if cleared_at:
         q["created_at"] = {"$gt": cleared_at}
+    # Fetch the most recent 200 (newest-first), then flip back to chronological
+    # order for display. Sorting ascending before limiting would return the
+    # OLDEST 200 and hide recent messages in any conversation past 200.
     cursor = (
         db.messages.find(q, {"_id": 0})
-        .sort("created_at", 1)
+        .sort("created_at", -1)
         .limit(200)
     )
     docs = await cursor.to_list(200)
+    docs.reverse()
     now = datetime.now(timezone.utc)
     # Disappearing messages: hide anything past its expiry from the response.
     def _expired(d: dict) -> bool:
