@@ -517,6 +517,7 @@ async def list_messages(
 
 class PresenceUpdate(BaseModel):
     typing: bool = False
+    state: Optional[str] = None   # "typing" | "idle"; state == "typing" ⇒ typing
 
 
 @router.post("/conversations/{conv_id}/presence", response_model=OkOut)
@@ -528,8 +529,11 @@ async def update_presence(conv_id: str, body: PresenceUpdate, authorization: Opt
     if not conv or user["user_id"] not in conv["participant_ids"]:
         raise HTTPException(status_code=404, detail="Conversation not found")
     now = datetime.now(timezone.utc)
+    # Accept either {typing: bool} or {state: "typing"|"idle"} — older app builds
+    # send the string state, so derive typing from whichever is present.
+    is_typing = bool(body.typing) or (body.state or "").strip().lower() == "typing"
     patch = {f"last_active.{user['user_id']}": now}
-    if body.typing:
+    if is_typing:
         patch[f"typing_at.{user['user_id']}"] = now
     else:
         patch[f"typing_at.{user['user_id']}"] = None
