@@ -473,6 +473,18 @@ class DecisionOut(_RsOut):
     status: str = ""
 
 
+class FormCheckOut(_RsOut):
+    ok: bool = True
+    issues: list = []         # [{field, message}]
+    block: bool = False
+    source: str = "rules"     # "rules" | "ai"
+
+
+class PhotoCheckOut(_RsOut):
+    ok: bool = True
+    reason: str = ""
+
+
 class RoadsideVerificationAdminOut(_RsOut):
     id: str
     user_id: str
@@ -493,7 +505,7 @@ async def quote(authorization: Optional[str] = Header(None)):
     return {"base": base, "tax": tax, "total": total, "tax_rate": ROADSIDE_TAX_RATE, "wallet_balance": bal}
 
 
-@router.post("/roadside/check")
+@router.post("/roadside/check", response_model=FormCheckOut)
 async def check_form(body: RoadsideCheck, authorization: Optional[str] = Header(None)):
     """AI (+ rule) review of a draft request: is it filled out correctly, and
     what should be fixed? Returns {ok, issues:[{field, message}]}."""
@@ -502,7 +514,7 @@ async def check_form(body: RoadsideCheck, authorization: Optional[str] = Header(
     return await review_form(body.model_dump())
 
 
-@router.post("/roadside/check-photo")
+@router.post("/roadside/check-photo", response_model=PhotoCheckOut)
 async def check_photo(body: RoadsidePhotoCheck, authorization: Optional[str] = Header(None)):
     """Verify a freshly-taken roadside photo shows the vehicle / the problem and
     isn't blank or random. Called right after capture. Returns {ok, reason}."""
