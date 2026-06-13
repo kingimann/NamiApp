@@ -739,6 +739,25 @@ def is_mod(user: dict) -> bool:
     return _effective_role(user) in ("mod", "admin")
 
 
+def _lite_public_user(u: dict):
+    """A cheap PublicUser for list contexts (e.g. the conversation list):
+    identity + presence only, with none of the per-user stat/relationship
+    count queries `_public_user` runs. `u` is a user doc."""
+    from models import PublicUser
+    hide = bool(u.get("hide_online", False))
+    return PublicUser(
+        user_id=u["user_id"],
+        name=u.get("name", ""),
+        username=u.get("username"),
+        picture=u.get("picture"),
+        verified=bool(u.get("verified", False)),
+        role=_effective_role(u),
+        online=(False if hide else _is_online(u.get("last_seen"))),
+        last_seen=(None if hide else (
+            _norm_dt(u["last_seen"]).isoformat() if u.get("last_seen") else None)),
+    )
+
+
 async def _public_user(user_id: str, viewer_id: Optional[str] = None):
     from models import PublicUser
     u = await db.users.find_one({"user_id": user_id})
