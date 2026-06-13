@@ -68,9 +68,13 @@ def _get_path(doc: dict, path: str) -> Any:
     return cur
 
 
-def _apply_update(doc: dict, update: dict) -> None:
+def _apply_update(doc: dict, update: dict, is_insert: bool = False) -> None:
     for op, fields in (update or {}).items():
-        if op == "$set":
+        if op == "$setOnInsert":
+            if is_insert:
+                for k, v in fields.items():
+                    _set_path(doc, k, v)
+        elif op == "$set":
             for k, v in fields.items():
                 _set_path(doc, k, v)
         elif op == "$inc":
@@ -166,14 +170,16 @@ class _Coll:
     async def update_one(self, filt: dict, update: dict, upsert: bool = False):
         for d in self.docs:
             if _match(d, filt):
-                _apply_update(d, update)
+                _apply_update(d, update)   # $setOnInsert is skipped on a match
                 return _Result(1)
         if upsert:
             base = {k: v for k, v in filt.items() if not isinstance(v, dict)}
-            _apply_update(base, update)
+            _apply_update(base, update, is_insert=True)
             self.docs.append(base)
             res = _Result(0)
-            res.upserted_id = base.get("id")
+            res.matched_count = 0
+            # Mirror Mongo: an insert returns a truthy upserted_id.
+            res.upserted_id = base.get("id") or f"_upserted_{len(self.docs)}"
             return res
         return _Result(0)
 
