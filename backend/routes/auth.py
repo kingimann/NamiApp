@@ -8,7 +8,7 @@ import uuid
 
 import bcrypt
 from email_validator import EmailNotValidError, validate_email
-from fastapi import APIRouter, Header, HTTPException
+from fastapi import APIRouter, Depends, Header, HTTPException
 from pydantic import BaseModel, ConfigDict
 from db import DuplicateKeyError
 
@@ -165,6 +165,14 @@ async def _registration_mode() -> str:
 def _admin_or_403(user: dict):
     if not is_admin(user):
         raise HTTPException(status_code=403, detail="Admins only")
+
+
+async def _require_admin(user: dict = Depends(get_current_user)) -> dict:
+    """Auth-as-a-dependency: FastAPI resolves it before validating the request
+    body, so an unauthenticated/non-admin call to a bodied admin route returns
+    401/403 instead of a 422 that leaks the body schema (API guide §5)."""
+    _admin_or_403(user)
+    return user
 
 
 class LoginRequest(BaseModel):
@@ -542,14 +550,12 @@ async def register(body: RegisterRequest):
 
 # ── Registration mode + invite codes (admin) ─────────────────────────────────
 @router.get("/admin/registration", response_model=RegistrationModeOut)
-async def admin_get_registration(authorization: Optional[str] = Header(None)):
-    _admin_or_403(await get_current_user(authorization))
+async def admin_get_registration(_admin: dict = Depends(_require_admin)):
     return {"mode": await _registration_mode()}
 
 
 @router.post("/admin/registration", response_model=RegistrationModeOut)
-async def admin_set_registration(body: RegistrationModeBody, authorization: Optional[str] = Header(None)):
-    _admin_or_403(await get_current_user(authorization))
+async def admin_set_registration(body: RegistrationModeBody, _admin: dict = Depends(_require_admin)):
     mode = (body.mode or "").strip().lower()
     if mode not in ("open", "invite", "closed"):
         raise HTTPException(status_code=400, detail="mode must be open, invite, or closed")
@@ -558,8 +564,7 @@ async def admin_set_registration(body: RegistrationModeBody, authorization: Opti
 
 
 @router.get("/admin/invites", response_model=InvitesListOut)
-async def admin_list_invites(authorization: Optional[str] = Header(None)):
-    _admin_or_403(await get_current_user(authorization))
+async def admin_list_invites(_admin: dict = Depends(_require_admin)):
     rows = await db.invite_codes.find({}, {"_id": 0}).sort("created_at", -1).limit(500).to_list(500)
     return {"data": [{
         "code": r.get("code"), "used": bool(r.get("used")),
@@ -568,8 +573,7 @@ async def admin_list_invites(authorization: Optional[str] = Header(None)):
 
 
 @router.post("/admin/invites", response_model=InvitesCreatedOut)
-async def admin_create_invites(body: InvitesBody, authorization: Optional[str] = Header(None)):
-    _admin_or_403(await get_current_user(authorization))
+async def admin_create_invites(body: InvitesBody, _admin: dict = Depends(_require_admin)):
     n = max(1, min(int(body.count or 1), 200))
     now = datetime.now(timezone.utc)
     codes: list = []
@@ -586,8 +590,7 @@ async def admin_create_invites(body: InvitesBody, authorization: Optional[str] =
 
 
 @router.delete("/admin/invites/{code}", response_model=AdminOkOut)
-async def admin_delete_invite(code: str, authorization: Optional[str] = Header(None)):
-    _admin_or_403(await get_current_user(authorization))
+async def admin_delete_invite(code: str, _admin: dict = Depends(_require_admin)):
     await db.invite_codes.delete_one({"code": (code or "").strip().upper()})
     return {"ok": True}
 
