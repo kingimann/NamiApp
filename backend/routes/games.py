@@ -15,12 +15,29 @@ from xml.sax.saxutils import quoteattr
 import uuid
 
 from fastapi import APIRouter, Header, HTTPException, Request, Response
-from pydantic import BaseModel
+from pydantic import BaseModel, ConfigDict
 
 from core import db, get_current_user
 from db import DuplicateKeyError
 
 router = APIRouter()
+
+# --- §1 response models (extra="allow") ---
+class OkOut(BaseModel):
+    model_config = ConfigDict(extra="allow")
+    ok: bool = True
+
+
+class ScoreOut(BaseModel):
+    model_config = ConfigDict(extra="allow")
+    ok: bool = True
+    best: float = 0
+
+
+class LeaderboardOut(BaseModel):
+    model_config = ConfigDict(extra="allow")
+    leaderboard: list = []
+
 
 HTML_MAX = 3_000_000      # ~3MB inline game cap (bigger games should use a URL)
 TITLE_MAX = 120
@@ -109,7 +126,7 @@ async def get_game(game_id: str, authorization: Optional[str] = Header(None)):
     return _card(doc)
 
 
-@router.delete("/games/{game_id}")
+@router.delete("/games/{game_id}", response_model=OkOut)
 async def delete_game(game_id: str, authorization: Optional[str] = Header(None)):
     user = await get_current_user(authorization)
     doc = await db.games.find_one({"id": game_id}, {"_id": 0, "owner_id": 1})
@@ -123,7 +140,7 @@ async def delete_game(game_id: str, authorization: Optional[str] = Header(None))
 
 
 # ── Scores / leaderboard (host-mediated; the game never calls these directly) ──
-@router.post("/games/{game_id}/score")
+@router.post("/games/{game_id}/score", response_model=ScoreOut)
 async def submit_score(game_id: str, body: ScoreSubmit, authorization: Optional[str] = Header(None)):
     user = await get_current_user(authorization)
     game = await db.games.find_one({"id": game_id}, {"_id": 0, "id": 1})
@@ -151,7 +168,7 @@ async def submit_score(game_id: str, body: ScoreSubmit, authorization: Optional[
     return {"ok": True, "best": float((row or {}).get("best", score))}
 
 
-@router.get("/games/{game_id}/leaderboard")
+@router.get("/games/{game_id}/leaderboard", response_model=LeaderboardOut)
 async def leaderboard(game_id: str, authorization: Optional[str] = Header(None)):
     user = await get_current_user(authorization)
     rows = await db.game_scores.find({"game_id": game_id}, {"_id": 0}).limit(500).to_list(500)
@@ -160,7 +177,7 @@ async def leaderboard(game_id: str, authorization: Optional[str] = Header(None))
     return {"leaderboard": top}
 
 
-@router.post("/games/{game_id}/play")
+@router.post("/games/{game_id}/play", response_model=OkOut)
 async def record_play(game_id: str, authorization: Optional[str] = Header(None)):
     await get_current_user(authorization)
     await db.games.update_one({"id": game_id}, {"$inc": {"plays": 1}})

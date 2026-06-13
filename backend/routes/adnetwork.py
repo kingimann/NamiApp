@@ -16,12 +16,28 @@ from typing import Optional
 
 from fastapi import APIRouter, Header, HTTPException, Query, Request
 from fastapi.responses import HTMLResponse, RedirectResponse, Response
-from pydantic import BaseModel
+from pydantic import BaseModel, ConfigDict
 
 from core import db, get_current_user, require_account_age, MONETIZE_MIN_AGE_DAYS
 from routes.ads import bill_link_ad, _seen_recently
 
 router = APIRouter()
+
+# --- §1 response models (extra="allow") ---
+class OkOut(BaseModel):
+    model_config = ConfigDict(extra="allow")
+    ok: bool = True
+
+
+class SitesOut(BaseModel):
+    model_config = ConfigDict(extra="allow")
+    sites: list = []
+
+
+class AdServeOut(BaseModel):
+    model_config = ConfigDict(extra="allow")
+    ok: bool = True
+
 
 
 def _public_base(request: Request) -> str:
@@ -107,14 +123,14 @@ def _site_view(s: dict) -> dict:
     }
 
 
-@router.get("/pub/sites")
+@router.get("/pub/sites", response_model=SitesOut)
 async def list_sites(authorization: Optional[str] = Header(None)):
     me = await get_current_user(authorization)
     rows = await db.ad_sites.find({"owner_id": me["user_id"]}, {"_id": 0}).sort("created_at", -1).limit(50).to_list(50)
     return {"sites": [_site_view(s) for s in rows]}
 
 
-@router.delete("/pub/sites/{site_id}")
+@router.delete("/pub/sites/{site_id}", response_model=OkOut)
 async def delete_site(site_id: str, authorization: Optional[str] = Header(None)):
     me = await get_current_user(authorization)
     res = await db.ad_sites.delete_one({"id": site_id, "owner_id": me["user_id"]})
@@ -132,7 +148,7 @@ async def _pick_link_ad(exclude_owner: str):
     return random.choice(rows) if rows else None
 
 
-@router.get("/pub/ad")
+@router.get("/pub/ad", response_model=AdServeOut)
 async def serve_ad(request: Request, site: str = Query(...)):
     """Return one ad for a publisher slot (JSON). Records a billed impression."""
     s = await db.ad_sites.find_one({"site_key": site}, {"_id": 0})

@@ -11,11 +11,18 @@ from typing import List, Optional
 import uuid
 
 from fastapi import APIRouter, Header, HTTPException
-from pydantic import BaseModel
+from pydantic import BaseModel, ConfigDict
 
 from core import db, get_current_user
 
 router = APIRouter()
+
+# --- §1 response models (extra="allow") ---
+class HazardsOut(BaseModel):
+    model_config = ConfigDict(extra="allow")
+    hazards: list = []
+    threshold: float = 0
+
 
 HAZARD_TYPES = {
     "police", "accident", "hazard", "traffic", "road_closed",
@@ -113,7 +120,7 @@ async def report_hazard(body: HazardCreate, authorization: Optional[str] = Heade
     return _view(doc, user["user_id"])
 
 
-@router.get("/hazards")
+@router.get("/hazards", response_model=HazardsOut)
 async def list_hazards(
     longitude: float, latitude: float, radius: Optional[float] = None,
     authorization: Optional[str] = Header(None),

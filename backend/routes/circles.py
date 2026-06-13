@@ -13,12 +13,18 @@ from typing import List, Optional
 import uuid
 
 from fastapi import APIRouter, Header, HTTPException
-from pydantic import BaseModel
+from pydantic import BaseModel, ConfigDict
 
 from core import _public_user, db, get_current_user
 from models import PublicUser
 
 router = APIRouter()
+
+# --- §1 response models (extra="allow") ---
+class OkOut(BaseModel):
+    model_config = ConfigDict(extra="allow")
+    ok: bool = True
+
 
 
 class CircleCreate(BaseModel):
@@ -103,7 +109,7 @@ async def update_circle(circle_id: str, body: CirclePatch, authorization: Option
     return _view(c)
 
 
-@router.delete("/circles/{circle_id}")
+@router.delete("/circles/{circle_id}", response_model=OkOut)
 async def delete_circle(circle_id: str, authorization: Optional[str] = Header(None)):
     me = await get_current_user(authorization)
     res = await db.circles.delete_one({"id": circle_id, "owner_id": me["user_id"]})

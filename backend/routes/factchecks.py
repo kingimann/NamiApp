@@ -10,7 +10,7 @@ from typing import Optional
 import uuid
 
 from fastapi import APIRouter, Header, HTTPException
-from pydantic import BaseModel
+from pydantic import BaseModel, ConfigDict
 
 from core import db, get_current_user
 try:
@@ -19,6 +19,18 @@ except Exception:  # pragma: no cover
     emit_notification = None  # type: ignore
 
 router = APIRouter()
+
+# --- §1 response models (extra="allow") ---
+class OkOut(BaseModel):
+    model_config = ConfigDict(extra="allow")
+    ok: bool = True
+
+
+class FactchecksOut(BaseModel):
+    model_config = ConfigDict(extra="allow")
+    factchecks: list = []
+    threshold: float = 0
+
 
 # A note becomes publicly visible once it has at least this many net-helpful
 # votes (helpful must also outweigh not-helpful). Simple threshold MVP — X uses a
@@ -101,7 +113,7 @@ async def add_factcheck(post_id: str, body: FactcheckCreate, authorization: Opti
     return _view(doc, None)
 
 
-@router.get("/posts/{post_id}/factchecks")
+@router.get("/posts/{post_id}/factchecks", response_model=FactchecksOut)
 async def list_factchecks(post_id: str, authorization: Optional[str] = Header(None)):
     user = await get_current_user(authorization)
     rows = await db.factchecks.find({"post_id": post_id}, {"_id": 0}).limit(100).to_list(100)
@@ -118,7 +130,7 @@ async def list_factchecks(post_id: str, authorization: Optional[str] = Header(No
     return {"factchecks": out, "threshold": HELPFUL_THRESHOLD}
 
 
-@router.post("/factchecks/{fc_id}/rate")
+@router.post("/factchecks/{fc_id}/rate", response_model=OkOut)
 async def rate_factcheck(fc_id: str, body: FactcheckRate, authorization: Optional[str] = Header(None)):
     user = await get_current_user(authorization)
     fc = await db.factchecks.find_one({"id": fc_id}, {"_id": 0})
@@ -157,7 +169,7 @@ async def rate_factcheck(fc_id: str, body: FactcheckRate, authorization: Optiona
     return _view(fc, body.helpful)
 
 
-@router.delete("/factchecks/{fc_id}")
+@router.delete("/factchecks/{fc_id}", response_model=OkOut)
 async def delete_factcheck(fc_id: str, authorization: Optional[str] = Header(None)):
     user = await get_current_user(authorization)
     fc = await db.factchecks.find_one({"id": fc_id}, {"_id": 0})

@@ -15,11 +15,24 @@ import time
 from typing import Optional
 
 from fastapi import APIRouter, Header, HTTPException
+from pydantic import BaseModel, ConfigDict
 
 from core import LIVEKIT_API_KEY, LIVEKIT_API_SECRET, LIVEKIT_URL, db, get_current_user
 from routes.notifications import emit_notification
 
 router = APIRouter()
+
+# --- §1 response models (extra="allow") ---
+class OkOut(BaseModel):
+    model_config = ConfigDict(extra="allow")
+    ok: bool = True
+
+
+class CallTokenOut(BaseModel):
+    model_config = ConfigDict(extra="allow")
+    token: str = ""
+    room: str = ""
+
 
 
 def calls_enabled() -> bool:
@@ -63,7 +76,7 @@ async def _conv_or_404(conversation_id: str, user_id: str) -> dict:
     return conv
 
 
-@router.post("/calls/{conversation_id}/token")
+@router.post("/calls/{conversation_id}/token", response_model=CallTokenOut)
 async def call_token(conversation_id: str, authorization: Optional[str] = Header(None)):
     """Mint a LiveKit token for this conversation's call room (members only)."""
     user = await get_current_user(authorization)
@@ -78,7 +91,7 @@ async def call_token(conversation_id: str, authorization: Optional[str] = Header
     return {"token": token, "url": LIVEKIT_URL, "room": room, "identity": user["user_id"]}
 
 
-@router.post("/calls/{conversation_id}/ring")
+@router.post("/calls/{conversation_id}/ring", response_model=OkOut)
 async def call_ring(conversation_id: str, authorization: Optional[str] = Header(None)):
     """Notify the other participant(s) of an incoming call (in-app + push)."""
     user = await get_current_user(authorization)
