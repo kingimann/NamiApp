@@ -377,7 +377,9 @@ async def transfers_history(me: dict = Depends(get_current_user)):
     rows = await db.money_transfers.find(
         {"$or": [{"from_user_id": uid}, {"to_user_id": uid}]}, {"_id": 0}
     ).sort("created_at", -1).limit(100).to_list(100)
-    return {"transfers": [await _hydrate_transfer(t, uid) for t in rows]}
+    transfers = [await _hydrate_transfer(t, uid) for t in rows]
+    # §6: canonical `data` + `total` alongside the legacy `transfers` key.
+    return {"transfers": transfers, "data": transfers, "total": len(transfers)}
 
 
 @router.get("/money/transfers")
