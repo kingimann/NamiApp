@@ -96,7 +96,50 @@ class OkaySpaceApi {
 
   Future<Post> createPost(Map<String, dynamic> body) async =>
       Post.fromJson(await raw.postJson('/posts', body: body));
+
+  /// Delete a post. Works for the author — and for moderators/admins on ANY
+  /// post (the role check is server-side), so this doubles as the admin
+  /// "remove post" action; there's no separate admin-delete endpoint.
   Future<void> deletePost(String id) async => raw.deleteJson('/posts/$id');
+
+  /// Delete several of your posts at once. Returns how many were removed.
+  Future<int> deletePosts(List<String> ids) async {
+    final r = await raw.postJson('/posts/delete-bulk', body: {'ids': ids});
+    return asInt(r['deleted']);
+  }
+
+  /// Report a post for moderator review.
+  Future<void> reportPost(String id) async => raw.postJson('/posts/$id/report');
+
+  /// Hide this post for you and feed fewer like it.
+  Future<void> notInterested(String id) async => raw.postJson('/posts/$id/not-interested');
+
+  /// Record a view (counts an impression).
+  Future<void> recordPostView(String id) async => raw.postJson('/posts/$id/view');
+
+  /// Who viewed a post (author only): `{count, unique, viewers: [...]}`.
+  Future<Map<String, dynamic>> postViewers(String id) async =>
+      Map<String, dynamic>.from(await raw.getJson('/posts/$id/viewers'));
+
+  /// Engagement analytics for a post you own (impressions, clicks, reactions,
+  /// comments, reposts, bookmarks, engagement_rate, …).
+  Future<Map<String, dynamic>> postAnalytics(String id) async =>
+      Map<String, dynamic>.from(await raw.getJson('/posts/$id/analytics'));
+
+  /// Trending hashtags right now, as `[{tag, count}]`.
+  Future<List<Map<String, dynamic>>> trendingHashtags() async {
+    final r = await raw.getJson('/hashtags/trending');
+    return ((r['hashtags'] as List?) ?? const [])
+        .map((e) => Map<String, dynamic>.from(e as Map))
+        .toList();
+  }
+
+  /// How many posts use a hashtag.
+  Future<int> hashtagCount(String tag) async {
+    final t = tag.replaceFirst(RegExp(r'^#'), '');
+    final r = await raw.getJson('/hashtags/${Uri.encodeComponent(t)}/count');
+    return asInt(r['count']);
+  }
 
   Future<Post> toggleLike(String id) async => Post.fromJson(await raw.postJson('/posts/$id/like'));
   Future<Post> toggleDislike(String id) async => Post.fromJson(await raw.postJson('/posts/$id/dislike'));
