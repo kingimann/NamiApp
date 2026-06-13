@@ -14,7 +14,7 @@ import bcrypt
 from fastapi import APIRouter, Depends, Header, HTTPException
 from pydantic import BaseModel, ConfigDict
 
-from core import db, get_current_user, _public_user, CURRENCIES, normalize_currency, _norm_dt
+from core import db, get_current_user, _public_user, CURRENCIES, normalize_currency, _norm_dt, MONEY_MAX_TOPUP, MONEY_MAX_SEND
 from db import _to_json, DuplicateKeyError
 
 # How long the sender can reverse a money transfer before the recipient can claim it.
@@ -129,16 +129,26 @@ def _insufficient():
     })
 
 
-def _money_amount(amount) -> float:
+def _money_amount(amount, cap: Optional[float] = None) -> float:
     """Validate a user-supplied money amount. Rejects non-finite values — NaN and
     Infinity slip past `<= 0` checks (every comparison with NaN is False) and
-    would poison wallet_balance permanently."""
+    would poison wallet_balance permanently — plus more-than-2-decimal amounts and
+    anything over `cap` (a modified client can't bypass these server checks)."""
     try:
-        a = round(float(amount or 0), 2)
+        f = float(amount or 0)
     except (TypeError, ValueError):
         raise HTTPException(status_code=400, detail="Amount must be a positive number")
-    if not math.isfinite(a) or a <= 0:
+    if not math.isfinite(f) or f <= 0:
         raise HTTPException(status_code=400, detail="Amount must be a positive number")
+    a = round(f, 2)
+    if abs(a - f) > 1e-6:
+        raise HTTPException(status_code=400, detail={
+            "code": "too_precise", "message": "Amount can have at most 2 decimal places.",
+        })
+    if cap is not None and a > cap + 1e-9:
+        raise HTTPException(status_code=400, detail={
+            "code": "amount_too_large", "message": f"That's over the ${cap:,.0f} limit for a single transaction.",
+        })
     return a
 
 
@@ -315,7 +325,7 @@ async def send_money(body: SendMoney, me: dict = Depends(get_current_user)):
     to = await db.users.find_one({"user_id": body.to_user_id}, {"_id": 0, "user_id": 1, "name": 1})
     if not to:
         raise HTTPException(status_code=404, detail="Recipient not found")
-    amount = _money_amount(body.amount)
+    amount = _money_amount(body.amount, cap=MONEY_MAX_SEND)
     # Anti-fraud: block outgoing transfers during the post-direct-deposit-change hold.
     from routes.payments import payout_hold_until, DD_HOLD_BUSINESS_DAYS
     hold = payout_hold_until(me)
@@ -521,7 +531,7 @@ async def request_money(body: RequestMoney, me: dict = Depends(get_current_user)
     payer = await db.users.find_one({"user_id": body.to_user_id}, {"_id": 0, "user_id": 1, "name": 1})
     if not payer:
         raise HTTPException(status_code=404, detail="User not found")
-    amount = _money_amount(body.amount)
+    amount = _money_amount(body.amount, cap=MONEY_MAX_SEND)
     now = datetime.now(timezone.utc)
     doc = {
         "id": str(uuid.uuid4()),
@@ -769,7 +779,7 @@ async def pay_from_wallet(body: WalletPay, me: dict = Depends(get_current_user))
                 "message": "You're already subscribed to this creator.",
             })
     else:
-        amount = _money_amount(body.amount)
+        amount = _money_amount(body.amount, cap=MONEY_MAX_SEND)
         fee = await _fee_dollars()
 
     total = round(amount + fee, 2)
@@ -865,8 +875,8 @@ async def wallet_topup(body: WalletTopup, me: dict = Depends(get_current_user)):
     amount = round(float(body.amount or 0), 2)
     if amount <= 0:
         raise HTTPException(status_code=400, detail="Amount must be greater than 0")
-    if amount > 10000:
-        raise HTTPException(status_code=400, detail="Maximum top-up is $10,000")
+    if amount > MONEY_MAX_TOPUP:
+        raise HTTPException(status_code=400, detail=f"Maximum top-up is ${MONEY_MAX_TOPUP:,.0f}")
 
     from routes.payments import payments_live
     if await payments_live():
@@ -941,8 +951,8 @@ async def wallet_topup_intent(body: TopupIntent, me: dict = Depends(get_current_
     amount = round(float(body.amount or 0), 2)
     if amount <= 0:
         raise HTTPException(status_code=400, detail="Amount must be greater than 0")
-    if amount > 10000:
-        raise HTTPException(status_code=400, detail="Maximum top-up is $10,000")
+    if amount > MONEY_MAX_TOPUP:
+        raise HTTPException(status_code=400, detail=f"Maximum top-up is ${MONEY_MAX_TOPUP:,.0f}")
     from routes.payments import payments_live, stripe, STRIPE_PUBLISHABLE_KEY
     if not await payments_live():
         raise HTTPException(status_code=400, detail={"code": "not_live", "message": "Card payments aren't enabled right now."})
