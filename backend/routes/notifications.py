@@ -15,11 +15,22 @@ from typing import List, Optional
 import uuid
 
 from fastapi import APIRouter, Header, HTTPException
-from pydantic import BaseModel
+from pydantic import BaseModel, ConfigDict
 
 from core import db, get_current_user
 
 router = APIRouter()
+
+# --- §1 response models (extra="allow") ---
+class OkOut(BaseModel):
+    model_config = ConfigDict(extra="allow")
+    ok: bool = True
+
+
+class CountOut(BaseModel):
+    model_config = ConfigDict(extra="allow")
+    count: int = 0
+
 
 
 class Notification(BaseModel):
@@ -266,7 +277,7 @@ async def network_activity(authorization: Optional[str] = Header(None)):
     return out
 
 
-@router.get("/notifications/unread")
+@router.get("/notifications/unread", response_model=CountOut)
 async def unread_count(authorization: Optional[str] = Header(None)):
     user = await get_current_user(authorization)
     n = await db.notifications.count_documents(
@@ -275,7 +286,7 @@ async def unread_count(authorization: Optional[str] = Header(None)):
     return {"count": n}
 
 
-@router.post("/notifications/{notif_id}/read")
+@router.post("/notifications/{notif_id}/read", response_model=OkOut)
 async def mark_one_read(notif_id: str, authorization: Optional[str] = Header(None)):
     user = await get_current_user(authorization)
     res = await db.notifications.update_one(
@@ -287,7 +298,7 @@ async def mark_one_read(notif_id: str, authorization: Optional[str] = Header(Non
     return {"ok": True}
 
 
-@router.post("/notifications/read-all")
+@router.post("/notifications/read-all", response_model=OkOut)
 async def mark_all_read(authorization: Optional[str] = Header(None)):
     user = await get_current_user(authorization)
     await db.notifications.update_many(
@@ -297,7 +308,7 @@ async def mark_all_read(authorization: Optional[str] = Header(None)):
     return {"ok": True}
 
 
-@router.delete("/notifications/{notif_id}")
+@router.delete("/notifications/{notif_id}", response_model=OkOut)
 async def delete_notification(notif_id: str, authorization: Optional[str] = Header(None)):
     user = await get_current_user(authorization)
     res = await db.notifications.delete_one(

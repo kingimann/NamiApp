@@ -13,6 +13,7 @@ from datetime import datetime, timedelta, timezone
 from typing import Optional
 
 from fastapi import APIRouter, Header, HTTPException
+from pydantic import BaseModel, ConfigDict
 
 from core import db, get_current_user, is_admin, _norm_dt
 from db import DuplicateKeyError
@@ -23,6 +24,19 @@ except Exception:
     stripe = None  # type: ignore
 
 router = APIRouter()
+
+# --- §1 response models (extra="allow") ---
+class PayoutsInfoOut(BaseModel):
+    model_config = ConfigDict(extra="allow")
+    balance: float = 0
+    history: list = []
+
+
+class PayoutsRunOut(BaseModel):
+    model_config = ConfigDict(extra="allow")
+    payouts_created: int = 0
+    total_paid: float = 0
+
 
 # Serialize payout batches so the hourly loop, the admin "run", and the cron
 # trigger can't run concurrently and double-pay (single-process deployment).
@@ -177,7 +191,7 @@ async def _process_payouts_impl(only_due: bool = True) -> dict:
     return {"payouts_created": created, "total_paid": round(total, 2)}
 
 
-@router.get("/payouts")
+@router.get("/payouts", response_model=PayoutsInfoOut)
 async def my_payouts(authorization: Optional[str] = Header(None)):
     user = await get_current_user(authorization)
     uid = user["user_id"]
@@ -233,7 +247,7 @@ async def my_payouts(authorization: Optional[str] = Header(None)):
     }
 
 
-@router.post("/payouts/run")
+@router.post("/payouts/run", response_model=PayoutsRunOut)
 async def run_payouts(authorization: Optional[str] = Header(None), x_cron_key: Optional[str] = Header(None)):
     """Trigger the payout batch. Allowed for admins, or via the cron secret
     header (so a Render Cron Job / external scheduler can call it)."""

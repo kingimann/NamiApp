@@ -3,14 +3,22 @@ from typing import Optional
 
 import httpx
 from fastapi import APIRouter, Header, Query
+from pydantic import BaseModel, ConfigDict
 
 from core import FSQ_API_KEY, FSQ_BASE, get_current_user
 from models import FsqProfile
 
 router = APIRouter()
 
+# --- §1 response models (extra="allow") ---
+class FsqOut(BaseModel):
+    model_config = ConfigDict(extra="allow")
+    configured: bool = False
+    results: list = []
 
-@router.get("/foursquare/search")
+
+
+@router.get("/foursquare/search", response_model=FsqOut)
 async def foursquare_search(
     query: str = Query(...),
     lng: float = Query(...),
