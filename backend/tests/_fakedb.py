@@ -13,6 +13,8 @@ Supported query operators: equality, `$in`, `$ne`, `$gt`, `$gte`, `$lt`,
 from typing import Any, Dict, List, Optional
 import re as _re
 
+from db import DuplicateKeyError
+
 
 def _match(doc: dict, filt: dict) -> bool:
     for key, cond in (filt or {}).items():
@@ -125,6 +127,19 @@ class _Cursor:
 class _Coll:
     def __init__(self):
         self.docs: List[dict] = []
+        self._unique: Optional[tuple] = None
+
+    def ensure_unique(self, *fields: str) -> "_Coll":
+        """Opt-in unique index: insert_one raises DuplicateKeyError on conflict,
+        mirroring the real DB so idempotent-by-index routes can be tested."""
+        self._unique = tuple(fields)
+        return self
+
+    def _conflicts(self, doc: dict) -> bool:
+        if not self._unique:
+            return False
+        key = tuple(doc.get(f) for f in self._unique)
+        return any(tuple(d.get(f) for f in self._unique) == key for d in self.docs)
 
     def find(self, filt: Optional[dict] = None, proj=None):
         return _Cursor([d.copy() for d in self.docs if _match(d, filt or {})])
@@ -138,6 +153,8 @@ class _Coll:
         return rows[0].copy() if rows else None
 
     async def insert_one(self, doc: dict):
+        if self._conflicts(doc):
+            raise DuplicateKeyError("duplicate key")
         self.docs.append(doc.copy())
         return _Result(1)
 
