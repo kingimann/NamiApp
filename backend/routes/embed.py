@@ -18,6 +18,7 @@ from typing import Optional
 
 from fastapi import APIRouter, HTTPException, Query, Request
 from fastapi.responses import HTMLResponse, JSONResponse
+from pydantic import BaseModel, ConfigDict
 
 from core import db
 
@@ -306,7 +307,35 @@ def _profile_json(u: dict) -> dict:
 
 
 # ── JSON read endpoints ───────────────────────────────────────────────────────
-@router.get("/pub/post/{post_id}")
+# --- §1 response models (extra="allow"; the 404/unavailable path returns an
+# HTMLResponse, so only the success JSON is validated against these). -----------
+class _EOut(BaseModel):
+    model_config = ConfigDict(extra="allow")
+
+
+class EmbedContentOut(_EOut):
+    # Public content object (post/profile/listing/guide/community) — shape varies
+    # by kind, so only the common keys are declared; the rest pass through.
+    id: Optional[str] = None
+    type: Optional[str] = None
+    url: Optional[str] = None
+    title: Optional[str] = None
+
+
+class PostsPageOut(_EOut):
+    posts: list = []
+    next_cursor: Optional[str] = None
+
+
+class OEmbedOut(_EOut):
+    version: str = "1.0"
+    type: Optional[str] = None
+    title: Optional[str] = None
+    html: Optional[str] = None
+    provider_name: Optional[str] = None
+
+
+@router.get("/pub/post/{post_id}", response_model=EmbedContentOut)
 async def public_post(request: Request, post_id: str):
     if not _rate_ok(_client_ip(request)):
         raise HTTPException(status_code=429, detail="Slow down — too many requests.")
@@ -316,7 +345,7 @@ async def public_post(request: Request, post_id: str):
     return _post_json(*r)
 
 
-@router.get("/pub/profile/{username}")
+@router.get("/pub/profile/{username}", response_model=EmbedContentOut)
 async def public_profile(request: Request, username: str):
     if not _rate_ok(_client_ip(request)):
         raise HTTPException(status_code=429, detail="Slow down — too many requests.")
@@ -326,7 +355,7 @@ async def public_profile(request: Request, username: str):
     return _profile_json(u)
 
 
-@router.get("/pub/listing/{listing_id}")
+@router.get("/pub/listing/{listing_id}", response_model=EmbedContentOut)
 async def public_listing(request: Request, listing_id: str):
     if not _rate_ok(_client_ip(request)):
         raise HTTPException(status_code=429, detail="Slow down — too many requests.")
@@ -336,7 +365,7 @@ async def public_listing(request: Request, listing_id: str):
     return _listing_json(*r)
 
 
-@router.get("/pub/guide/{slug}")
+@router.get("/pub/guide/{slug}", response_model=EmbedContentOut)
 async def public_guide(request: Request, slug: str):
     if not _rate_ok(_client_ip(request)):
         raise HTTPException(status_code=429, detail="Slow down — too many requests.")
@@ -348,7 +377,7 @@ async def public_guide(request: Request, slug: str):
     return _guide_json(guide, owner, places)
 
 
-@router.get("/pub/community/{name}")
+@router.get("/pub/community/{name}", response_model=EmbedContentOut)
 async def public_community(request: Request, name: str):
     if not _rate_ok(_client_ip(request)):
         raise HTTPException(status_code=429, detail="Slow down — too many requests.")
@@ -358,7 +387,7 @@ async def public_community(request: Request, name: str):
     return _community_json(doc, await _community_member_count(doc["id"]))
 
 
-@router.get("/pub/profile/{username}/posts")
+@router.get("/pub/profile/{username}/posts", response_model=PostsPageOut)
 async def public_profile_posts(request: Request, username: str,
                                limit: int = Query(10), cursor: Optional[str] = Query(None)):
     """A user's public posts, newest first — build a OkaySpace feed widget on your site.
@@ -646,7 +675,7 @@ def _extract_username(url: str) -> Optional[str]:
     return m.group(1) if m else None
 
 
-@router.get("/pub/oembed")
+@router.get("/pub/oembed", response_model=OEmbedOut)
 async def oembed(request: Request, url: str = Query(...), format: str = Query("json"),
                  maxwidth: Optional[int] = Query(None), maxheight: Optional[int] = Query(None)):
     """oEmbed provider endpoint. Paste a OkaySpace post/profile URL into any oEmbed-aware
