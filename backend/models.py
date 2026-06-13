@@ -363,6 +363,16 @@ class ReviewSummary(BaseModel):
     distribution: Dict[str, int]  # {"1": n, ..., "5": n}
 
 
+class NearbyRatedPlace(BaseModel):
+    place_key: str
+    place_name: str
+    longitude: float
+    latitude: float
+    count: int
+    average: float
+    distance_km: float
+
+
 class MessageCreate(BaseModel):
     type: Literal["text", "place", "media", "voice", "post", "gif", "file", "contact", "tip", "form", "poll"] = "text"
     text: Optional[str] = ""

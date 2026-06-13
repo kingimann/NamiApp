@@ -58,6 +58,26 @@ async def test_summary_aggregates_ratings(env):
 
 
 @pytest.mark.asyncio
+async def test_nearby_ranks_by_rating_within_radius(env):
+    # Two places near (lng=0, lat=0); one far away.
+    env.reviews.docs = [
+        {"id": "a1", "user_id": "u1", "place_key": "near-hi", "place_name": "Hi",
+         "longitude": 0.001, "latitude": 0.001, "rating": 5, "created_at": None},
+        {"id": "a2", "user_id": "u2", "place_key": "near-hi", "place_name": "Hi",
+         "longitude": 0.001, "latitude": 0.001, "rating": 4, "created_at": None},
+        {"id": "b1", "user_id": "u1", "place_key": "near-lo", "place_name": "Lo",
+         "longitude": 0.002, "latitude": 0.002, "rating": 2, "created_at": None},
+        {"id": "c1", "user_id": "u1", "place_key": "far", "place_name": "Far",
+         "longitude": 50.0, "latitude": 50.0, "rating": 5, "created_at": None},
+    ]
+    out = await reviews.reviews_nearby(lat=0.0, lng=0.0, radius_km=5.0, limit=50)
+    keys = [p.place_key for p in out]
+    assert "far" not in keys              # outside the radius
+    assert keys == ["near-hi", "near-lo"]  # higher average first
+    assert out[0].count == 2 and out[0].average == 4.5
+
+
+@pytest.mark.asyncio
 async def test_summary_empty_place(env):
     out = await reviews.review_summary(place_key="nope")
     assert out.count == 0 and out.average == 0.0
