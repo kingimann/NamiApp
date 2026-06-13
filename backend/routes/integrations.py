@@ -11,10 +11,17 @@ from typing import Optional
 
 import httpx
 from fastapi import APIRouter, Header, HTTPException, Query
+from pydantic import BaseModel, ConfigDict
 
 from core import db, get_current_user, is_admin
 
 router = APIRouter()
+
+# --- §1 response models (extra="allow") ---
+class IntegrationsOut(BaseModel):
+    model_config = ConfigDict(extra="allow")
+    integrations: list = []
+
 
 
 def _present(*names: str) -> bool:
@@ -332,7 +339,7 @@ _INTEGRATIONS = [
 ]
 
 
-@router.get("/admin/integrations")
+@router.get("/admin/integrations", response_model=IntegrationsOut)
 async def admin_integrations(
     live: bool = Query(False, description="true = run live health checks for everything (slower). Accepts true/false or 1/0."),
     only: Optional[str] = Query(None, description="run the live check for just this integration key"),
