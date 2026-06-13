@@ -24,6 +24,54 @@ except Exception:  # pragma: no cover
 router = APIRouter()
 
 
+# --- §1 response models (extra="allow" so no field is ever dropped) ----------
+class _UOut(BaseModel):
+    model_config = ConfigDict(extra="allow")
+
+
+class OkOut(_UOut):
+    ok: bool = True
+
+
+class FollowOut(_UOut):
+    following: bool
+
+
+class FriendStatusOut(_UOut):
+    status: str = ""   # none | request_sent | friends | rejected | …
+
+
+class SubscribeOut(_UOut):
+    subscribed: bool
+
+
+class TiersOut(_UOut):
+    tiers: list = []
+
+
+class LeaderboardOut(_UOut):
+    leaders: list = []
+
+
+class EntriesOut(_UOut):
+    entries: list = []
+
+
+class AdminUsersOut(_UOut):
+    users: list = []
+    total: int = 0
+
+
+class TransactionsOut(_UOut):
+    transactions: list = []
+
+
+class ExportOut(_UOut):
+    filename: str = ""
+    csv: str = ""
+
+
+
 def _block_self_funds(user_id: str, me: dict):
     """No one — not even an admin — may edit their OWN balance or transactions.
     Otherwise an admin could credit themselves and cash out money that isn't
@@ -77,7 +125,7 @@ async def admin_patch_user(
     return await _public_user(user_id, viewer_id=me["user_id"])
 
 
-@router.get("/admin/audit")
+@router.get("/admin/audit", response_model=EntriesOut)
 async def admin_audit_log(limit: int = Query(80), authorization: Optional[str] = Header(None)):
     """Admin-only: recent moderation/admin actions."""
     me = await get_current_user(authorization)
@@ -109,7 +157,7 @@ def _admin_user_view(u: dict) -> dict:
     }
 
 
-@router.get("/admin/users")
+@router.get("/admin/users", response_model=AdminUsersOut)
 async def admin_list_users(
     q: str = Query("", description="search name/username/email"),
     limit: int = Query(50), offset: int = Query(0),
@@ -151,7 +199,7 @@ async def _require_admin_target(user_id: str, me: dict):
     return target
 
 
-@router.post("/admin/users/{user_id}/ban")
+@router.post("/admin/users/{user_id}/ban", response_model=OkOut)
 async def admin_ban_user(user_id: str, body: ModerationBody, authorization: Optional[str] = Header(None)):
     me = await get_current_user(authorization)
     target = await _require_admin_target(user_id, me)
@@ -163,7 +211,7 @@ async def admin_ban_user(user_id: str, body: ModerationBody, authorization: Opti
     return {"ok": True}
 
 
-@router.post("/admin/users/{user_id}/unban")
+@router.post("/admin/users/{user_id}/unban", response_model=OkOut)
 async def admin_unban_user(user_id: str, authorization: Optional[str] = Header(None)):
     me = await get_current_user(authorization)
     if not is_admin(me):
@@ -174,7 +222,7 @@ async def admin_unban_user(user_id: str, authorization: Optional[str] = Header(N
     return {"ok": True}
 
 
-@router.post("/admin/users/{user_id}/suspend")
+@router.post("/admin/users/{user_id}/suspend", response_model=OkOut)
 async def admin_suspend_user(user_id: str, body: ModerationBody, authorization: Optional[str] = Header(None)):
     me = await get_current_user(authorization)
     target = await _require_admin_target(user_id, me)
@@ -195,7 +243,7 @@ class RestrictionsBody(BaseModel):
     posting_disabled: Optional[bool] = None
 
 
-@router.post("/admin/users/{user_id}/restrictions")
+@router.post("/admin/users/{user_id}/restrictions", response_model=OkOut)
 async def admin_set_restrictions(user_id: str, body: RestrictionsBody, authorization: Optional[str] = Header(None)):
     """Admin-only: turn another user's messaging, marketplace, or newsfeed
     posting on/off. Can't be used on yourself or another admin."""
@@ -222,7 +270,7 @@ class WalletSet(BaseModel):
     balance: float
 
 
-@router.post("/admin/users/{user_id}/wallet")
+@router.post("/admin/users/{user_id}/wallet", response_model=OkOut)
 async def admin_set_wallet(user_id: str, body: WalletSet, authorization: Optional[str] = Header(None)):
     """Admin-only: set a user's wallet balance (USD) to an exact amount."""
     me = await get_current_user(authorization)
@@ -247,7 +295,7 @@ class AddTxn(BaseModel):
     created_at: Optional[str] = None   # ISO date/time to backdate; default now
 
 
-@router.post("/admin/users/{user_id}/transaction")
+@router.post("/admin/users/{user_id}/transaction", response_model=OkOut)
 async def admin_add_transaction(user_id: str, body: AddTxn, authorization: Optional[str] = Header(None)):
     """Admin-only: re-add a lost transaction to a user's history so it shows in
     their All-activity feed, optionally moving their wallet balance to match."""
@@ -322,7 +370,7 @@ def _parse_when(s: Optional[str]):
         return None
 
 
-@router.get("/admin/users/{user_id}/transactions")
+@router.get("/admin/users/{user_id}/transactions", response_model=TransactionsOut)
 async def admin_list_transactions(user_id: str, authorization: Optional[str] = Header(None)):
     """Admin-only: list a user's editable transactions so they can be corrected."""
     me = await get_current_user(authorization)
@@ -353,7 +401,7 @@ class EditTxn(BaseModel):
     adjust_balance: bool = False   # apply the amount change to the wallet balance
 
 
-@router.patch("/admin/users/{user_id}/transaction")
+@router.patch("/admin/users/{user_id}/transaction", response_model=OkOut)
 async def admin_edit_transaction(user_id: str, body: EditTxn, authorization: Optional[str] = Header(None)):
     """Admin-only: edit a transaction's amount, name, note, or date/time."""
     me = await get_current_user(authorization)
@@ -394,7 +442,7 @@ async def admin_edit_transaction(user_id: str, body: EditTxn, authorization: Opt
     return {"ok": True, "balance": round(float((fresh or {}).get("wallet_balance", 0) or 0), 2)}
 
 
-@router.delete("/admin/users/{user_id}/transaction")
+@router.delete("/admin/users/{user_id}/transaction", response_model=OkOut)
 async def admin_delete_transaction(user_id: str, ref: str = Query(...), adjust_balance: bool = Query(False),
                                    authorization: Optional[str] = Header(None)):
     """Admin-only: delete a transaction, optionally reversing its wallet effect."""
@@ -537,7 +585,7 @@ async def _purge_user_data(uid: str) -> None:
         pass
 
 
-@router.delete("/admin/users/{user_id}")
+@router.delete("/admin/users/{user_id}", response_model=OkOut)
 async def admin_remove_user(user_id: str, authorization: Optional[str] = Header(None)):
     """Permanently delete a user account AND all of their data (posts, reactions,
     follows, listings, stories, messages, etc.)."""
@@ -590,7 +638,7 @@ async def create_badge(body: BadgeCreate, authorization: Optional[str] = Header(
     return Badge(id=doc["id"], label=doc["label"], icon=doc["icon"], color=doc["color"])
 
 
-@router.delete("/admin/badges/{badge_id}")
+@router.delete("/admin/badges/{badge_id}", response_model=OkOut)
 async def delete_badge(badge_id: str, authorization: Optional[str] = Header(None)):
     me = await get_current_user(authorization)
     if not is_admin(me):
@@ -602,7 +650,7 @@ async def delete_badge(badge_id: str, authorization: Optional[str] = Header(None
     return {"ok": True}
 
 
-@router.post("/admin/users/{user_id}/badge")
+@router.post("/admin/users/{user_id}/badge", response_model=OkOut)
 async def set_user_badge(user_id: str, body: UserBadgeBody, authorization: Optional[str] = Header(None)):
     me = await get_current_user(authorization)
     if not is_admin(me):
@@ -624,35 +672,6 @@ async def set_user_badge(user_id: str, body: UserBadgeBody, authorization: Optio
         await db.users.update_one({"user_id": user_id}, {"$set": {"badge_ids": ids}})
         await _audit(me, f"gave badge · {bdef.get('label', '')}", target)
     return {"ok": True}
-
-
-# --- §1 response models (extra="allow" so no field is ever dropped) ----------
-class _UOut(BaseModel):
-    model_config = ConfigDict(extra="allow")
-
-
-class OkOut(_UOut):
-    ok: bool = True
-
-
-class FollowOut(_UOut):
-    following: bool
-
-
-class FriendStatusOut(_UOut):
-    status: str = ""   # none | request_sent | friends | rejected | …
-
-
-class SubscribeOut(_UOut):
-    subscribed: bool
-
-
-class TiersOut(_UOut):
-    tiers: list = []
-
-
-class LeaderboardOut(_UOut):
-    leaders: list = []
 
 
 @router.post("/presence/ping", response_model=OkOut)
@@ -1227,7 +1246,7 @@ async def my_wallet(authorization: Optional[str] = Header(None)):
     )
 
 
-@router.get("/wallet/export")
+@router.get("/wallet/export", response_model=ExportOut)
 async def export_wallet(authorization: Optional[str] = Header(None)):
     """A CSV of all earnings + payouts for the creator's records/taxes."""
     me = await get_current_user(authorization)
