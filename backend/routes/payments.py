@@ -655,6 +655,77 @@ async def add_bank_account(body: DebitCardBody, authorization: Optional[str] = H
             "hold_until": hold.isoformat() if hold else None, "hold_days": DD_HOLD_BUSINESS_DAYS}
 
 
+def _external_account_view(e: dict) -> dict:
+    """Normalize a Stripe external account (card or bank) into the saved-method
+    shape the app shows ("Visa •• 4242 · default")."""
+    obj = e.get("object")
+    base = {
+        "id": e.get("id"),
+        "type": obj,
+        "last4": e.get("last4"),
+        "default": bool(e.get("default_for_currency")),
+    }
+    if obj == "card":
+        # Cards eligible for Stripe Instant Payouts advertise it here.
+        base["brand"] = e.get("brand")
+        base["exp_month"] = e.get("exp_month")
+        base["exp_year"] = e.get("exp_year")
+        base["instant_eligible"] = "instant" in (e.get("available_payout_methods") or [])
+    elif obj == "bank_account":
+        base["bank_name"] = e.get("bank_name")
+        base["instant_eligible"] = False
+    return base
+
+
+@router.get("/payments/payouts/methods")
+async def list_payout_methods(authorization: Optional[str] = Header(None)):
+    """List the saved payout destinations (debit cards + bank accounts) on the
+    user's connected account so the app can show "Visa •• 4242 · default"."""
+    _require_stripe()
+    user = await get_current_user(authorization)
+    acct_id = user.get("stripe_account_id")
+    if not acct_id:
+        return {"data": []}
+    try:
+        ext = stripe.Account.list_external_accounts(acct_id, limit=20)
+    except Exception as e:
+        msg = getattr(e, "user_message", None) or getattr(e, "_message", None) or str(e)
+        raise HTTPException(status_code=400, detail={"code": "methods_error", "message": f"Couldn't load payout methods: {msg}"})
+    return {"data": [_external_account_view(x) for x in (ext.get("data") or [])]}
+
+
+@router.delete("/payments/payouts/methods/{method_id}")
+async def delete_payout_method(method_id: str, authorization: Optional[str] = Header(None)):
+    """Remove a saved card/bank from the user's connected account."""
+    _require_stripe()
+    user = await get_current_user(authorization)
+    acct_id = user.get("stripe_account_id")
+    if not acct_id:
+        raise HTTPException(status_code=400, detail={"code": "no_account", "message": "Set up payouts first."})
+    try:
+        stripe.Account.delete_external_account(acct_id, method_id)
+    except Exception as e:
+        msg = getattr(e, "user_message", None) or getattr(e, "_message", None) or str(e)
+        raise HTTPException(status_code=400, detail={"code": "delete_failed", "message": f"Couldn't remove that method: {msg}"})
+    return {"ok": True, "id": method_id}
+
+
+@router.post("/payments/payouts/methods/{method_id}/default")
+async def set_default_payout_method(method_id: str, authorization: Optional[str] = Header(None)):
+    """Make a saved card/bank the default payout destination."""
+    _require_stripe()
+    user = await get_current_user(authorization)
+    acct_id = user.get("stripe_account_id")
+    if not acct_id:
+        raise HTTPException(status_code=400, detail={"code": "no_account", "message": "Set up payouts first."})
+    try:
+        stripe.Account.modify_external_account(acct_id, method_id, default_for_currency=True)
+    except Exception as e:
+        msg = getattr(e, "user_message", None) or getattr(e, "_message", None) or str(e)
+        raise HTTPException(status_code=400, detail={"code": "default_failed", "message": f"Couldn't set default: {msg}"})
+    return {"ok": True, "id": method_id, "default": True}
+
+
 # ── Standalone ID verification via Stripe Identity (not tied to payouts) ──────
 @router.post("/payments/identity/start")
 async def start_identity(authorization: Optional[str] = Header(None)):
@@ -1521,32 +1592,35 @@ async def payout_account_session(authorization: Optional[str] = Header(None)):
     try:
         acct_id = await _ensure_connect_account(user)
 
-        components: dict = {"account_onboarding": {"enabled": True}}
-        if _account_supports_embedded_mgmt(acct_id):
-            # Full DoorDash-style payout management embedded in the site: balance,
-            # payout history/schedule, change bank/debit card, instant cash-out.
-            components["payouts"] = {
+        # Always *try* to enable the full DoorDash-style set so the app never
+        # renders an embedded component the session didn't enable (which shows as a
+        # silent blank element — the white "Payout method" screen). If a component
+        # isn't allowed for this account (e.g. a legacy Express account), Stripe
+        # rejects the call and we fall back to onboarding-only below.
+        components: dict = {
+            "account_onboarding": {"enabled": True},
+            "payouts": {
                 "enabled": True,
                 "features": {
                     "instant_payouts": True,
                     "standard_payouts": True,
                     "edit_payout_schedule": True,
                 },
-            }
-            components["account_management"] = {
+            },
+            "account_management": {
                 "enabled": True,
                 "features": {"external_account_collection": True},
-            }
-            components["notification_banner"] = {
+            },
+            "notification_banner": {
                 "enabled": True,
                 "features": {"external_account_collection": True},
-            }
-
+            },
+        }
         try:
             sess = stripe.AccountSession.create(account=acct_id, components=components)
         except Exception:
-            # If a management component isn't allowed for this account, still return
-            # a working onboarding session so the embedded panel renders in-site.
+            # Management components aren't allowed for this account — still return a
+            # working onboarding session so the embedded panel renders in-site.
             components = {"account_onboarding": {"enabled": True}}
             sess = stripe.AccountSession.create(account=acct_id, components=components)
 
