@@ -945,9 +945,13 @@ async def wallet_topup_intent(body: TopupIntent, authorization: Optional[str] = 
     from routes.payments import payments_live, stripe, STRIPE_PUBLISHABLE_KEY
     if not await payments_live():
         raise HTTPException(status_code=400, detail={"code": "not_live", "message": "Card payments aren't enabled right now."})
+    # automatic_payment_methods lets the in-app card form (web Payment Element /
+    # native PaymentSheet) drive the intent — including wallets like Apple/Google
+    # Pay — instead of being pinned to a raw card field. Left UNCONFIRMED: the app
+    # confirms it with the card the user enters.
     pi = stripe.PaymentIntent.create(
         amount=int(round(amount * 100)), currency="usd",
-        payment_method_types=["card"],
+        automatic_payment_methods={"enabled": True},
         metadata={"kind": "wallet_topup", "buyer_id": me["user_id"], "amount": str(amount)},
     )
     await db.wallet_topups.insert_one({
@@ -1063,6 +1067,22 @@ async def cancel_topup(tid: str, authorization: Optional[str] = Header(None)):
     return {"ok": True, "status": "cancelled"}
 
 
+def _canonical_status(s) -> str:
+    """Map internal status strings to the set the app renders with colored labels:
+    pending | completed | canceled | failed | reversed. Anything successful
+    (paid/instant/simulated/active/accepted/succeeded/…) reads as completed."""
+    v = str(s or "").strip().lower()
+    if v in ("pending", "processing", "on-hold", "on_hold", "requires_action", "requires_payment_method", "requires_confirmation"):
+        return "pending"
+    if v in ("canceled", "cancelled"):
+        return "canceled"
+    if v in ("failed", "declined", "rejected"):
+        return "failed"
+    if v in ("reversed", "refunded"):
+        return "reversed"
+    return "completed"
+
+
 @router.get("/wallet/activity", response_model=ActivityOut)
 async def wallet_activity(authorization: Optional[str] = Header(None)):
     """One chronological feed of everything money: top-ups, cash-outs, tips and
@@ -1144,6 +1164,10 @@ async def wallet_activity(authorization: Optional[str] = Header(None)):
         })
 
     items = [i for i in items if i.get("created_at") is not None]
+    # Normalize every row's status so the app shows the right colored label and
+    # excludes canceled/failed from spending-limit math.
+    for i in items:
+        i["status"] = _canonical_status(i.get("status"))
     items.sort(key=lambda x: x["created_at"], reverse=True)
     return {"activity": items[:120]}
 
