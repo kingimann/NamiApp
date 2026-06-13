@@ -55,6 +55,25 @@ async def test_short_conversation_returns_all_in_order(env):
 
 
 @pytest.mark.asyncio
+async def test_list_conversations_hydrates_participants(env):
+    now = datetime(2026, 1, 1, tzinfo=timezone.utc)
+    env.seed(
+        users=[
+            {"user_id": "me", "name": "Me"},
+            {"user_id": "u2", "name": "Bo", "picture": "p2"},
+        ],
+        conversations=[
+            {"id": "c1", "kind": "dm", "participant_ids": ["me", "u2"],
+             "created_at": now, "last_message_at": now},
+        ],
+    )
+    out = await msg.list_conversations()
+    assert len(out) == 1
+    assert out[0].other_user.name == "Bo"
+    assert out[0].other_user.picture == "p2"
+
+
+@pytest.mark.asyncio
 async def test_non_participant_404s(env):
     _seed_messages(env, 3)
     env.conversations.docs = [{"id": "c1", "participant_ids": ["someone", "u2"]}]

@@ -24,7 +24,7 @@ from fastapi import APIRouter, Header, HTTPException
 from pydantic import BaseModel, ConfigDict
 
 from db import DuplicateKeyError
-from core import _conv_key, _public_user, db, get_current_user, is_admin, _norm_dt
+from core import _conv_key, _lite_public_user, _public_user, db, get_current_user, is_admin, _norm_dt
 from models import (
     ConversationCreate,
     ConversationView,
@@ -83,9 +83,20 @@ async def _can_message(sender_id: str, recipient: dict) -> bool:
     return True
 
 
-async def _hydrate_conv(conv: dict, viewer_id: str) -> ConversationView:
-    """Hydrate a conversation into a ConversationView from `viewer_id`'s perspective."""
+async def _hydrate_conv(conv: dict, viewer_id: str, users: Optional[dict] = None) -> ConversationView:
+    """Hydrate a conversation into a ConversationView from `viewer_id`'s perspective.
+
+    When `users` (a `{user_id: PublicUser}` map of lightweight participants) is
+    supplied — as the conversation list does — participants resolve from it
+    instead of running `_public_user`'s per-user stat queries."""
     kind = conv.get("kind", "dm")
+
+    async def _resolve(uid: str):
+        if users is not None:
+            from models import PublicUser
+            return users.get(uid) or PublicUser(user_id=uid, name="Unknown")
+        return await _public_user(uid)
+
     last_q = {"conversation_id": conv["id"], "deleted": {"$ne": True}}
     cleared_at = (conv.get("cleared_at") or {}).get(viewer_id)
     if cleared_at:
@@ -117,7 +128,7 @@ async def _hydrate_conv(conv: dict, viewer_id: str) -> ConversationView:
     if kind == "group":
         members: List[PublicUser] = []
         for mid in conv.get("participant_ids", []):
-            members.append(await _public_user(mid))
+            members.append(await _resolve(mid))
         return ConversationView(
             id=conv["id"], kind="group",
             name=conv.get("name") or "Group",
@@ -137,7 +148,7 @@ async def _hydrate_conv(conv: dict, viewer_id: str) -> ConversationView:
         (x for x in conv.get("participant_ids", []) if x != viewer_id), None
     )
     is_self = other_id is None
-    other = await _public_user(other_id or viewer_id)
+    other = await _resolve(other_id or viewer_id)
     if is_self:
         other = PublicUser(
             user_id=viewer_id, name="Notes to self",
@@ -443,9 +454,17 @@ async def list_conversations(authorization: Optional[str] = Header(None)):
                        c.get("last_message_at") or c.get("created_at")),
         reverse=True,
     )
+    # Prefetch every participant in one query and hydrate them cheaply — the
+    # list only needs identity + presence, not each user's full profile stats
+    # (which _public_user would compute with ~7 count queries per participant).
+    ids = {p for c in convs for p in (c.get("participant_ids") or [])}
+    users: dict = {}
+    if ids:
+        rows = await db.users.find({"user_id": {"$in": list(ids)}}, {"_id": 0}).to_list(len(ids))
+        users = {r["user_id"]: _lite_public_user(r) for r in rows}
     out: List[ConversationView] = []
     for c in convs:
-        out.append(await _hydrate_conv(c, me_id))
+        out.append(await _hydrate_conv(c, me_id, users=users))
     return out
 
 

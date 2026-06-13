@@ -49,7 +49,12 @@ def _match(doc: dict, filt: dict) -> bool:
                     if val is None or _re.search(target, str(val)) is None:
                         return False
         else:
-            if val != cond:
+            # Mongo semantics: a scalar equality query against an array field
+            # matches when the array contains the value (e.g. participant_ids).
+            if isinstance(val, list) and not isinstance(cond, (list, dict)):
+                if cond not in val:
+                    return False
+            elif val != cond:
                 return False
     return True
 
@@ -119,7 +124,14 @@ class _Cursor:
         self._rows = rows
 
     def sort(self, key, direction=-1):
-        # key may be a field name; mirror Mongo's stable single-key sort.
+        # Mongo-style sort. `key` is a field name, or a list of (field, dir)
+        # tuples for a composite sort (applied least-significant first for a
+        # stable result).
+        if isinstance(key, list):
+            for k, d in reversed(key):
+                self._rows.sort(key=lambda r, k=k: (r.get(k) is None, r.get(k)),
+                                reverse=(d == -1))
+            return self
         self._rows.sort(key=lambda d: (d.get(key) is None, d.get(key)),
                         reverse=(direction == -1))
         return self
