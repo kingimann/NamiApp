@@ -17,7 +17,7 @@ import uuid
 from datetime import datetime, timezone, timedelta
 from typing import Literal, Optional
 
-from fastapi import APIRouter, Header, HTTPException, Request
+from fastapi import APIRouter, Depends, Header, HTTPException, Request
 from pydantic import BaseModel, ConfigDict
 
 from core import (
@@ -323,11 +323,10 @@ async def payments_config():
 
 
 @router.get("/capabilities", response_model=CapabilitiesOut)
-async def capabilities(authorization: Optional[str] = Header(None)):
+async def capabilities(_auth_user: dict = Depends(get_current_user)):
     """Runtime feature flags so a client/SDK can enable behaviour at runtime
     instead of shipping hardcoded assumptions (old builds degrade gracefully when
     the backend changes). Auth'd — reflects what this server can do right now."""
-    await get_current_user(authorization)
     from services.sms import active_provider
     configured = stripe_enabled()
     live = configured and not await test_payments_on()
@@ -349,11 +348,11 @@ async def capabilities(authorization: Optional[str] = Header(None)):
 
 
 @router.post("/payments/payouts/setup", response_model=SetupUrlOut)
-async def setup_payouts(authorization: Optional[str] = Header(None)):
+async def setup_payouts(_auth_user: dict = Depends(get_current_user)):
     """Create (or reuse) the user's Stripe Connect account and return a hosted
     onboarding link where they choose how they want to get paid."""
     _require_stripe()
-    user = await get_current_user(authorization)
+    user = _auth_user
     try:
         acct_id = await _ensure_connect_account(user)
         link = stripe.AccountLink.create(
@@ -369,9 +368,9 @@ async def setup_payouts(authorization: Optional[str] = Header(None)):
 
 
 @router.get("/payments/payouts/status", response_model=PayoutStatusOut)
-async def payouts_status(authorization: Optional[str] = Header(None)):
+async def payouts_status(_auth_user: dict = Depends(get_current_user)):
     """Current payout-account state for the creator's Wallet screen."""
-    user = await get_current_user(authorization)
+    user = _auth_user
     if not stripe_enabled():
         return {"enabled": False, "connected": False, "payouts_enabled": False, "details_submitted": False}
     acct_id = user.get("stripe_account_id")
@@ -463,14 +462,14 @@ class CashoutBody(BaseModel):
 
 
 @router.post("/payments/payouts/cashout", response_model=CashoutOut)
-async def cashout_to_card(body: CashoutBody, authorization: Optional[str] = Header(None)):
+async def cashout_to_card(body: CashoutBody, _auth_user: dict = Depends(get_current_user)):
     """Instant cash-out of the in-app wallet balance to the user's debit card
     (Stripe Instant Payouts, DoorDash-style). Moves platform funds to the user's
     connected account and instantly pays out to their debit card."""
     _require_stripe()
     if await test_payments_on():
         raise HTTPException(status_code=400, detail={"code": "test_mode", "message": "Cash out isn't available in test mode."})
-    user = await get_current_user(authorization)
+    user = _auth_user
     hold = payout_hold_until(user)
     if hold:
         raise HTTPException(status_code=403, detail={
@@ -592,12 +591,12 @@ class DebitCardBody(BaseModel):
 
 
 @router.post("/payments/payouts/debit-card")
-async def add_debit_card(body: DebitCardBody, authorization: Optional[str] = Header(None)):
+async def add_debit_card(body: DebitCardBody, _auth_user: dict = Depends(get_current_user)):
     """Attach a debit card to the user's connected account as their payout method
     (for instant cash-out). The card is tokenized in the app via Stripe.js — raw
     card data never touches our server — and only the token is sent here."""
     _require_stripe()
-    user = await get_current_user(authorization)
+    user = _auth_user
     acct_id = await _ensure_connect_account(user)
     if not body.token:
         raise HTTPException(status_code=400, detail={"code": "no_token", "message": "Card details were missing — please try again."})
@@ -625,12 +624,12 @@ async def add_debit_card(body: DebitCardBody, authorization: Optional[str] = Hea
 
 
 @router.post("/payments/payouts/bank-account")
-async def add_bank_account(body: DebitCardBody, authorization: Optional[str] = Header(None)):
+async def add_bank_account(body: DebitCardBody, _auth_user: dict = Depends(get_current_user)):
     """Attach a bank account (direct deposit) to the user's connected account.
     The bank details are tokenized in the app via Stripe.js — only the token is
     sent here, never raw account numbers."""
     _require_stripe()
-    user = await get_current_user(authorization)
+    user = _auth_user
     acct_id = await _ensure_connect_account(user)
     if not body.token:
         raise HTTPException(status_code=400, detail={"code": "no_token", "message": "Bank details were missing — please try again."})
@@ -678,11 +677,11 @@ def _external_account_view(e: dict) -> dict:
 
 
 @router.get("/payments/payouts/methods")
-async def list_payout_methods(authorization: Optional[str] = Header(None)):
+async def list_payout_methods(_auth_user: dict = Depends(get_current_user)):
     """List the saved payout destinations (debit cards + bank accounts) on the
     user's connected account so the app can show "Visa •• 4242 · default"."""
     _require_stripe()
-    user = await get_current_user(authorization)
+    user = _auth_user
     acct_id = user.get("stripe_account_id")
     if not acct_id:
         return {"data": []}
@@ -695,10 +694,10 @@ async def list_payout_methods(authorization: Optional[str] = Header(None)):
 
 
 @router.delete("/payments/payouts/methods/{method_id}")
-async def delete_payout_method(method_id: str, authorization: Optional[str] = Header(None)):
+async def delete_payout_method(method_id: str, _auth_user: dict = Depends(get_current_user)):
     """Remove a saved card/bank from the user's connected account."""
     _require_stripe()
-    user = await get_current_user(authorization)
+    user = _auth_user
     acct_id = user.get("stripe_account_id")
     if not acct_id:
         raise HTTPException(status_code=400, detail={"code": "no_account", "message": "Set up payouts first."})
@@ -711,10 +710,10 @@ async def delete_payout_method(method_id: str, authorization: Optional[str] = He
 
 
 @router.post("/payments/payouts/methods/{method_id}/default")
-async def set_default_payout_method(method_id: str, authorization: Optional[str] = Header(None)):
+async def set_default_payout_method(method_id: str, _auth_user: dict = Depends(get_current_user)):
     """Make a saved card/bank the default payout destination."""
     _require_stripe()
-    user = await get_current_user(authorization)
+    user = _auth_user
     acct_id = user.get("stripe_account_id")
     if not acct_id:
         raise HTTPException(status_code=400, detail={"code": "no_account", "message": "Set up payouts first."})
@@ -728,12 +727,12 @@ async def set_default_payout_method(method_id: str, authorization: Optional[str]
 
 # ── Standalone ID verification via Stripe Identity (not tied to payouts) ──────
 @router.post("/payments/identity/start")
-async def start_identity(authorization: Optional[str] = Header(None)):
+async def start_identity(_auth_user: dict = Depends(get_current_user)):
     """Begin Stripe Identity verification: the user uploads a government ID +
     selfie on a Stripe-hosted page. On success a webhook (and the status
     endpoint) marks them `id_verified`. Works even if they never set up payouts."""
     _require_stripe()
-    user = await get_current_user(authorization)
+    user = _auth_user
     if user.get("id_verified"):
         return {"already_verified": True}
     try:
@@ -755,10 +754,10 @@ async def start_identity(authorization: Optional[str] = Header(None)):
 
 
 @router.get("/payments/identity/status")
-async def identity_status(authorization: Optional[str] = Header(None)):
+async def identity_status(_auth_user: dict = Depends(get_current_user)):
     """Where the user's standalone ID verification stands. Also flips the stored
     `id_verified` flag if Stripe now reports the session as verified."""
-    user = await get_current_user(authorization)
+    user = _auth_user
     if user.get("id_verified"):
         return {"status": "verified", "id_verified": True}
     if not stripe_enabled():
@@ -783,11 +782,11 @@ def _doc_needed(reqs: dict) -> bool:
 
 
 @router.get("/payments/payouts/requirements")
-async def payout_requirements(authorization: Optional[str] = Header(None)):
+async def payout_requirements(_auth_user: dict = Depends(get_current_user)):
     """What Stripe still needs to enable payouts, plus any details already on file
     so the in-app verification form can prefill. No Stripe-hosted screen involved."""
     _require_stripe()
-    user = await get_current_user(authorization)
+    user = _auth_user
     acct_id = await _ensure_connect_account(user)
     acct = stripe.Account.retrieve(acct_id)
     reqs = acct.get("requirements") or {}
@@ -833,11 +832,11 @@ class VerificationBody(BaseModel):
 
 
 @router.post("/payments/payouts/verification")
-async def submit_verification(body: VerificationBody, request: Request, authorization: Optional[str] = Header(None)):
+async def submit_verification(body: VerificationBody, request: Request, _auth_user: dict = Depends(get_current_user)):
     """Submit identity details collected by our own in-app form to Stripe via the
     API. Replaces Stripe's hosted/embedded onboarding — nothing opens externally."""
     _require_stripe()
-    user = await get_current_user(authorization)
+    user = _auth_user
     acct_id = await _ensure_connect_account(user)
     acct = stripe.Account.retrieve(acct_id)
     country = (body.country or acct.get("country") or "US").upper()
@@ -891,12 +890,12 @@ class DocBody(BaseModel):
 
 
 @router.post("/payments/payouts/verification-document")
-async def upload_verification_document(body: DocBody, authorization: Optional[str] = Header(None)):
+async def upload_verification_document(body: DocBody, _auth_user: dict = Depends(get_current_user)):
     """Upload an ID photo (captured in-app) to Stripe and attach it for verification."""
     _require_stripe()
     import base64
     import io
-    user = await get_current_user(authorization)
+    user = _auth_user
     acct_id = await _ensure_connect_account(user)
 
     def _upload(b64: str) -> str:
@@ -921,14 +920,14 @@ async def upload_verification_document(body: DocBody, authorization: Optional[st
 
 
 @router.post("/payments/checkout", response_model=CheckoutOut)
-async def create_checkout(body: CheckoutCreate, authorization: Optional[str] = Header(None)):
+async def create_checkout(body: CheckoutCreate, _auth_user: dict = Depends(get_current_user)):
     """Create a Stripe Checkout session and return a hosted checkout URL.
     - tip:          one-time destination charge to the creator's account
     - subscription: auto-renewing monthly destination charge to the creator
     - promote:      one-time charge to the platform (boost your own post)
     - topup:        one-time charge that credits the buyer's own wallet"""
     _require_stripe()
-    me = await get_current_user(authorization)
+    me = _auth_user
 
     # ── Top-up: the buyer adds money to their OWN wallet (no creator/transfer) ──
     # Mirrors /wallet/topup so thin clients (e.g. the Flutter app) can add money
@@ -1098,14 +1097,14 @@ async def _already_fulfilled(ref_id: str) -> bool:
 
 
 @router.post("/payments/pay-intent", response_model=PayIntentOut)
-async def create_pay_intent(body: CheckoutCreate, authorization: Optional[str] = Header(None)):
+async def create_pay_intent(body: CheckoutCreate, _auth_user: dict = Depends(get_current_user)):
     """Create a PaymentIntent (tip/promote) or Subscription (subscription) for an
     inline, in-app card form. Returns a client_secret the app confirms with the
     card field — no hosted or embedded Stripe checkout."""
     _require_stripe()
     if not await payments_live():
         raise HTTPException(status_code=400, detail={"code": "not_live", "message": "Card payments aren't enabled right now."})
-    me = await get_current_user(authorization)
+    me = _auth_user
 
     if body.kind == "promote":
         days = max(1, min(30, int(body.days or 7)))
@@ -1184,10 +1183,10 @@ class PayConfirm(BaseModel):
 
 
 @router.post("/payments/pay-intent/confirm", response_model=PayIntentConfirmOut)
-async def confirm_pay_intent(body: PayConfirm, authorization: Optional[str] = Header(None)):
+async def confirm_pay_intent(body: PayConfirm, _auth_user: dict = Depends(get_current_user)):
     """Fulfill an inline card payment after the card field confirms it (idempotent)."""
     _require_stripe()
-    me = await get_current_user(authorization)
+    me = _auth_user
     now = datetime.now(timezone.utc)
 
     meta: dict = {}
@@ -1275,8 +1274,8 @@ class ApiPlanBuy(BaseModel):
 
 
 @router.get("/payments/api-plan")
-async def api_plan_status(authorization: Optional[str] = Header(None)):
-    user = await get_current_user(authorization)
+async def api_plan_status(_auth_user: dict = Depends(get_current_user)):
+    user = _auth_user
     active = _active_plan(user)
     return {
         "plans": API_PLANS,
@@ -1296,10 +1295,10 @@ def _grant_plan_doc(plan_id: str):
 
 
 @router.post("/payments/api-plan/checkout")
-async def api_plan_checkout(body: ApiPlanBuy, authorization: Optional[str] = Header(None)):
+async def api_plan_checkout(body: ApiPlanBuy, _auth_user: dict = Depends(get_current_user)):
     """Buy/upgrade a Developer API plan via Stripe (charges the platform)."""
     _require_stripe()
-    me = await get_current_user(authorization)
+    me = _auth_user
     plan = API_PLANS_BY_ID.get(body.plan)
     if not plan:
         raise HTTPException(status_code=400, detail="Unknown plan")
@@ -1321,11 +1320,11 @@ async def api_plan_checkout(body: ApiPlanBuy, authorization: Optional[str] = Hea
 
 
 @router.post("/payments/api-plan/activate")
-async def api_plan_activate(body: ApiPlanBuy, authorization: Optional[str] = Header(None)):
+async def api_plan_activate(body: ApiPlanBuy, _auth_user: dict = Depends(get_current_user)):
     """Test-mode activation (no Stripe configured). Mirrors the fake-payment flow."""
     if stripe_enabled():
         raise HTTPException(status_code=400, detail="Use checkout — real payments are enabled")
-    me = await get_current_user(authorization)
+    me = _auth_user
     plan = API_PLANS_BY_ID.get(body.plan)
     if not plan:
         raise HTTPException(status_code=400, detail="Unknown plan")
@@ -1339,8 +1338,8 @@ class UsageBuy(BaseModel):
 
 
 @router.get("/payments/api-usage")
-async def api_usage(authorization: Optional[str] = Header(None)):
-    user = await get_current_user(authorization)
+async def api_usage(_auth_user: dict = Depends(get_current_user)):
+    user = _auth_user
     plan = _active_plan(user)
     used = int(user.get("api_usage_count", 0) or 0)
     extra = int(user.get("api_extra_credits", 0) or 0)
@@ -1361,10 +1360,10 @@ async def api_usage(authorization: Optional[str] = Header(None)):
 
 
 @router.post("/payments/api-usage/buy")
-async def buy_usage(body: UsageBuy, authorization: Optional[str] = Header(None)):
+async def buy_usage(body: UsageBuy, _auth_user: dict = Depends(get_current_user)):
     """Pay-as-you-go: buy an overage pack via Stripe (charges the platform)."""
     _require_stripe()
-    me = await get_current_user(authorization)
+    me = _auth_user
     pack = API_OVERAGE_BY_ID.get(body.pack)
     if not pack:
         raise HTTPException(status_code=400, detail="Unknown pack")
@@ -1386,11 +1385,11 @@ async def buy_usage(body: UsageBuy, authorization: Optional[str] = Header(None))
 
 
 @router.post("/payments/api-usage/activate")
-async def activate_usage(body: UsageBuy, authorization: Optional[str] = Header(None)):
+async def activate_usage(body: UsageBuy, _auth_user: dict = Depends(get_current_user)):
     """Test-mode pay-as-you-go (no Stripe). Adds request credits immediately."""
     if stripe_enabled():
         raise HTTPException(status_code=400, detail="Use checkout — real payments are enabled")
-    me = await get_current_user(authorization)
+    me = _auth_user
     pack = API_OVERAGE_BY_ID.get(body.pack)
     if not pack:
         raise HTTPException(status_code=400, detail="Unknown pack")
@@ -1579,7 +1578,7 @@ async def stripe_webhook(request: Request):
 
 # ── Embedded Connect onboarding + payout management (rendered inside the site) ─
 @router.post("/payments/payouts/account-session")
-async def payout_account_session(authorization: Optional[str] = Header(None)):
+async def payout_account_session(_auth_user: dict = Depends(get_current_user)):
     """Create an Account Session for Stripe's embedded components.
 
     Returns the list of enabled `components` so the client knows whether it can
@@ -1588,7 +1587,7 @@ async def payout_account_session(authorization: Optional[str] = Header(None)):
     Either way the panel renders inside the site — the user never leaves the app.
     """
     _require_stripe()
-    user = await get_current_user(authorization)
+    user = _auth_user
     try:
         acct_id = await _ensure_connect_account(user)
 
@@ -1646,8 +1645,8 @@ def _admin_only(me: dict):
 
 
 @router.get("/admin/test-payments")
-async def admin_get_test_payments(authorization: Optional[str] = Header(None)):
-    me = await get_current_user(authorization)
+async def admin_get_test_payments(_auth_user: dict = Depends(get_current_user)):
+    me = _auth_user
     _admin_only(me)
     return {"test_payments": await test_payments_on(), "stripe_configured": stripe_enabled()}
 
@@ -1661,8 +1660,8 @@ async def _set_setting(key: str, value):
 
 
 @router.post("/admin/test-payments")
-async def admin_set_test_payments(body: TestPaymentsBody, authorization: Optional[str] = Header(None)):
-    me = await get_current_user(authorization)
+async def admin_set_test_payments(body: TestPaymentsBody, _auth_user: dict = Depends(get_current_user)):
+    me = _auth_user
     _admin_only(me)
     val = bool(body.enabled)
     await _set_setting("test_payments", val)
@@ -1678,9 +1677,9 @@ class WebBuildBody(BaseModel):
 
 
 @router.get("/admin/web-build")
-async def admin_get_web_build(authorization: Optional[str] = Header(None)):
+async def admin_get_web_build(_auth_user: dict = Depends(get_current_user)):
     """Current web-update kill-switch token (and any admin override)."""
-    me = await get_current_user(authorization)
+    me = _auth_user
     _admin_only(me)
     from routes.meta import resolve_web_build
     override = await _setting("web_build", None)
@@ -1688,11 +1687,11 @@ async def admin_get_web_build(authorization: Optional[str] = Header(None)):
 
 
 @router.post("/admin/web-build")
-async def admin_set_web_build(body: WebBuildBody, authorization: Optional[str] = Header(None)):
+async def admin_set_web_build(body: WebBuildBody, _auth_user: dict = Depends(get_current_user)):
     """Bump the kill-switch token so every open web client hard-refreshes to the
     latest deploy. Pass a `build` string to set it explicitly, or omit it to
     auto-bump to the current timestamp."""
-    me = await get_current_user(authorization)
+    me = _auth_user
     _admin_only(me)
     import time
     val = (body.build or "").strip() or str(int(time.time()))
@@ -1707,8 +1706,8 @@ class FeesBody(BaseModel):
 
 
 @router.get("/admin/fees")
-async def admin_get_fees(authorization: Optional[str] = Header(None)):
-    me = await get_current_user(authorization)
+async def admin_get_fees(_auth_user: dict = Depends(get_current_user)):
+    me = _auth_user
     _admin_only(me)
     pct = await platform_fee_percent()
     return {
@@ -1719,8 +1718,8 @@ async def admin_get_fees(authorization: Optional[str] = Header(None)):
 
 
 @router.post("/admin/fees")
-async def admin_set_fees(body: FeesBody, authorization: Optional[str] = Header(None)):
-    me = await get_current_user(authorization)
+async def admin_set_fees(body: FeesBody, _auth_user: dict = Depends(get_current_user)):
+    me = _auth_user
     _admin_only(me)
     if body.platform_fee_percent is not None:
         await _set_setting("platform_fee_percent", max(0.0, min(100.0, float(body.platform_fee_percent))))
@@ -1735,12 +1734,12 @@ async def admin_set_fees(body: FeesBody, authorization: Optional[str] = Header(N
 
 
 @router.get("/admin/revenue")
-async def admin_revenue(authorization: Optional[str] = Header(None)):
+async def admin_revenue(_auth_user: dict = Depends(get_current_user)):
     """Platform revenue from in-app fees — read from the platform_revenue ledger,
     so it includes every recorded fee: per-payment transaction fees on sends, and
     the flat instant cash-out fee. (The % cut on tips/subscriptions is collected by
     Stripe and shows in your Stripe Dashboard.)"""
-    me = await get_current_user(authorization)
+    me = _auth_user
     _admin_only(me)
     rows = await db.platform_revenue.find({}, {"_id": 0, "amount": 1, "source": 1}).limit(50000).to_list(50000)
     by_source: dict = {}
@@ -1768,10 +1767,10 @@ async def admin_revenue(authorization: Optional[str] = Header(None)):
 
 
 @router.post("/admin/reset/money")
-async def admin_reset_money(authorization: Optional[str] = Header(None)):
+async def admin_reset_money(_auth_user: dict = Depends(get_current_user)):
     """Wipe wallet/money data (earnings, tips, subs, payouts, transfers, requests)
     and zero ad balances. For clearing test/fake money."""
-    me = await get_current_user(authorization)
+    me = _auth_user
     _admin_only(me)
     for coll in ("earnings", "tips", "subscriptions", "payouts", "money_transfers",
                  "money_requests", "wallet_topups", "ad_topups", "platform_revenue"):
@@ -1781,9 +1780,9 @@ async def admin_reset_money(authorization: Optional[str] = Header(None)):
 
 
 @router.post("/admin/reset/analytics")
-async def admin_reset_analytics(authorization: Optional[str] = Header(None)):
+async def admin_reset_analytics(_auth_user: dict = Depends(get_current_user)):
     """Zero ad + view analytics (impressions/clicks/spend, profile views, events)."""
-    me = await get_current_user(authorization)
+    me = _auth_user
     _admin_only(me)
     await db.posts.update_many({}, {"$set": {"ad_impressions": 0, "ad_clicks": 0, "ad_comments": 0, "ad_spent": 0, "views_count": 0}})
     await db.link_ads.update_many({}, {"$set": {"ad_impressions": 0, "ad_clicks": 0, "ad_spent": 0}})

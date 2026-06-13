@@ -71,6 +71,9 @@ AUTH_BEFORE_VALIDATION_POSTS = [
     "/wallet/currency",
     "/payments/pay-wallet",
     "/money/send",
+    "/payments/checkout",
+    "/payments/pay-intent",
+    "/payments/payouts/cashout",
 ]
 
 
