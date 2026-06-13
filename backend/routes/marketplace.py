@@ -26,7 +26,7 @@ from models import (
     SellerProfile,
     TradeConfirm,
 )
-from pydantic import BaseModel
+from pydantic import BaseModel, ConfigDict
 from services.encryption import encrypt_text, decrypt_text
 
 router = APIRouter()
@@ -443,7 +443,31 @@ async def get_listing(listing_id: str, authorization: Optional[str] = Header(Non
     return await _hydrate_listing(doc, viewer_id=user["user_id"], with_counts=True)
 
 
-@router.post("/listings/{listing_id}/save")
+# --- §1 response models (extra="allow" so no field is ever dropped) ----------
+class _MkOut(BaseModel):
+    model_config = ConfigDict(extra="allow")
+
+
+class OkOut(_MkOut):
+    ok: bool = True
+
+
+class SaveOut(_MkOut):
+    ok: bool = True
+    saved: bool = False
+
+
+class TradeStartOut(_MkOut):
+    code: str = ""
+    status: str = ""
+
+
+class TradeConfirmOut(_MkOut):
+    status: str = ""
+    partner_name: Optional[str] = None
+
+
+@router.post("/listings/{listing_id}/save", response_model=SaveOut)
 async def save_listing(listing_id: str, authorization: Optional[str] = Header(None)):
     user = await get_current_user(authorization)
     listing = await db.listings.find_one({"id": listing_id}, {"_id": 0, "id": 1})
@@ -461,7 +485,7 @@ async def save_listing(listing_id: str, authorization: Optional[str] = Header(No
     return {"ok": True, "saved": True}
 
 
-@router.delete("/listings/{listing_id}/save")
+@router.delete("/listings/{listing_id}/save", response_model=SaveOut)
 async def unsave_listing(listing_id: str, authorization: Optional[str] = Header(None)):
     user = await get_current_user(authorization)
     await db.listing_saves.delete_one({"listing_id": listing_id, "user_id": user["user_id"]})
@@ -557,7 +581,7 @@ async def patch_listing(
     return await _hydrate_listing(updated, viewer_id=user["user_id"], with_counts=True)
 
 
-@router.delete("/listings/{listing_id}")
+@router.delete("/listings/{listing_id}", response_model=OkOut)
 async def delete_listing(listing_id: str, authorization: Optional[str] = Header(None)):
     user = await get_current_user(authorization)
     res = await db.listings.delete_one({"id": listing_id, "user_id": user["user_id"]})
@@ -797,7 +821,7 @@ async def upsert_business(body: BusinessProfilePatch, authorization: Optional[st
     return await _hydrate_business(doc, user["user_id"])
 
 
-@router.delete("/marketplace/business")
+@router.delete("/marketplace/business", response_model=OkOut)
 async def delete_business(authorization: Optional[str] = Header(None)):
     """Close the storefront and move its listings back to the personal profile."""
     user = await get_current_user(authorization)
@@ -886,7 +910,7 @@ async def add_business_review(
 
 
 # ---------- Trade verification (shared code) ----------
-@router.post("/listings/{listing_id}/trade/start")
+@router.post("/listings/{listing_id}/trade/start", response_model=TradeStartOut)
 async def start_trade(listing_id: str, authorization: Optional[str] = Header(None)):
     """Generate a one-time code for this listing. Share it with the other party;
     once they enter it, the trade is verified and both can review each other."""
@@ -922,7 +946,7 @@ async def start_trade(listing_id: str, authorization: Optional[str] = Header(Non
     return {"code": code, "status": "pending"}
 
 
-@router.post("/trades/confirm")
+@router.post("/trades/confirm", response_model=TradeConfirmOut)
 async def confirm_trade(body: TradeConfirm, authorization: Optional[str] = Header(None)):
     """Enter a code shared by the other party to verify the trade."""
     me = await get_current_user(authorization)
@@ -1155,7 +1179,7 @@ async def toggle_listing_like(listing_id: str, authorization: Optional[str] = He
     return await _hydrate_listing(updated, viewer_id=user["user_id"], with_counts=True)
 
 
-@router.post("/listings/{listing_id}/report")
+@router.post("/listings/{listing_id}/report", response_model=OkOut)
 async def report_listing(listing_id: str, body: ReportCreate, authorization: Optional[str] = Header(None)):
     user = await get_current_user(authorization)
     doc = await db.listings.find_one({"id": listing_id}, {"_id": 0, "id": 1})
@@ -1246,7 +1270,7 @@ async def like_listing_comment(listing_id: str, comment_id: str, authorization: 
     return await _hydrate_comment(c, user["user_id"])
 
 
-@router.delete("/listings/{listing_id}/comments/{comment_id}")
+@router.delete("/listings/{listing_id}/comments/{comment_id}", response_model=OkOut)
 async def delete_listing_comment(listing_id: str, comment_id: str, authorization: Optional[str] = Header(None)):
     user = await get_current_user(authorization)
     c = await db.listing_comments.find_one({"id": comment_id, "listing_id": listing_id}, {"_id": 0})
