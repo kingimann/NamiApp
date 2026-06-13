@@ -1551,3 +1551,144 @@ async def withdraw_offer(offer_id: str, authorization: Optional[str] = Header(No
     await _notify_offer(o["seller_id"], me["user_id"], "withdrew their offer")
     o.update({"status": "withdrawn", "updated_at": now})
     return _offer_view(o, me["user_id"])
+
+
+# ────────────────────────────────────────────────────────────────────────────
+# Saved searches — a user saves a query + filters and revisits it; each saved
+# search reports how many new active listings match since they last looked
+# (a lightweight "alerts" badge, no push needed).
+# ────────────────────────────────────────────────────────────────────────────
+class SavedSearchBody(BaseModel):
+    name: Optional[str] = None
+    query: Optional[str] = None
+    category: Optional[str] = None
+    condition: Optional[str] = None
+    min_price: Optional[float] = None
+    max_price: Optional[float] = None
+    sort: Optional[str] = None
+
+
+class SavedSearchOut(_MkOut):
+    id: str
+    name: str
+    query: Optional[str] = None
+    category: Optional[str] = None
+    condition: Optional[str] = None
+    min_price: Optional[float] = None
+    max_price: Optional[float] = None
+    sort: Optional[str] = None
+    new_count: int = 0                          # active matches since last_checked_at
+    created_at: Optional[datetime] = None
+
+
+class SavedSearchesOut(_MkOut):
+    searches: list = []
+
+
+def _saved_search_label(b: "SavedSearchBody | dict") -> str:
+    g = (lambda k: (b.get(k) if isinstance(b, dict) else getattr(b, k, None)))
+    parts = []
+    if (g("query") or "").strip():
+        parts.append(f'“{g("query").strip()}”')
+    if g("category"):
+        parts.append(str(g("category")))
+    if g("min_price") is not None or g("max_price") is not None:
+        lo = g("min_price")
+        hi = g("max_price")
+        parts.append(f'${lo or 0:.0f}–{("$%.0f" % hi) if hi is not None else "∞"}')
+    return " · ".join(parts) or "All listings"
+
+
+def _saved_search_match(s: dict, since: datetime) -> dict:
+    """Mongo-style filter for active listings matching this search since `since`."""
+    filt: dict = {"status": "active", "created_at": {"$gt": since}}
+    if s.get("category"):
+        filt["category"] = s["category"]
+    if s.get("condition"):
+        filt["condition"] = s["condition"]
+    price: dict = {}
+    if s.get("min_price") is not None:
+        price["$gte"] = float(s["min_price"])
+    if s.get("max_price") is not None:
+        price["$lte"] = float(s["max_price"])
+    if price:
+        filt["price"] = price
+    q = (s.get("query") or "").strip()
+    if q:
+        pattern = re.escape(q)
+        filt["$or"] = [
+            {"title": {"$regex": pattern, "$options": "i"}},
+            {"description": {"$regex": pattern, "$options": "i"}},
+        ]
+    return filt
+
+
+def _saved_search_view(s: dict) -> dict:
+    return {
+        "id": s["id"], "name": s.get("name") or _saved_search_label(s),
+        "query": s.get("query"), "category": s.get("category"), "condition": s.get("condition"),
+        "min_price": s.get("min_price"), "max_price": s.get("max_price"), "sort": s.get("sort"),
+        "created_at": s.get("created_at"),
+    }
+
+
+@router.post("/marketplace/saved-searches", response_model=SavedSearchOut)
+async def save_search(body: SavedSearchBody, authorization: Optional[str] = Header(None)):
+    me = await get_current_user(authorization)
+    if await db.marketplace_saved_searches.count_documents({"user_id": me["user_id"]}) >= 50:
+        raise HTTPException(status_code=400, detail="You can save up to 50 searches")
+    now = datetime.now(timezone.utc)
+    mn = body.min_price if (body.min_price is None or body.min_price >= 0) else None
+    mx = body.max_price if (body.max_price is None or body.max_price >= 0) else None
+    doc = {
+        "id": str(uuid.uuid4()), "user_id": me["user_id"],
+        "name": (body.name or "").strip()[:80] or _saved_search_label(body),
+        "query": (body.query or "").strip()[:120] or None,
+        "category": body.category, "condition": body.condition,
+        "min_price": mn, "max_price": mx, "sort": body.sort,
+        "created_at": now, "last_checked_at": now,
+    }
+    await db.marketplace_saved_searches.insert_one(doc.copy())
+    out = _saved_search_view(doc)
+    out["new_count"] = 0   # nothing is "new" the instant you save it
+    return out
+
+
+@router.get("/marketplace/saved-searches", response_model=SavedSearchesOut)
+async def list_saved_searches(authorization: Optional[str] = Header(None)):
+    me = await get_current_user(authorization)
+    rows = await db.marketplace_saved_searches.find(
+        {"user_id": me["user_id"]}, {"_id": 0}).sort("created_at", -1).limit(50).to_list(50)
+    out = []
+    for s in rows:
+        since = s.get("last_checked_at") or s.get("created_at") or datetime.now(timezone.utc)
+        try:
+            since = _norm_dt(since)
+        except Exception:
+            since = datetime.now(timezone.utc)
+        view = _saved_search_view(s)
+        view["new_count"] = await db.listings.count_documents(_saved_search_match(s, since))
+        out.append(view)
+    return {"searches": out}
+
+
+@router.post("/marketplace/saved-searches/{search_id}/seen", response_model=OkOut)
+async def mark_saved_search_seen(search_id: str, authorization: Optional[str] = Header(None)):
+    """Reset the 'new' badge — call when the user opens the saved search."""
+    me = await get_current_user(authorization)
+    res = await db.marketplace_saved_searches.update_one(
+        {"id": search_id, "user_id": me["user_id"]},
+        {"$set": {"last_checked_at": datetime.now(timezone.utc)}},
+    )
+    if getattr(res, "matched_count", 0) != 1:
+        raise HTTPException(status_code=404, detail="Saved search not found")
+    return {"ok": True}
+
+
+@router.delete("/marketplace/saved-searches/{search_id}", response_model=OkOut)
+async def delete_saved_search(search_id: str, authorization: Optional[str] = Header(None)):
+    me = await get_current_user(authorization)
+    res = await db.marketplace_saved_searches.delete_one({"id": search_id, "user_id": me["user_id"]})
+    if getattr(res, "deleted_count", 0) != 1:
+        raise HTTPException(status_code=404, detail="Saved search not found")
+    return {"ok": True}
