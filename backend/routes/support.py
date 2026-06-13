@@ -5,12 +5,18 @@ from datetime import datetime, timezone
 from typing import Optional
 
 from fastapi import APIRouter, Header, HTTPException, Query
-from pydantic import BaseModel
+from pydantic import BaseModel, ConfigDict
 
 from core import db, get_current_user, is_admin, is_mod, _public_user
 from routes.notifications import emit_notification
 
 router = APIRouter()
+
+# --- §1 response models (extra="allow") ---
+class CountOut(BaseModel):
+    model_config = ConfigDict(extra="allow")
+    count: int = 0
+
 
 CATEGORIES = {"dispute", "payment", "account", "content", "bug", "safety", "other"}
 OPEN_STATUSES = {"open", "awaiting_staff", "awaiting_user"}
@@ -124,7 +130,7 @@ async def create_ticket(body: TicketCreate, authorization: Optional[str] = Heade
     return await _hydrate_ticket(doc, with_messages=True)
 
 
-@router.get("/support/unread-count")
+@router.get("/support/unread-count", response_model=CountOut)
 async def unread_count(authorization: Optional[str] = Header(None)):
     """Tickets needing the user's attention (a staff reply they haven't opened)."""
     user = await get_current_user(authorization)

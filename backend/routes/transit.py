@@ -10,10 +10,19 @@ from typing import Optional
 
 import httpx
 from fastapi import APIRouter, Header, Query
+from pydantic import BaseModel, ConfigDict
 
 from core import TRANSITLAND_API_KEY, TRANSITLAND_BASE, get_current_user
 
 router = APIRouter()
+
+# --- §1 response models (extra="allow") ---
+class TransitOut(BaseModel):
+    model_config = ConfigDict(extra="allow")
+    configured: bool = False
+    departures: list = []
+    stops: list = []
+
 
 # GTFS route_type → friendly label/icon hint.
 _ROUTE_TYPES = {
@@ -163,7 +172,7 @@ async def _routes_near(client: httpx.AsyncClient, lat: float, lon: float, radius
     return {r.get("onestop_id") for r in (data.get("routes") or []) if r.get("onestop_id")}
 
 
-@router.get("/transit/nearby")
+@router.get("/transit/nearby", response_model=TransitOut)
 async def transit_nearby(
     lat: float = Query(...),
     lon: float = Query(...),
@@ -260,7 +269,7 @@ def _haversine_m(lon1, lat1, lon2, lat2) -> Optional[float]:
         return None
 
 
-@router.get("/transit/plan")
+@router.get("/transit/plan", response_model=TransitOut)
 async def transit_plan(
     route_id: str = Query(...),
     board_lat: Optional[float] = Query(None),

@@ -3,11 +3,17 @@ from datetime import datetime, timezone
 from typing import Optional
 
 from fastapi import APIRouter, Header
-from pydantic import BaseModel
+from pydantic import BaseModel, ConfigDict
 
 from core import db, get_current_user
 
 router = APIRouter()
+
+# --- §1 response models (extra="allow") ---
+class OkOut(BaseModel):
+    model_config = ConfigDict(extra="allow")
+    ok: bool = True
+
 
 
 class PushRegister(BaseModel):
@@ -20,7 +26,7 @@ class PushUnregister(BaseModel):
     token: str
 
 
-@router.post("/push/register")
+@router.post("/push/register", response_model=OkOut)
 async def register_push(body: PushRegister, authorization: Optional[str] = Header(None)):
     """Save (or move) a device push token for the current user. Idempotent."""
     user = await get_current_user(authorization)
@@ -43,7 +49,7 @@ async def register_push(body: PushRegister, authorization: Optional[str] = Heade
     return {"ok": True}
 
 
-@router.delete("/push/register")
+@router.delete("/push/register", response_model=OkOut)
 async def unregister_push(body: PushUnregister, authorization: Optional[str] = Header(None)):
     """Remove a token (e.g. on logout)."""
     user = await get_current_user(authorization)
