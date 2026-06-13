@@ -45,11 +45,21 @@ from services.link_preview import fetch_link_preview, first_url
 
 
 def _decrypt_msg(doc: dict) -> dict:
-    """Return a copy of `doc` with text fields decrypted for the API response."""
+    """Return a copy of `doc` with all content fields decrypted for the API
+    response. Covers text, voice notes, files, transcripts, place/contact
+    details and polls. `decrypt_text` is a no-op on legacy plaintext."""
     if not doc:
         return doc
     out = dict(doc)
     out["text"] = decrypt_text(doc.get("text") or "")
+    for f in (
+        "place_name", "place_address", "audio_base64", "file_base64",
+        "file_name", "contact_name", "transcript", "poll_question",
+    ):
+        if doc.get(f) is not None:
+            out[f] = decrypt_text(doc.get(f))
+    if doc.get("poll_options"):
+        out["poll_options"] = [decrypt_text(o) for o in doc["poll_options"]]
     out["edit_history"] = [
         {"text": decrypt_text(h.get("text") or ""), "edited_at": h.get("edited_at")}
         for h in (doc.get("edit_history") or [])
@@ -757,29 +767,30 @@ async def _create_message(conv_id: str, conv: dict, user: dict, body: MessageCre
         "sender_id": user["user_id"],
         "type": body.type,
         "text": encrypt_text((body.text or "")[:2000]),
-        "place_name": body.place_name,
-        "place_address": body.place_address,
+        # Content fields are encrypted at rest (decrypted in _decrypt_msg).
+        "place_name": encrypt_text(body.place_name),
+        "place_address": encrypt_text(body.place_address),
         "place_longitude": body.place_longitude,
         "place_latitude": body.place_latitude,
         "media": media,
-        "audio_base64": audio_b64,
+        "audio_base64": encrypt_text(audio_b64),
         "audio_duration_ms": body.audio_duration_ms if body.type == "voice" else None,
         "post_id": post_id,
         "gif_url": body.gif_url if body.type == "gif" else None,
-        "file_base64": body.file_base64 if body.type == "file" else None,
-        "file_name": (body.file_name or "file")[:200] if body.type == "file" else None,
+        "file_base64": encrypt_text(body.file_base64 if body.type == "file" else None),
+        "file_name": encrypt_text((body.file_name or "file")[:200] if body.type == "file" else None),
         "file_size": body.file_size if body.type == "file" else None,
         "file_mime": body.file_mime if body.type == "file" else None,
         "contact_user_id": body.contact_user_id if body.type == "contact" else None,
-        "contact_name": (body.contact_name or "")[:120] if body.type == "contact" else None,
+        "contact_name": encrypt_text((body.contact_name or "")[:120] if body.type == "contact" else None),
         "contact_picture": body.contact_picture if body.type == "contact" else None,
         "form_id": form_id,
         "form_key": form_key,
         "form_title": form_title,
         "amount": tip_amount,
         "link_preview": link_prev,
-        "poll_question": poll_question,
-        "poll_options": poll_options,
+        "poll_question": encrypt_text(poll_question),
+        "poll_options": [encrypt_text(o) for o in poll_options],
         "poll_votes": {},
         "reactions": {},
         "reply_to_id": reply_to_id,
@@ -1037,10 +1048,12 @@ async def transcribe_voice(conv_id: str, msg_id: str, body: TranscribeBody, auth
         raise HTTPException(status_code=404, detail="Voice message not found")
     # Already transcribed once (cached on a plain voice note) — hand it straight back.
     if m.get("transcript"):
-        return {"text": m["transcript"], "cached": True}
+        return {"text": decrypt_text(m["transcript"]), "cached": True}
     if not transcribe_enabled():
         raise HTTPException(status_code=503, detail={"code": "transcribe_unavailable", "message": "Voice transcription isn't set up on this server yet."})
-    stored = m.get("audio_base64") or ""
+    # The stored audio is encrypted at rest — decrypt to get the real value
+    # (which may itself be an `e2eb:v1:` E2E blob the server still can't read).
+    stored = decrypt_text(m.get("audio_base64")) or ""
     is_e2e = stored.startswith("e2eb:v1:")
     audio = body.audio_base64 if (body.audio_base64 and is_e2e) else stored
     if is_e2e and not body.audio_base64:
@@ -1053,7 +1066,7 @@ async def transcribe_voice(conv_id: str, msg_id: str, body: TranscribeBody, auth
     # Cache only when the audio is the server's own non-E2E copy — never persist a
     # client-decrypted E2E transcript (that would defeat end-to-end encryption).
     if not is_e2e:
-        await db.messages.update_one({"id": msg_id, "conversation_id": conv_id}, {"$set": {"transcript": text}})
+        await db.messages.update_one({"id": msg_id, "conversation_id": conv_id}, {"$set": {"transcript": encrypt_text(text)}})
     return {"text": text, "cached": False}
 
 
