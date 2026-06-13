@@ -17,7 +17,7 @@ from pydantic import BaseModel, ConfigDict
 from core import (
     db, get_current_user, _public_user, CURRENCIES, normalize_currency, _norm_dt, is_admin,
     MONEY_MAX_TOPUP, MONEY_MAX_SEND, SEND_MAX_PER_HOUR, SEND_MAX_PER_DAY, TOPUP_MAX_PENDING,
-    NEW_ACCOUNT_DAYS, NEW_ACCOUNT_SEND_PER_HOUR, NEW_ACCOUNT_SEND_PER_DAY,
+    NEW_ACCOUNT_DAYS, NEW_ACCOUNT_SEND_PER_HOUR, NEW_ACCOUNT_SEND_PER_DAY, get_request_context,
 )
 from db import _to_json, DuplicateKeyError
 
@@ -26,6 +26,32 @@ REVERSAL_WINDOW_MIN = 5
 from routes.notifications import emit_notification
 
 router = APIRouter()
+
+
+# ── Immutable money audit log ────────────────────────────────────────────────
+async def record_money_event(event: str, user_id: str, amount: float, *,
+                             ref_id: Optional[str] = None, counterparty: Optional[str] = None,
+                             status: Optional[str] = None, meta: Optional[dict] = None) -> None:
+    """Append a money mutation to the append-only `money_audit` ledger:
+    who / what / when / how-much / request-id / IP. Best-effort — auditing must
+    never break the money path. The collection is never updated or deleted from."""
+    try:
+        ctx = get_request_context()
+        await db.money_audit.insert_one({
+            "id": str(uuid.uuid4()),
+            "event": event,                     # send | accept | decline | reverse | topup | cashout | …
+            "user_id": user_id,
+            "counterparty_id": counterparty,
+            "amount": round(float(amount or 0), 2),
+            "ref_id": ref_id,                   # the transfer / topup / payout id
+            "status": status,
+            "request_id": ctx.get("request_id"),
+            "ip": ctx.get("ip"),
+            "meta": meta or {},
+            "created_at": datetime.now(timezone.utc),
+        })
+    except Exception:
+        pass
 
 
 # ── Wallet balance (spendable, topped-up funds) ──────────────────────────────
@@ -73,6 +99,8 @@ async def _apply_wallet_topup(uid: str, amount: float, source: str, session_id: 
             row = None  # no top-ups recorded yet — falls through to the insert path
         if row is not None:
             await _credit_wallet(uid, amount)
+            await record_money_event("topup", uid, amount, ref_id=session_id,
+                                     status="completed", meta={"source": source})
             return True
         # Nothing flipped: either it was already 'completed' (a concurrent caller
         # won — skip) or there's no record for this session yet (credit fresh).
@@ -94,9 +122,13 @@ async def _apply_wallet_topup(uid: str, amount: float, source: str, session_id: 
         except DuplicateKeyError:
             return False   # another caller already recorded/credited this session
         await _credit_wallet(uid, amount)
+        await record_money_event("topup", uid, amount, ref_id=session_id,
+                                 status="completed", meta={"source": source})
         return True
     await _credit_wallet(uid, amount)
     await db.wallet_topups.insert_one(record)
+    await record_money_event("topup", uid, amount, ref_id=record["id"],
+                             status="completed", meta={"source": source})
     return True
 
 
@@ -537,6 +569,9 @@ async def send_money(body: SendMoney, me: dict = Depends(get_current_user)):
         await db.money_transfers.insert_one(doc.copy())
         await _record_platform_fee(fee, "transfer_fee", me["user_id"], doc["id"])
         await _notify_money(body.to_user_id, me["user_id"], "money_received", f"sent you ${amount:.2f}")
+        await record_money_event("send", me["user_id"], amount, ref_id=doc["id"],
+                                 counterparty=body.to_user_id, status="completed",
+                                 meta={"fee": fee, "auto_deposited": True})
         return {"ok": True, "amount": amount, "fee": fee, "status": "completed", "auto_deposited": True}
 
     doc = {**base, "status": "pending", "claimable_at": now + timedelta(minutes=REVERSAL_WINDOW_MIN)}
@@ -546,6 +581,9 @@ async def send_money(body: SendMoney, me: dict = Depends(get_current_user)):
     await _record_platform_fee(fee, "transfer_fee", me["user_id"], doc["id"])
     await _notify_money(body.to_user_id, me["user_id"], "money_received",
                         ("sent you money — accept it" if sec_hash else f"sent you ${amount:.2f} — accept it"))
+    await record_money_event("send", me["user_id"], amount, ref_id=doc["id"],
+                             counterparty=body.to_user_id, status="pending",
+                             meta={"fee": fee, "protected": bool(sec_hash)})
     return {"ok": True, "amount": amount, "fee": fee, "status": "pending", "protected": bool(sec_hash),
             "claimable_at": doc["claimable_at"], "reversal_window_min": REVERSAL_WINDOW_MIN}
 
@@ -657,6 +695,8 @@ async def accept_transfer(tid: str, body: Optional[AcceptBody] = None, me: dict 
     # The fee was already booked as platform revenue when the transfer was sent.
     await _notify_money(t["from_user_id"], me["user_id"], "money_accepted",
                         f"accepted your ${amount:.2f}")
+    await record_money_event("accept", me["user_id"], amount, ref_id=tid,
+                             counterparty=t["from_user_id"], status="accepted")
     return {"ok": True, "amount": amount}
 
 
@@ -679,6 +719,8 @@ async def decline_transfer(tid: str, me: dict = Depends(get_current_user)):
     await db.platform_revenue.delete_one({"ref_id": tid, "source": "transfer_fee"})
     await _notify_money(t["from_user_id"], me["user_id"], "money_declined",
                         "declined your money")
+    await record_money_event("decline", me["user_id"], float(t.get("amount", 0) or 0),
+                             ref_id=tid, counterparty=t["from_user_id"], status="declined")
     return {"ok": True}
 
 
@@ -703,6 +745,8 @@ async def reverse_transfer(tid: str, me: dict = Depends(get_current_user)):
     await db.platform_revenue.delete_one({"ref_id": tid, "source": "transfer_fee"})
     await _notify_money(t["to_user_id"], me["user_id"], "money_reversed",
                         f"reversed the ${round(float(t.get('amount', 0) or 0), 2):.2f} they sent")
+    await record_money_event("reverse", me["user_id"], float(t.get("amount", 0) or 0),
+                             ref_id=tid, counterparty=t["to_user_id"], status="reversed")
     return {"ok": True}
 
 
@@ -962,6 +1006,11 @@ class TopupsOut(_W):
 class MoneyAlertsOut(_W):
     alerts: list = []
     open: int = 0
+
+
+class MoneyAuditOut(_W):
+    entries: list = []
+    total: int = 0
 
 
 @router.post("/payments/pay-wallet", response_model=PayWalletOut)
@@ -1431,3 +1480,21 @@ async def admin_money_alerts(me: dict = Depends(get_current_user)):
         raise HTTPException(status_code=403, detail="Admins only")
     rows = await db.money_alerts.find({}, {"_id": 0}).sort("created_at", -1).limit(200).to_list(200)
     return {"alerts": rows, "open": sum(1 for r in rows if not r.get("resolved"))}
+
+
+@router.get("/admin/money-audit", response_model=MoneyAuditOut)
+async def admin_money_audit(user_id: Optional[str] = None, event: Optional[str] = None,
+                           limit: int = 100, me: dict = Depends(get_current_user)):
+    """Immutable money audit trail (admin only): every send / accept / decline /
+    reverse / top-up / cash-out with who / amount / request-id / IP. Filter by
+    [user_id] or [event]. Append-only — entries are never modified or deleted."""
+    if not is_admin(me):
+        raise HTTPException(status_code=403, detail="Admins only")
+    q: dict = {}
+    if user_id:
+        q["$or"] = [{"user_id": user_id}, {"counterparty_id": user_id}]
+    if event:
+        q["event"] = event
+    lim = max(1, min(int(limit or 100), 500))
+    rows = await db.money_audit.find(q, {"_id": 0}).sort("created_at", -1).limit(lim).to_list(lim)
+    return {"entries": rows, "total": len(rows)}

@@ -693,6 +693,12 @@ async def cashout_to_card(body: CashoutBody, _auth_user: dict = Depends(get_curr
         })
     except Exception:
         pass
+    try:
+        from routes.money import record_money_event
+        await record_money_event("cashout", user["user_id"], amount, ref_id=cashout_id,
+                                 status="instant", meta={"net": net, "fee": c_fee, "currency": acct_ccy})
+    except Exception:
+        pass
     fresh = await db.users.find_one({"user_id": user["user_id"]}, {"_id": 0, "wallet_balance": 1})
     return {
         "ok": True, "amount": net, "gross": amount, "fee": c_fee,

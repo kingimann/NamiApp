@@ -283,6 +283,12 @@ async def admin_set_wallet(user_id: str, body: WalletSet, authorization: Optiona
     bal = round(max(0.0, float(body.balance or 0)), 2)
     await db.users.update_one({"user_id": user_id}, {"$set": {"wallet_balance": bal}})
     await _audit(me, f"set wallet ${bal:.2f}", target)
+    try:
+        from routes.money import record_money_event
+        await record_money_event("admin_set_wallet", user_id, bal, status="set",
+                                 counterparty=me["user_id"], meta={"admin_id": me["user_id"]})
+    except Exception:
+        pass
     return {"ok": True, "balance": bal}
 
 
@@ -347,6 +353,13 @@ async def admin_add_transaction(user_id: str, body: AddTxn, authorization: Optio
         delta = amount if direction_in else -amount
         await db.users.update_one({"user_id": user_id}, {"$inc": {"wallet_balance": round(delta, 2)}})
     await _audit(me, f"re-added {kind} ${amount:.2f}", target, body.note or "")
+    try:
+        from routes.money import record_money_event
+        await record_money_event(f"admin_{kind}", user_id, amount, ref_id=nid,
+                                 counterparty=me["user_id"], status="admin",
+                                 meta={"admin_id": me["user_id"], "note": (body.note or "")[:200]})
+    except Exception:
+        pass
     fresh = await db.users.find_one({"user_id": user_id}, {"_id": 0, "wallet_balance": 1})
     return {"ok": True, "id": nid, "balance": round(float((fresh or {}).get("wallet_balance", 0) or 0), 2)}
 
