@@ -52,6 +52,15 @@ MONEY_ROUTES = [
     # Payout methods item schema (instant_eligible) + immutable money audit log.
     ("/payments/payouts/methods", "get"),
     ("/admin/money-audit", "get"),
+    # Transfer security question + the request-money flow + currencies (§5 hygiene).
+    ("/money/security", "get"),
+    ("/money/security", "post"),
+    ("/money/request", "post"),
+    ("/money/requests", "get"),
+    ("/money/requests/{rid}/pay", "post"),
+    ("/money/requests/{rid}/decline", "post"),
+    ("/money/requests/{rid}/cancel", "post"),
+    ("/currencies", "get"),
 ]
 
 
@@ -88,6 +97,9 @@ AUTH_BEFORE_VALIDATION_POSTS = [
     "/payments/pay-intent",
     "/payments/payouts/cashout",
     "/money/transfers/{tid}/accept",
+    "/money/security",
+    "/money/request",
+    "/money/requests/{rid}/pay",
 ]
 
 

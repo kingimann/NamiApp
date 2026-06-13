@@ -389,6 +389,7 @@ async def _hydrate_post(doc: dict, viewer_id: Optional[str]) -> Post:
         place_longitude=None if locked else doc.get("place_longitude"),
         place_latitude=None if locked else doc.get("place_latitude"),
         media=[] if locked else (doc.get("media", []) or []),
+        kind=_post_kind(doc),
         tagged_users=[] if locked else (await _hydrate_tagged(doc.get("tagged_user_ids"))),
         link_preview=None if locked else link_prev_obj,
         poll=None if locked else poll_obj,
@@ -571,6 +572,7 @@ async def create_post(body: PostCreate, authorization: Optional[str] = Header(No
         "place_longitude": body.place_longitude,
         "place_latitude": body.place_latitude,
         "media": media,
+        "kind": _resolve_create_kind(body.kind, media, title),
         "poll": poll_doc,
         "hashtags": hashtags,
         "community_id": community_id,
@@ -1756,6 +1758,30 @@ def _has_playable_video(doc: dict) -> bool:
     return False
 
 
+def _post_kind(doc: dict) -> str:
+    """The post's media kind: 'video' (a titled video), 'reel' (an untitled
+    video) or 'post' (everything else). Uses the value stored at create time
+    when present, and otherwise derives it — so posts that predate the explicit
+    field keep the exact heuristic the app used to apply client-side."""
+    k = (doc.get("kind") or "").strip().lower()
+    if k in ("post", "reel", "video"):
+        return k
+    if _has_playable_video(doc):
+        return "video" if (doc.get("title") or "").strip() else "reel"
+    return "post"
+
+
+def _resolve_create_kind(requested: Optional[str], media: list, title: Optional[str]) -> str:
+    """Pick the kind to store for a new post. An explicit 'reel'/'video' is only
+    honored when the post actually carries a playable video (a modified client
+    can't mislabel a text post as a reel); otherwise we fall back to deriving it."""
+    req = (requested or "").strip().lower()
+    has_video = _has_playable_video({"media": media})
+    if req == "post" or (req in ("reel", "video") and has_video):
+        return req
+    return _post_kind({"media": media, "title": title})
+
+
 @router.get("/feed/reels", response_model=List[Post])
 async def reels_feed(
     focus: Optional[str] = Query(None),
@@ -1798,6 +1824,46 @@ async def reels_feed(
             if orig and _has_playable_video(orig):
                 playable.append(d)
     ranked = await _rank_docs(playable, uid, 60)
+    if focus:
+        ranked.sort(key=lambda d: 0 if d["id"] == focus else 1)
+    return await _hydrate_many(ranked, uid)
+
+
+@router.get("/feed/videos", response_model=List[Post])
+async def videos_feed(
+    focus: Optional[str] = Query(None),
+    scope: str = Query("explore"),
+    authorization: Optional[str] = Header(None),
+):
+    """Landscape video feed: titled video posts only (kind == "video"), the
+    counterpart to the vertical /feed/reels (which carries untitled clips). A
+    `focus` post is pinned first; `scope=following` limits it to accounts you
+    follow, `scope=explore` (default) is the full personalized feed.
+
+    Lets the Videos screen drop its client-side merge of /feed/reels +
+    /reels/popular and the "keep only titled ones" filtering."""
+    user = await get_current_user(authorization)
+    uid = user["user_id"]
+    query: dict = {"parent_id": None, "media": {"$elemMatch": {"type": "video"}}}
+    if scope == "following":
+        followees = await db.follows.find(
+            {"follower_id": uid}, {"_id": 0, "followee_id": 1}
+        ).to_list(2000)
+        ids = [f["followee_id"] for f in followees]
+        if not ids:
+            return []
+        query["user_id"] = {"$in": ids}
+    docs = await db.posts.find(query, {"_id": 0}).sort("created_at", -1).limit(250).to_list(250)
+    seen: set = set()
+    videos: list = []
+    for d in docs:
+        if d["id"] in seen:
+            continue
+        seen.add(d["id"])
+        # Titled, playable videos only — untitled clips belong to /feed/reels.
+        if _has_playable_video(d) and _post_kind(d) == "video":
+            videos.append(d)
+    ranked = await _rank_docs(videos, uid, 60)
     if focus:
         ranked.sort(key=lambda d: 0 if d["id"] == focus else 1)
     return await _hydrate_many(ranked, uid)
