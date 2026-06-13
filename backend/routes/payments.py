@@ -306,6 +306,45 @@ class CashoutOut(_MoneyOut):
     balance: float                              # remaining wallet balance
 
 
+class OkOut(_MoneyOut):
+    ok: bool = True
+
+
+class MethodsOut(_MoneyOut):
+    data: list = []
+
+
+class IdentityStatusOut(_MoneyOut):
+    status: Optional[str] = None
+    id_verified: bool = False
+
+
+class AccountSessionOut(_MoneyOut):
+    client_secret: Optional[str] = None
+    publishable_key: Optional[str] = None
+    components: Optional[list] = None
+
+
+class FeesOut(_MoneyOut):
+    platform_fee_percent: Optional[float] = None
+    creator_share_percent: Optional[float] = None
+    transaction_fee_cents: Optional[int] = None
+    cashout_fee: Optional[float] = None
+    cashout_min: Optional[float] = None
+
+
+class WebBuildOut(_MoneyOut):
+    web_build: Optional[str] = None
+
+
+class MobileGateOut(_MoneyOut):
+    mobile_web_gate: bool = False
+
+
+class TestPaymentsOut(_MoneyOut):
+    test_payments: bool = False
+
+
 @router.get("/payments/config", response_model=PaymentsConfigOut)
 async def payments_config():
     """Tell the client whether real payments are available.
@@ -655,7 +694,7 @@ class DebitCardBody(BaseModel):
     token: str   # Stripe.js card token (tok_...) created on the connected account
 
 
-@router.post("/payments/payouts/debit-card")
+@router.post("/payments/payouts/debit-card", response_model=OkOut)
 async def add_debit_card(body: DebitCardBody, _auth_user: dict = Depends(get_current_user)):
     """Attach a debit card to the user's connected account as their payout method
     (for instant cash-out). The card is tokenized in the app via Stripe.js — raw
@@ -688,7 +727,7 @@ async def add_debit_card(body: DebitCardBody, _auth_user: dict = Depends(get_cur
             "hold_until": hold.isoformat() if hold else None, "hold_days": DD_HOLD_BUSINESS_DAYS}
 
 
-@router.post("/payments/payouts/bank-account")
+@router.post("/payments/payouts/bank-account", response_model=OkOut)
 async def add_bank_account(body: DebitCardBody, _auth_user: dict = Depends(get_current_user)):
     """Attach a bank account (direct deposit) to the user's connected account.
     The bank details are tokenized in the app via Stripe.js — only the token is
@@ -741,7 +780,7 @@ def _external_account_view(e: dict) -> dict:
     return base
 
 
-@router.get("/payments/payouts/methods")
+@router.get("/payments/payouts/methods", response_model=MethodsOut)
 async def list_payout_methods(_auth_user: dict = Depends(get_current_user)):
     """List the saved payout destinations (debit cards + bank accounts) on the
     user's connected account so the app can show "Visa •• 4242 · default"."""
@@ -758,7 +797,7 @@ async def list_payout_methods(_auth_user: dict = Depends(get_current_user)):
     return {"data": [_external_account_view(x) for x in (ext.get("data") or [])]}
 
 
-@router.delete("/payments/payouts/methods/{method_id}")
+@router.delete("/payments/payouts/methods/{method_id}", response_model=OkOut)
 async def delete_payout_method(method_id: str, _auth_user: dict = Depends(get_current_user)):
     """Remove a saved card/bank from the user's connected account."""
     _require_stripe()
@@ -774,7 +813,7 @@ async def delete_payout_method(method_id: str, _auth_user: dict = Depends(get_cu
     return {"ok": True, "id": method_id}
 
 
-@router.post("/payments/payouts/methods/{method_id}/default")
+@router.post("/payments/payouts/methods/{method_id}/default", response_model=OkOut)
 async def set_default_payout_method(method_id: str, _auth_user: dict = Depends(get_current_user)):
     """Make a saved card/bank the default payout destination."""
     _require_stripe()
@@ -939,7 +978,7 @@ async def start_identity(_auth_user: dict = Depends(get_current_user)):
     return {"url": session.get("url"), "client_secret": session.get("client_secret"), "id": session.get("id")}
 
 
-@router.get("/payments/identity/status")
+@router.get("/payments/identity/status", response_model=IdentityStatusOut)
 async def identity_status(_auth_user: dict = Depends(get_current_user)):
     """Where the user's standalone ID verification stands. Also flips the stored
     `id_verified` flag if Stripe now reports the session as verified."""
@@ -967,7 +1006,7 @@ def _doc_needed(reqs: dict) -> bool:
     return any("verification.document" in r for r in pool)
 
 
-@router.get("/payments/payouts/requirements")
+@router.get("/payments/payouts/requirements", response_model=_MoneyOut)
 async def payout_requirements(_auth_user: dict = Depends(get_current_user)):
     """What Stripe still needs to enable payouts, plus any details already on file
     so the in-app verification form can prefill. No Stripe-hosted screen involved."""
@@ -1017,7 +1056,7 @@ class VerificationBody(BaseModel):
     accept_tos: bool = False
 
 
-@router.post("/payments/payouts/verification")
+@router.post("/payments/payouts/verification", response_model=OkOut)
 async def submit_verification(body: VerificationBody, request: Request, _auth_user: dict = Depends(get_current_user)):
     """Submit identity details collected by our own in-app form to Stripe via the
     API. Replaces Stripe's hosted/embedded onboarding — nothing opens externally."""
@@ -1075,7 +1114,7 @@ class DocBody(BaseModel):
     back: Optional[str] = None
 
 
-@router.post("/payments/payouts/verification-document")
+@router.post("/payments/payouts/verification-document", response_model=OkOut)
 async def upload_verification_document(body: DocBody, _auth_user: dict = Depends(get_current_user)):
     """Upload an ID photo (captured in-app) to Stripe and attach it for verification."""
     _require_stripe()
@@ -1461,7 +1500,7 @@ class ApiPlanBuy(BaseModel):
     plan: str
 
 
-@router.get("/payments/api-plan")
+@router.get("/payments/api-plan", response_model=_MoneyOut)
 async def api_plan_status(_auth_user: dict = Depends(get_current_user)):
     user = _auth_user
     active = _active_plan(user)
@@ -1482,7 +1521,7 @@ def _grant_plan_doc(plan_id: str):
     return {"$set": {"api_plan": plan_id, "api_access_until": now + timedelta(days=30)}}
 
 
-@router.post("/payments/api-plan/checkout")
+@router.post("/payments/api-plan/checkout", response_model=SetupUrlOut)
 async def api_plan_checkout(body: ApiPlanBuy, _auth_user: dict = Depends(get_current_user)):
     """Buy/upgrade a Developer API plan via Stripe (charges the platform)."""
     _require_stripe()
@@ -1507,7 +1546,7 @@ async def api_plan_checkout(body: ApiPlanBuy, _auth_user: dict = Depends(get_cur
     return {"url": session["url"], "id": session["id"]}
 
 
-@router.post("/payments/api-plan/activate")
+@router.post("/payments/api-plan/activate", response_model=OkOut)
 async def api_plan_activate(body: ApiPlanBuy, _auth_user: dict = Depends(get_current_user)):
     """Test-mode activation (no Stripe configured). Mirrors the fake-payment flow."""
     if stripe_enabled():
@@ -1525,7 +1564,7 @@ class UsageBuy(BaseModel):
     pack: str
 
 
-@router.get("/payments/api-usage")
+@router.get("/payments/api-usage", response_model=_MoneyOut)
 async def api_usage(_auth_user: dict = Depends(get_current_user)):
     user = _auth_user
     plan = _active_plan(user)
@@ -1547,7 +1586,7 @@ async def api_usage(_auth_user: dict = Depends(get_current_user)):
     }
 
 
-@router.post("/payments/api-usage/buy")
+@router.post("/payments/api-usage/buy", response_model=SetupUrlOut)
 async def buy_usage(body: UsageBuy, _auth_user: dict = Depends(get_current_user)):
     """Pay-as-you-go: buy an overage pack via Stripe (charges the platform)."""
     _require_stripe()
@@ -1572,7 +1611,7 @@ async def buy_usage(body: UsageBuy, _auth_user: dict = Depends(get_current_user)
     return {"url": session["url"], "id": session["id"]}
 
 
-@router.post("/payments/api-usage/activate")
+@router.post("/payments/api-usage/activate", response_model=OkOut)
 async def activate_usage(body: UsageBuy, _auth_user: dict = Depends(get_current_user)):
     """Test-mode pay-as-you-go (no Stripe). Adds request credits immediately."""
     if stripe_enabled():
@@ -1585,7 +1624,7 @@ async def activate_usage(body: UsageBuy, _auth_user: dict = Depends(get_current_
     return {"ok": True, "added": pack["requests"]}
 
 
-@router.post("/payments/webhook")
+@router.post("/payments/webhook", response_model=OkOut)
 async def stripe_webhook(request: Request):
     """Credit the creator's in-app wallet when a Checkout payment completes."""
     if not stripe_enabled():
@@ -1772,7 +1811,7 @@ async def stripe_webhook(request: Request):
 
 
 # ── Embedded Connect onboarding + payout management (rendered inside the site) ─
-@router.post("/payments/payouts/account-session")
+@router.post("/payments/payouts/account-session", response_model=AccountSessionOut)
 async def payout_account_session(_auth_user: dict = Depends(get_current_user)):
     """Create an Account Session for Stripe's embedded components.
 
@@ -1839,7 +1878,7 @@ def _admin_only(me: dict):
         raise HTTPException(status_code=403, detail="Admins only")
 
 
-@router.get("/admin/test-payments")
+@router.get("/admin/test-payments", response_model=TestPaymentsOut)
 async def admin_get_test_payments(_auth_user: dict = Depends(get_current_user)):
     me = _auth_user
     _admin_only(me)
@@ -1854,7 +1893,7 @@ async def _set_setting(key: str, value):
         await db.app_settings.insert_one({"key": key, "value": value})
 
 
-@router.post("/admin/test-payments")
+@router.post("/admin/test-payments", response_model=TestPaymentsOut)
 async def admin_set_test_payments(body: TestPaymentsBody, _auth_user: dict = Depends(get_current_user)):
     me = _auth_user
     _admin_only(me)
@@ -1867,14 +1906,14 @@ class ToggleBody(BaseModel):
     enabled: bool
 
 
-@router.get("/admin/mobile-web-gate")
+@router.get("/admin/mobile-web-gate", response_model=MobileGateOut)
 async def admin_get_mobile_web_gate(_auth_user: dict = Depends(get_current_user)):
     """Whether phone browsers are pushed to the native app (default on)."""
     _admin_only(_auth_user)
     return {"mobile_web_gate": bool(await _setting("mobile_web_gate", True))}
 
 
-@router.post("/admin/mobile-web-gate")
+@router.post("/admin/mobile-web-gate", response_model=MobileGateOut)
 async def admin_set_mobile_web_gate(body: ToggleBody, _auth_user: dict = Depends(get_current_user)):
     """Turn the mobile-web gate on/off without a redeploy."""
     _admin_only(_auth_user)
@@ -1886,7 +1925,7 @@ class WebBuildBody(BaseModel):
     build: Optional[str] = None   # explicit token; blank → auto-bump to a timestamp
 
 
-@router.get("/admin/web-build")
+@router.get("/admin/web-build", response_model=WebBuildOut)
 async def admin_get_web_build(_auth_user: dict = Depends(get_current_user)):
     """Current web-update kill-switch token (and any admin override)."""
     me = _auth_user
@@ -1896,7 +1935,7 @@ async def admin_get_web_build(_auth_user: dict = Depends(get_current_user)):
     return {"web_build": resolve_web_build(override), "override": override}
 
 
-@router.post("/admin/web-build")
+@router.post("/admin/web-build", response_model=WebBuildOut)
 async def admin_set_web_build(body: WebBuildBody, _auth_user: dict = Depends(get_current_user)):
     """Bump the kill-switch token so every open web client hard-refreshes to the
     latest deploy. Pass a `build` string to set it explicitly, or omit it to
@@ -1917,7 +1956,7 @@ class FeesBody(BaseModel):
     cashout_min_cents: Optional[int] = None        # minimum instant cash-out
 
 
-@router.get("/admin/fees")
+@router.get("/admin/fees", response_model=FeesOut)
 async def admin_get_fees(_auth_user: dict = Depends(get_current_user)):
     me = _auth_user
     _admin_only(me)
@@ -1931,7 +1970,7 @@ async def admin_get_fees(_auth_user: dict = Depends(get_current_user)):
     }
 
 
-@router.post("/admin/fees")
+@router.post("/admin/fees", response_model=FeesOut)
 async def admin_set_fees(body: FeesBody, _auth_user: dict = Depends(get_current_user)):
     me = _auth_user
     _admin_only(me)
@@ -1953,7 +1992,7 @@ async def admin_set_fees(body: FeesBody, _auth_user: dict = Depends(get_current_
     }
 
 
-@router.get("/admin/revenue")
+@router.get("/admin/revenue", response_model=_MoneyOut)
 async def admin_revenue(_auth_user: dict = Depends(get_current_user)):
     """Platform revenue from in-app fees — read from the platform_revenue ledger,
     so it includes every recorded fee: per-payment transaction fees on sends, and
@@ -1986,7 +2025,7 @@ async def admin_revenue(_auth_user: dict = Depends(get_current_user)):
     }
 
 
-@router.post("/admin/reset/money")
+@router.post("/admin/reset/money", response_model=OkOut)
 async def admin_reset_money(_auth_user: dict = Depends(get_current_user)):
     """Wipe wallet/money data (earnings, tips, subs, payouts, transfers, requests)
     and zero ad balances. For clearing test/fake money."""
@@ -1999,7 +2038,7 @@ async def admin_reset_money(_auth_user: dict = Depends(get_current_user)):
     return {"ok": True}
 
 
-@router.post("/admin/reset/analytics")
+@router.post("/admin/reset/analytics", response_model=OkOut)
 async def admin_reset_analytics(_auth_user: dict = Depends(get_current_user)):
     """Zero ad + view analytics (impressions/clicks/spend, profile views, events)."""
     me = _auth_user
