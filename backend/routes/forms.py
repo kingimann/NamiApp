@@ -23,7 +23,7 @@ import httpx
 
 from fastapi import APIRouter, Header, HTTPException, Query, Request
 from fastapi.responses import HTMLResponse, Response
-from pydantic import BaseModel
+from pydantic import BaseModel, ConfigDict
 
 from core import db, get_current_user
 
@@ -227,6 +227,33 @@ def _public_form_view(f: dict) -> dict:
 
 
 # ── Owner CRUD (authenticated) ───────────────────────────────────────────────
+# --- §1 response models (extra="allow" so no field is ever dropped) ----------
+class _FOut(BaseModel):
+    model_config = ConfigDict(extra="allow")
+
+
+class OkResultOut(_FOut):
+    ok: bool = True
+
+
+class FormsListOut(_FOut):
+    forms: list = []
+
+
+class SubmissionsOut(_FOut):
+    submissions: list = []
+    total: int = 0
+    fields: list = []
+
+
+class GeocodeOut(_FOut):
+    results: list = []
+
+
+class CheckoutUrlOut(_FOut):
+    url: Optional[str] = None
+
+
 @router.post("/forms")
 async def create_form(body: FormCreate, authorization: Optional[str] = Header(None)):
     user = await get_current_user(authorization)
@@ -250,7 +277,7 @@ async def create_form(body: FormCreate, authorization: Optional[str] = Header(No
     return _form_view(doc)
 
 
-@router.get("/forms")
+@router.get("/forms", response_model=FormsListOut)
 async def list_forms(authorization: Optional[str] = Header(None)):
     user = await get_current_user(authorization)
     rows = await db.forms.find({"owner_id": user["user_id"]}, {"_id": 0}).sort("created_at", -1).limit(100).to_list(100)
@@ -288,7 +315,7 @@ async def update_form(form_id: str, body: FormCreate, authorization: Optional[st
     return _form_view(doc)
 
 
-@router.delete("/forms/{form_id}")
+@router.delete("/forms/{form_id}", response_model=OkResultOut)
 async def delete_form(form_id: str, authorization: Optional[str] = Header(None)):
     user = await get_current_user(authorization)
     res = await db.forms.delete_one({"id": form_id, "owner_id": user["user_id"]})
@@ -298,7 +325,7 @@ async def delete_form(form_id: str, authorization: Optional[str] = Header(None))
     return {"ok": True}
 
 
-@router.get("/forms/{form_id}/submissions")
+@router.get("/forms/{form_id}/submissions", response_model=SubmissionsOut)
 async def list_submissions(form_id: str, limit: int = Query(50), offset: int = Query(0), authorization: Optional[str] = Header(None)):
     user = await get_current_user(authorization)
     form = await db.forms.find_one({"id": form_id, "owner_id": user["user_id"]}, {"_id": 0})
@@ -342,7 +369,7 @@ async def public_form(form: str = Query(...)):
     return _public_form_view(doc)
 
 
-@router.get("/pub/geocode")
+@router.get("/pub/geocode", response_model=GeocodeOut)
 async def pub_geocode(request: Request, q: str = Query(...)):
     """Address autocomplete for form 'address' fields — proxies Mapbox forward
     geocoding with the backend MAPBOX_TOKEN so the public form never sees a token.
@@ -467,7 +494,7 @@ async def _record_submission(doc: dict, clean: dict, ip: str, payment: Optional[
     return sub["id"]
 
 
-@router.post("/pub/form-submit")
+@router.post("/pub/form-submit", response_model=OkResultOut)
 async def public_submit(request: Request, body: FormSubmit, form: str = Query(...)):
     doc = await db.forms.find_one({"form_key": form}, {"_id": 0})
     if not doc:
@@ -502,7 +529,7 @@ async def finalize_form_payment(pending_id: str) -> bool:
     return True
 
 
-@router.post("/pub/form-checkout")
+@router.post("/pub/form-checkout", response_model=CheckoutUrlOut)
 async def form_checkout(request: Request, body: FormSubmit, form: str = Query(...)):
     """Create a Stripe Checkout session for a paid form — the charge is routed to
     the form owner's connected account; the submission is recorded on payment."""
@@ -572,7 +599,7 @@ async def form_checkout(request: Request, body: FormSubmit, form: str = Query(..
     return {"url": session.get("url")}
 
 
-@router.get("/pub/form-paid")
+@router.get("/pub/form-paid", response_model=OkResultOut)
 async def form_paid(session: str = Query(...)):
     """On-return confirm (belt-and-braces with the webhook): if the session is paid,
     finalize its submission."""
