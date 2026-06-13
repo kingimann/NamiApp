@@ -4,7 +4,7 @@ from typing import List, Optional
 import uuid
 
 from fastapi import APIRouter, Header, HTTPException, Query
-from pydantic import BaseModel
+from pydantic import BaseModel, ConfigDict
 from db import DuplicateKeyError
 
 from core import db, get_current_user, is_mod, is_admin
@@ -716,7 +716,64 @@ async def edit_post_privacy(
     return await _hydrate_post(updated, user["user_id"])
 
 
-@router.delete("/posts/{post_id}")
+# --- §1 response models (extra="allow" so no field is ever dropped) ----------
+class _PostOut(BaseModel):
+    model_config = ConfigDict(extra="allow")
+
+
+class OkOut(_PostOut):
+    ok: bool = True
+
+
+class DeleteBulkOut(_PostOut):
+    ok: bool = True
+    deleted: int = 0
+
+
+class HashtagCount(_PostOut):
+    tag: str
+    count: int
+
+
+class TrendingHashtagsOut(_PostOut):
+    hashtags: list[HashtagCount] = []
+
+
+class ViewOut(_PostOut):
+    viewed: bool
+
+
+class ViewerOut(_PostOut):
+    user_id: str = ""
+    name: str = ""
+    username: Optional[str] = None
+    picture: Optional[str] = None
+    verified: bool = False
+    viewed_at: Optional[datetime] = None
+
+
+class ViewersOut(_PostOut):
+    count: int = 0
+    unique: int = 0
+    viewers: list[ViewerOut] = []
+
+
+class PostAnalyticsOut(_PostOut):
+    # The numeric metrics; created_at/reactions/promoted/ad pass through (extra).
+    post_id: str = ""
+    impressions: int = 0
+    unique_viewers: int = 0
+    clicks: int = 0
+    reactions_total: int = 0
+    comments: int = 0
+    reposts: int = 0
+    quotes: int = 0
+    bookmarks: int = 0
+    interactions: int = 0
+    engagement_rate: float = 0
+
+
+@router.delete("/posts/{post_id}", response_model=OkOut)
 async def delete_post(post_id: str, authorization: Optional[str] = Header(None)):
     user = await get_current_user(authorization)
     # Owner can always delete; mods/admins can remove anyone's post (moderation).
@@ -740,7 +797,7 @@ class BulkDeletePostsBody(BaseModel):
     post_ids: Optional[List[str]] = None   # omit/empty = delete ALL your posts
 
 
-@router.post("/posts/delete-bulk")
+@router.post("/posts/delete-bulk", response_model=DeleteBulkOut)
 async def delete_posts_bulk(body: BulkDeletePostsBody, authorization: Optional[str] = Header(None)):
     """Delete many of your own posts at once. With post_ids: just those.
     Without: purge every post you've made."""
@@ -1363,7 +1420,7 @@ async def list_bookmarks(authorization: Optional[str] = Header(None)):
 
 
 # ---------- Hashtags ----------
-@router.get("/hashtags/trending")
+@router.get("/hashtags/trending", response_model=TrendingHashtagsOut)
 async def trending_hashtags(authorization: Optional[str] = Header(None)):
     """Most-used hashtags across recent posts (defined before /hashtags/{tag})."""
     await get_current_user(authorization)
@@ -1418,7 +1475,7 @@ async def posts_for_hashtag(tag: str, authorization: Optional[str] = Header(None
     return await _hydrate_many(docs, user["user_id"])
 
 
-@router.get("/hashtags/{tag}/count")
+@router.get("/hashtags/{tag}/count", response_model=HashtagCount)
 async def hashtag_count(tag: str, authorization: Optional[str] = Header(None)):
     await get_current_user(authorization)
     t = (tag or "").lstrip("#").lower()
@@ -1505,7 +1562,7 @@ async def vote_poll(
     return await _hydrate_post(updated, user["user_id"])
 
 
-@router.post("/posts/{post_id}/view")
+@router.post("/posts/{post_id}/view", response_model=ViewOut)
 async def record_view(post_id: str, authorization: Optional[str] = Header(None)):
     """Record a unique view (idempotent per user per post)."""
     user = await get_current_user(authorization)
@@ -1524,7 +1581,7 @@ async def record_view(post_id: str, authorization: Optional[str] = Header(None))
         return {"viewed": False}
 
 
-@router.get("/posts/{post_id}/viewers")
+@router.get("/posts/{post_id}/viewers", response_model=ViewersOut)
 async def post_viewers(post_id: str, authorization: Optional[str] = Header(None)):
     """List who viewed a post — visible only to the post's author (or a mod)."""
     user = await get_current_user(authorization)
@@ -1562,7 +1619,7 @@ async def post_viewers(post_id: str, authorization: Optional[str] = Header(None)
     return {"count": int(doc.get("views_count", 0) or 0), "unique": len(viewers), "viewers": viewers}
 
 
-@router.get("/posts/{post_id}/analytics")
+@router.get("/posts/{post_id}/analytics", response_model=PostAnalyticsOut)
 async def post_analytics(post_id: str, authorization: Optional[str] = Header(None)):
     """Detailed performance for a post — author (or a mod/admin) only."""
     user = await get_current_user(authorization)
@@ -1613,7 +1670,7 @@ async def post_analytics(post_id: str, authorization: Optional[str] = Header(Non
     }
 
 
-@router.post("/posts/{post_id}/report")
+@router.post("/posts/{post_id}/report", response_model=OkOut)
 async def report_post(
     post_id: str, body: ReportCreate, authorization: Optional[str] = Header(None)
 ):
@@ -1644,7 +1701,7 @@ async def report_post(
     return {"ok": True}
 
 
-@router.post("/posts/{post_id}/not-interested")
+@router.post("/posts/{post_id}/not-interested", response_model=OkOut)
 async def not_interested(post_id: str, authorization: Optional[str] = Header(None)):
     """Hide this post for the viewer and feed fewer like it (records the signal
     so the home/explore feeds skip it)."""
