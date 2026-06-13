@@ -15,7 +15,7 @@ from fastapi import APIRouter, Depends, Header, HTTPException
 from pydantic import BaseModel, ConfigDict
 
 from core import (
-    db, get_current_user, _public_user, CURRENCIES, normalize_currency, _norm_dt,
+    db, get_current_user, _public_user, CURRENCIES, normalize_currency, _norm_dt, is_admin,
     MONEY_MAX_TOPUP, MONEY_MAX_SEND, SEND_MAX_PER_HOUR, SEND_MAX_PER_DAY, TOPUP_MAX_PENDING,
     NEW_ACCOUNT_DAYS, NEW_ACCOUNT_SEND_PER_HOUR, NEW_ACCOUNT_SEND_PER_DAY,
 )
@@ -199,6 +199,33 @@ async def enforce_topup_pending(uid: str):
         pending = 0
     if pending >= TOPUP_MAX_PENDING:
         raise HTTPException(status_code=429, detail={"code": "too_many_pending", "message": "You have too many pending top-ups. Finish or cancel one before starting another."})
+
+
+async def scan_money_anomalies() -> dict:
+    """Money-integrity tripwire (run hourly): flag any NEGATIVE wallet balance.
+    The atomic conditional debits should make that impossible, so a hit means a
+    bug or abuse — record it to db.money_alerts (deduped while unresolved) so it
+    surfaces on the admin alerts endpoint. Best-effort; never raises."""
+    flagged = 0
+    try:
+        rows = await db.users.find({"wallet_balance": {"$lt": -0.001}}, {"_id": 0, "user_id": 1, "wallet_balance": 1}).to_list(1000)
+    except Exception:
+        return {"flagged": 0}
+    for u in rows:
+        uid = u.get("user_id")
+        try:
+            dup = await db.money_alerts.find_one({"kind": "negative_balance", "user_id": uid, "resolved": {"$ne": True}}, {"_id": 0, "id": 1})
+            if dup:
+                continue
+            await db.money_alerts.insert_one({
+                "id": str(uuid.uuid4()), "kind": "negative_balance", "user_id": uid,
+                "balance": round(float(u.get("wallet_balance", 0) or 0), 2),
+                "created_at": datetime.now(timezone.utc), "resolved": False,
+            })
+            flagged += 1
+        except Exception:
+            continue
+    return {"flagged": flagged}
 
 
 # Brute-force protection for the transfer security answer.
@@ -796,6 +823,11 @@ class TopupsOut(_W):
     total: int = 0
 
 
+class MoneyAlertsOut(_W):
+    alerts: list = []
+    open: int = 0
+
+
 @router.post("/payments/pay-wallet", response_model=PayWalletOut)
 async def pay_from_wallet(body: WalletPay, me: dict = Depends(get_current_user)):
     """Pay a tip or a (first) subscription charge from the in-app wallet balance.
@@ -1253,3 +1285,13 @@ async def list_topups(me: dict = Depends(get_current_user)):
     topups = [_topup_view(t) for t in rows]
     # §6: canonical `data` + `total` alongside the legacy `topups` key.
     return {"topups": topups, "data": topups, "total": len(topups)}
+
+
+@router.get("/admin/money-alerts", response_model=MoneyAlertsOut)
+async def admin_money_alerts(me: dict = Depends(get_current_user)):
+    """Money-integrity anomalies (admin only) — e.g. negative balances flagged by
+    the hourly scan. `open` counts unresolved alerts."""
+    if not is_admin(me):
+        raise HTTPException(status_code=403, detail="Admins only")
+    rows = await db.money_alerts.find({}, {"_id": 0}).sort("created_at", -1).limit(200).to_list(200)
+    return {"alerts": rows, "open": sum(1 for r in rows if not r.get("resolved"))}

@@ -260,6 +260,12 @@ def start_scheduler():
                 await process_biweekly_payouts()
             except Exception:
                 pass
+            try:
+                # Money-integrity tripwire (negative balances → admin alerts).
+                from routes.money import scan_money_anomalies
+                await scan_money_anomalies()
+            except Exception:
+                pass
     try:
         asyncio.create_task(_loop())
     except Exception:
