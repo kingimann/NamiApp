@@ -50,12 +50,17 @@ def _winner_mark(board: list) -> Optional[str]:
     return None
 
 
-def _cpu_move(board: list, me: str = "O", opp: str = "X") -> Optional[int]:
-    """A competent tic-tac-toe move: take a win, block a loss, then prefer the
-    centre, corners and sides."""
+def _cpu_move(board: list, me: str = "O", opp: str = "X",
+              difficulty: str = "medium") -> Optional[int]:
+    """Pick the computer's tic-tac-toe move: easy = random, medium = win/block
+    heuristic, hard = perfect (minimax)."""
     empties = [i for i, c in enumerate(board) if not c]
     if not empties:
         return None
+    if difficulty == "easy":
+        return random.choice(empties)
+    if difficulty == "hard":
+        return _ttt_best(board, me, opp)
     for mark in (me, opp):                     # 1. win, then 2. block
         for i in empties:
             b = list(board)
@@ -66,6 +71,33 @@ def _cpu_move(board: list, me: str = "O", opp: str = "X") -> Optional[int]:
         if not board[i]:
             return i
     return empties[0]
+
+
+def _ttt_best(board: list, me: str, opp: str) -> Optional[int]:
+    """Optimal tic-tac-toe move via minimax (never loses on 'hard')."""
+    def score(b, turn):
+        w = _winner_mark(b)
+        if w == me:
+            return (1, None)
+        if w == opp:
+            return (-1, None)
+        empties = [i for i, c in enumerate(b) if not c]
+        if not empties:
+            return (0, None)
+        best_val, best_cell = None, empties[0]
+        for i in empties:
+            b[i] = turn
+            val, _ = score(b, opp if turn == me else me)
+            b[i] = ""
+            if turn == me:
+                if best_val is None or val > best_val:
+                    best_val, best_cell = val, i
+            else:
+                if best_val is None or val < best_val:
+                    best_val, best_cell = val, i
+        return (best_val, best_cell)
+
+    return score(list(board), me)[1]
 
 
 async def _conv_or_404(conv_id: str, user: dict) -> dict:
@@ -285,11 +317,14 @@ async def create_chat_game(
     uid = user["user_id"]
     now = datetime.now(timezone.utc)
     game_id = str(uuid.uuid4())
+    difficulty = body.difficulty if body.difficulty in (
+        "easy", "medium", "hard") else "medium"
     base = {
         "id": str(uuid.uuid4()),
         "game_id": game_id,
         "conversation_id": conv_id,
         "game_type": body.game_type,
+        "difficulty": difficulty,
         "status": "active",
         "stats_recorded": False,
         "created_at": now,
@@ -318,22 +353,28 @@ async def create_chat_game(
             status = "push" if _hand_total(dealer) == 21 else "blackjack"
         game = {**base, "deck": deck, "player": player, "dealer": dealer,
                 "player_id": uid, "status": status}
-    elif body.game_type == "chess":  # strictly two human players
-        if len(others) != 1:
+    elif body.game_type == "chess":  # vs a person, or the computer
+        vs_cpu = body.vs_cpu or len(others) == 0
+        if not vs_cpu and len(others) != 1:
             raise HTTPException(
                 status_code=400, detail="Chess needs an opponent")
         st = ce.initial_state()
         game = {**base, "chess": st, "white_player": uid,
-                "black_player": others[0], "winner": None, "move_count": 0}
-        notify_other = (others[0], "♟️ Wants to play chess")
-    elif body.game_type == "checkers":  # two human players
-        if len(others) != 1:
+                "black_player": _CPU if vs_cpu else others[0],
+                "vs_cpu": vs_cpu, "winner": None, "move_count": 0}
+        if not vs_cpu:
+            notify_other = (others[0], "♟️ Wants to play chess")
+    elif body.game_type == "checkers":  # vs a person, or the computer
+        vs_cpu = body.vs_cpu or len(others) == 0
+        if not vs_cpu and len(others) != 1:
             raise HTTPException(
                 status_code=400, detail="Checkers needs an opponent")
         st = ck.initial_state()
         game = {**base, "checkers": st, "white_player": uid,
-                "black_player": others[0], "winner": None, "move_count": 0}
-        notify_other = (others[0], "🔴 Wants to play checkers")
+                "black_player": _CPU if vs_cpu else others[0],
+                "vs_cpu": vs_cpu, "winner": None, "move_count": 0}
+        if not vs_cpu:
+            notify_other = (others[0], "🔴 Wants to play checkers")
     elif body.game_type == "poker":  # five-card draw vs the dealer (anywhere)
         deck = pk.new_deck()
         player = [deck.pop() for _ in range(5)]
@@ -352,6 +393,7 @@ async def create_chat_game(
         "text": "",
         "game_id": game_id,
         "game_type": body.game_type,
+        "difficulty": difficulty,
         "deleted": False,
         "reactions": {},
         "created_at": now,
@@ -443,7 +485,8 @@ async def cpu_move(game_id: str, authorization: Optional[str] = Header(None)):
 
 async def _play_cpu(game: dict) -> dict:
     """Apply the computer's move (it plays O) and hand the turn back."""
-    cell = _cpu_move(game["board"], me="O", opp="X")
+    cell = _cpu_move(game["board"], me="O", opp="X",
+                     difficulty=game.get("difficulty", "medium"))
     if cell is None:
         return game
     board = list(game["board"])
@@ -595,6 +638,33 @@ async def get_chess(
     return _chess_view(game)
 
 
+@router.post("/chat-games/{game_id}/chess/cpu-move", response_model=ChessView)
+async def chess_cpu_move(
+    game_id: str, authorization: Optional[str] = Header(None)
+):
+    """Play the computer's chess move (client calls after a short pause)."""
+    user = await get_current_user(authorization)
+    game = await db.chat_games.find_one({"game_id": game_id}, {"_id": 0})
+    if not game or game.get("game_type") != "chess":
+        raise HTTPException(status_code=404, detail="Game not found")
+    await _conv_or_404(game["conversation_id"], user)
+    st = game["chess"]
+    if game.get("vs_cpu") and game.get("status") == "active" \
+            and game["black_player"] == _CPU and st["turn"] == "b":
+        nxt = ce.cpu_apply(st, game.get("difficulty", "medium"))
+        if nxt is not None:
+            new_status = ce.status(nxt)
+            patch = {"chess": nxt, "move_count": game.get("move_count", 0) + 1,
+                     "updated_at": datetime.now(timezone.utc)}
+            if new_status in ("checkmate", "stalemate", "draw"):
+                patch["status"] = new_status
+                patch["winner"] = _CPU if new_status == "checkmate" else None
+            await db.chat_games.update_one({"game_id": game_id}, {"$set": patch})
+            game = await db.chat_games.find_one({"game_id": game_id}, {"_id": 0})
+            await _record_result(game)
+    return _chess_view(game)
+
+
 # ===== Checkers =====
 @router.post("/chat-games/{game_id}/checkers/move", response_model=CheckersView)
 async def checkers_move(
@@ -642,6 +712,32 @@ async def get_checkers(
     if not game or game.get("game_type") != "checkers":
         raise HTTPException(status_code=404, detail="Game not found")
     await _conv_or_404(game["conversation_id"], user)
+    return _checkers_view(game)
+
+
+@router.post("/chat-games/{game_id}/checkers/cpu-move", response_model=CheckersView)
+async def checkers_cpu_move(
+    game_id: str, authorization: Optional[str] = Header(None)
+):
+    """Play the computer's checkers move (client calls after a short pause)."""
+    user = await get_current_user(authorization)
+    game = await db.chat_games.find_one({"game_id": game_id}, {"_id": 0})
+    if not game or game.get("game_type") != "checkers":
+        raise HTTPException(status_code=404, detail="Game not found")
+    await _conv_or_404(game["conversation_id"], user)
+    st = game["checkers"]
+    if game.get("vs_cpu") and game.get("status") == "active" \
+            and game["black_player"] == _CPU and st["turn"] == "b":
+        nxt = ck.cpu_apply(st, game.get("difficulty", "medium"))
+        if nxt is not None:
+            new_status = ck.status(nxt)
+            patch = {"checkers": nxt, "move_count": game.get("move_count", 0) + 1,
+                     "updated_at": datetime.now(timezone.utc)}
+            if new_status != "active":
+                patch["status"] = new_status
+            await db.chat_games.update_one({"game_id": game_id}, {"$set": patch})
+            game = await db.chat_games.find_one({"game_id": game_id}, {"_id": 0})
+            await _record_result(game)
     return _checkers_view(game)
 
 

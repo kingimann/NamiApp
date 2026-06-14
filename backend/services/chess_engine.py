@@ -313,3 +313,57 @@ def status(state: dict) -> str:
     if state["halfmove"] >= 100:
         return "draw"
     return "active"
+
+
+# ----- A small CPU opponent: alpha-beta minimax on material -----
+import random as _random
+
+_VAL = {"p": 100, "n": 320, "b": 330, "r": 500, "q": 900, "k": 0}
+
+
+def _material(state: dict) -> int:
+    """Material from the perspective of the side to move."""
+    white = state["turn"] == "w"
+    score = 0
+    for c in state["board"]:
+        if c == ".":
+            continue
+        v = _VAL[c.lower()]
+        score += v if (c.isupper() == white) else -v
+    return score
+
+
+def _negamax(state: dict, depth: int, alpha: int, beta: int) -> int:
+    moves = legal_moves(state)
+    if not moves:
+        return -100000 if in_check(state, state["turn"] == "w") else 0
+    if depth == 0:
+        return _material(state)
+    best = -10 ** 9
+    for mv in moves:
+        val = -_negamax(_apply(state, mv), depth - 1, -beta, -alpha)
+        if val > best:
+            best = val
+        if best > alpha:
+            alpha = best
+        if alpha >= beta:
+            break
+    return best
+
+
+def cpu_apply(state: dict, difficulty: str = "medium") -> Optional[dict]:
+    """Choose and play the computer's move; returns the new state (or None)."""
+    moves = legal_moves(state)
+    if not moves:
+        return None
+    if difficulty == "easy":
+        caps = [m for m in moves if state["board"][m[1]] != "."]
+        return _apply(state, _random.choice(caps or moves))
+    depth = 3 if difficulty == "hard" else 2
+    _random.shuffle(moves)
+    best, best_mv = -10 ** 9, moves[0]
+    for mv in moves:
+        val = -_negamax(_apply(state, mv), depth - 1, -10 ** 9, 10 ** 9)
+        if val > best:
+            best, best_mv = val, mv
+    return _apply(state, best_mv)

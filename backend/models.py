@@ -439,6 +439,7 @@ class Message(BaseModel):
     live_active: Optional[bool] = None       # False once stopped/expired
     game_id: Optional[str] = None            # type == "game": the game to poll/play
     game_type: Optional[str] = None          # e.g. "tictactoe"
+    difficulty: Optional[str] = None         # easy | medium | hard (CPU/arcade games)
     media: List["PostMedia"] = []
     audio_base64: Optional[str] = None       # voice note
     audio_duration_ms: Optional[int] = None  # length of the voice note
@@ -569,6 +570,7 @@ class LiveLocationView(BaseModel):
 class GameCreate(BaseModel):
     game_type: str = "tictactoe"
     vs_cpu: bool = False               # play the computer (forced on in notes-to-self)
+    difficulty: str = "medium"         # easy | medium | hard (CPU strength / arcade speed)
 
 
 class GameMove(BaseModel):

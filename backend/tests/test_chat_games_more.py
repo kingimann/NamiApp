@@ -80,12 +80,14 @@ async def test_blackjack_hit_bust(env):
 # ----- Chess -----
 
 @pytest.mark.asyncio
-async def test_chess_needs_opponent(env):
+async def test_chess_self_chat_plays_cpu(env):
     db, mp = env
     _as(mp, "alice")
-    with pytest.raises(HTTPException) as ei:
-        await games.create_chat_game("self", GameCreate(game_type="chess"))
-    assert ei.value.status_code == 400
+    # In a notes-to-self chat (no opponent), chess is played vs the computer.
+    msg = await games.create_chat_game("self", GameCreate(game_type="chess"))
+    g = await db.chat_games.find_one({"game_id": msg.game_id})
+    assert g["vs_cpu"] is True and g["black_player"] == "cpu"
+    assert g["white_player"] == "alice"
 
 
 @pytest.mark.asyncio
@@ -131,12 +133,31 @@ async def test_chess_checkmate_sets_winner(env):
 # ----- Checkers -----
 
 @pytest.mark.asyncio
-async def test_checkers_needs_opponent(env):
+async def test_checkers_self_chat_plays_cpu(env):
     db, mp = env
     _as(mp, "alice")
-    with pytest.raises(HTTPException) as ei:
-        await games.create_chat_game("self", GameCreate(game_type="checkers"))
-    assert ei.value.status_code == 400
+    msg = await games.create_chat_game("self", GameCreate(game_type="checkers"))
+    g = await db.chat_games.find_one({"game_id": msg.game_id})
+    assert g["vs_cpu"] is True and g["black_player"] == "cpu"
+
+
+@pytest.mark.asyncio
+async def test_chess_cpu_replies(env):
+    db, mp = env
+    _as(mp, "alice")
+    msg = await games.create_chat_game(
+        "self", GameCreate(game_type="chess", difficulty="medium"))
+    gid = msg.game_id
+    # Alice (white) opens; the CPU then replies on its endpoint.
+    await games.chess_move(gid, ChessMoveBody(from_sq="e2", to_sq="e4"))
+    out = await games.chess_cpu_move(gid)
+    assert out.turn == "alice"          # back to the human after the CPU moved
+    assert out.board != ce_initial_board()
+
+
+def ce_initial_board():
+    from services import chess_engine as ce
+    return ce.initial_state()["board"]
 
 
 @pytest.mark.asyncio
