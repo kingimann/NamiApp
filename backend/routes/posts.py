@@ -310,7 +310,8 @@ async def _notify_tags(tagged_ids: list, actor_id: str, post_id: str, preview: s
 
 
 async def _hydrate_post(
-    doc: dict, viewer_id: Optional[str], authors: Optional[dict] = None
+    doc: dict, viewer_id: Optional[str], authors: Optional[dict] = None,
+    thread_count: int = 0,
 ) -> Post:
     _community_name = None
     if doc.get("community_id"):
@@ -416,6 +417,7 @@ async def _hydrate_post(
         reactions_total=sum((doc.get("reactions") or {}).values()),
         my_reaction=my_reaction,
         replies_count=doc.get("replies_count", 0),
+        thread_count=thread_count,
         reposts_count=doc.get("reposts_count", 0),
         quotes_count=doc.get("quotes_count", 0),
         bookmarks_count=doc.get("bookmarks_count", 0),
@@ -457,8 +459,23 @@ async def _hydrate_many(docs: list, viewer_id: Optional[str]) -> list:
             {"user_id": {"$in": author_ids}}, {"_id": 0}
         ).to_list(len(author_ids))
         authors = {r["user_id"]: r for r in rows if r.get("user_id")}
+    # Self-thread detection (one query for the whole page): a post is a thread
+    # head when its own author has replied to it. Count those self-replies so
+    # the tile can offer "Show this thread".
+    id_to_author = {d["id"]: d.get("user_id") for d in docs if d.get("id")}
+    thread_counts: dict = {}
+    if id_to_author:
+        kids = await db.posts.find(
+            {"parent_id": {"$in": list(id_to_author)}},
+            {"_id": 0, "parent_id": 1, "user_id": 1},
+        ).to_list(2000)
+        for k in kids:
+            pid = k.get("parent_id")
+            if pid and k.get("user_id") == id_to_author.get(pid):
+                thread_counts[pid] = thread_counts.get(pid, 0) + 1
     return list(await asyncio.gather(
-        *(_hydrate_post(d, viewer_id, authors) for d in docs)))
+        *(_hydrate_post(d, viewer_id, authors, thread_counts.get(d["id"], 0))
+          for d in docs)))
 
 
 def _is_promoted(doc: dict) -> bool:
