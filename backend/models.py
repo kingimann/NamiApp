@@ -588,6 +588,90 @@ class GameView(BaseModel):
     updated_at: datetime
 
 
+class BlackjackView(BaseModel):
+    game_id: str
+    conversation_id: str
+    game_type: str = "blackjack"
+    player: List[dict]                 # [{"r": "A", "s": "♠"}, ...]
+    dealer: List[dict]                 # dealer cards (hole card hidden while active)
+    player_total: int
+    dealer_total: int                  # visible total (hidden card excluded while active)
+    status: str = "active"             # active | blackjack | win | lose | push
+    updated_at: datetime
+
+
+class ChessMoveBody(BaseModel):
+    from_sq: str                       # e.g. "e2"
+    to_sq: str                         # e.g. "e4"
+    promotion: Optional[str] = None    # q | r | b | n
+
+
+class ChessView(BaseModel):
+    game_id: str
+    conversation_id: str
+    game_type: str = "chess"
+    board: str                         # 64-char board, a8..h1
+    white_player: str
+    black_player: str
+    turn: str                          # user_id whose move it is
+    in_check: bool = False
+    status: str = "active"             # active | checkmate | stalemate | draw
+    winner: Optional[str] = None       # user_id of the winner (None on draw/active)
+    updated_at: datetime
+
+
+class CheckersMoveBody(BaseModel):
+    from_sq: int                       # board index 0..63
+    to_sq: int
+
+
+class CheckersView(BaseModel):
+    game_id: str
+    conversation_id: str
+    game_type: str = "checkers"
+    board: str                         # 64-char board, a8..h1
+    white_player: str
+    black_player: str
+    turn: str                          # user_id whose move it is
+    chain: Optional[int] = None        # square mid multi-jump that must continue
+    status: str = "active"             # active | white_won | black_won
+    winner: Optional[str] = None       # user_id of the winner
+    updated_at: datetime
+
+
+class PokerDrawBody(BaseModel):
+    holds: List[int] = []              # indices (0..4) of cards to keep
+
+
+class PokerView(BaseModel):
+    game_id: str
+    conversation_id: str
+    game_type: str = "poker"
+    you: List[dict]                    # the viewer's 5 cards
+    opponent: List[dict]               # hidden until showdown
+    your_hand: str                     # name of the viewer's hand
+    opponent_hand: Optional[str] = None  # revealed at showdown
+    status: str = "active"             # active | revealing | win | lose | push
+    updated_at: datetime
+
+
+class GameScoreBody(BaseModel):
+    score: int                         # client-reported arcade score (Pong/Snake)
+
+
+class GameScores(BaseModel):
+    user_id: str
+    scores: dict = {}                  # game_type -> best score
+
+
+class GameStats(BaseModel):
+    user_id: str
+    wins: int = 0
+    losses: int = 0
+    ties: int = 0
+    games: int = 0
+
+
 # ---------- Marketplace ----------
 class ListingCreate(BaseModel):
     title: str

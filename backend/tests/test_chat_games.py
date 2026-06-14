@@ -116,9 +116,12 @@ async def test_notes_to_self_plays_the_cpu(env):
     gid = msg.game_id
     game = await db.chat_games.find_one({"game_id": gid})
     assert game["vs_cpu"] is True and game["o_player"] == "cpu"
-    # Alice moves; the CPU replies within the same call, handing the turn back.
+    # Alice moves; the turn passes to the CPU but it doesn't move yet.
     out = await games.play_move(gid, GameMove(cell=0))
-    assert out.board[0] == "X"
+    assert out.board[0] == "X" and out.turn == "cpu"
+    assert out.board.count("O") == 0
+    # The client calls /cpu-move (after its delay) to play the computer.
+    out = await games.cpu_move(gid)
     assert out.board.count("O") == 1          # CPU made exactly one move
     if out.status == "active":
         assert out.turn == "alice"            # back to the human
@@ -136,9 +139,59 @@ async def test_cpu_blocks_a_winning_line(env):
         {"game_id": gid},
         {"$set": {"board": ["X", "", "", "", "O", "", "", "", ""],
                   "turn": "alice", "status": "active"}})
-    out = await games.play_move(gid, GameMove(cell=1))  # X now at 0,1
+    await games.play_move(gid, GameMove(cell=1))  # X now at 0,1
+    out = await games.cpu_move(gid)
     # The CPU must block the 0,1,2 line by taking cell 2.
     assert out.board[2] == "O"
+
+
+@pytest.mark.asyncio
+async def test_arcade_create_and_high_score(env):
+    db, mp = env
+    _as(mp, "alice")
+    # Snake works anywhere, including notes-to-self.
+    msg = await games.create_chat_game("self", GameCreate(game_type="snake"))
+    gid = msg.game_id
+    assert msg.type == "game"
+    from models import GameScoreBody
+    out = await games.report_arcade_score(gid, GameScoreBody(score=12))
+    assert out.scores["snake"] == 12
+    # Only the best score is kept.
+    out2 = await games.report_arcade_score(gid, GameScoreBody(score=7))
+    assert out2.scores["snake"] == 12
+    out3 = await games.report_arcade_score(gid, GameScoreBody(score=20))
+    assert out3.scores["snake"] == 20
+
+
+@pytest.mark.asyncio
+async def test_win_loss_tie_are_recorded(env):
+    db, mp = env
+    gid = await _new_game(db, mp)   # alice (X) vs bob (O)
+    # Play X to a top-row win: X 0,1,2 ; O 3,4.
+    for uid, cell in [("alice", 0), ("bob", 3), ("alice", 1), ("bob", 4),
+                      ("alice", 2)]:
+        _as(mp, uid)
+        await games.play_move(gid, GameMove(cell=cell))
+    a = await games.get_game_stats("alice")
+    b = await games.get_game_stats("bob")
+    assert (a.wins, a.losses, a.ties) == (1, 0, 0)
+    assert (b.wins, b.losses, b.ties) == (0, 1, 0)
+    assert a.games == 1 and b.games == 1
+
+
+@pytest.mark.asyncio
+async def test_stats_recorded_once(env):
+    db, mp = env
+    gid = await _new_game(db, mp)
+    for uid, cell in [("alice", 0), ("bob", 3), ("alice", 1), ("bob", 4),
+                      ("alice", 2)]:
+        _as(mp, uid)
+        await games.play_move(gid, GameMove(cell=cell))
+    # The game is over; the stats row is flagged so re-reads don't double-count.
+    g = await db.chat_games.find_one({"game_id": gid})
+    assert g["stats_recorded"] is True
+    a = await games.get_game_stats("alice")
+    assert a.wins == 1   # still 1, not incremented again
 
 
 @pytest.mark.asyncio
