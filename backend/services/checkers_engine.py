@@ -151,14 +151,28 @@ import random as _random
 
 
 def _material(state: dict) -> int:
-    """Material (men=1, kings=2) from the perspective of the side to move."""
+    """Material + positional score from the side-to-move's perspective. Men are
+    worth ~10 (kings ~18); the positional term rewards advancing men toward
+    promotion, holding the back row, and central squares — so the CPU pushes for
+    kings and defends rather than just trading evenly."""
     white = state["turn"] == "w"
     score = 0
-    for c in state["board"]:
+    for sq in range(64):
+        c = state["board"][sq]
         if c == ".":
             continue
-        v = 2 if c in ("W", "B") else 1
-        score += v if (_white(c) == white) else -v
+        f, r = sq % 8, sq // 8           # r: 0 = top (black's back), 7 = bottom
+        king = c in ("W", "B")
+        own_white = _white(c)
+        val = 18 if king else 10
+        if not king:
+            # Advancement toward the promotion row (white promotes at r=0).
+            val += (7 - r) if own_white else r
+            # Reward holding the home back row (anchors against breakthroughs).
+            if (own_white and r == 7) or (not own_white and r == 0):
+                val += 2
+        val += (2 if 2 <= f <= 5 else 0)  # slight centre-file bonus
+        score += val if (own_white == white) else -val
     return score
 
 

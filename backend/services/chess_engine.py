@@ -321,16 +321,49 @@ import random as _random
 _VAL = {"p": 100, "n": 320, "b": 330, "r": 500, "q": 900, "k": 0}
 
 
-def _material(state: dict) -> int:
-    """Material from the perspective of the side to move."""
+def _evaluate(state: dict) -> int:
+    """Material + positional score, from the side-to-move's perspective. The
+    positional term rewards piece activity (centre control), pawn advancement
+    and pieces leaving the back rank, so the CPU develops and plays sensibly
+    rather than just grabbing material."""
+    board = state["board"]
     white = state["turn"] == "w"
     score = 0
-    for c in state["board"]:
+    for sq, c in enumerate(board):
         if c == ".":
             continue
-        v = _VAL[c.lower()]
-        score += v if (c.isupper() == white) else -v
-    return score
+        f, r = sq % 8, sq // 8           # r: 0 = rank8 (top), 7 = rank1 (bottom)
+        up = c.upper()
+        own_white = c.isupper()
+        v = _VAL[up.lower()] if up.lower() in _VAL else 0
+        centre = 3.5 - (abs(f - 3.5) + abs(r - 3.5)) / 2  # ~ -0 (edge) .. 3.5 (centre)
+        pos = 0
+        if up in ("N", "B"):
+            pos = centre * 6
+            # Undeveloped minor on its own back rank is slightly penalised.
+            if (own_white and r == 7) or (not own_white and r == 0):
+                pos -= 12
+        elif up == "Q":
+            pos = centre * 2
+        elif up == "P":
+            adv = (6 - r) if own_white else (r - 1)   # 0 at start … 5 near promotion
+            pos = adv * 6 + centre * 3
+        elif up == "R":
+            pos = centre * 1
+        elif up == "K":
+            pos = -centre * 6            # keep the king off the centre mid-game
+        total = v + pos
+        score += total if (own_white == white) else -total
+    return int(score)
+
+
+def _ordered(state: dict, moves):
+    """Captures first (by captured-piece value) — sharper alpha-beta pruning."""
+    board = state["board"]
+    return sorted(
+        moves,
+        key=lambda m: _VAL.get(board[m[1]].lower(), 0) if board[m[1]] != "." else 0,
+        reverse=True)
 
 
 def _negamax(state: dict, depth: int, alpha: int, beta: int) -> int:
@@ -338,9 +371,9 @@ def _negamax(state: dict, depth: int, alpha: int, beta: int) -> int:
     if not moves:
         return -100000 if in_check(state, state["turn"] == "w") else 0
     if depth == 0:
-        return _material(state)
+        return _evaluate(state)
     best = -10 ** 9
-    for mv in moves:
+    for mv in _ordered(state, moves):
         val = -_negamax(_apply(state, mv), depth - 1, -beta, -alpha)
         if val > best:
             best = val
@@ -360,7 +393,7 @@ def cpu_apply(state: dict, difficulty: str = "medium") -> Optional[dict]:
         caps = [m for m in moves if state["board"][m[1]] != "."]
         return _apply(state, _random.choice(caps or moves))
     depth = 3 if difficulty == "hard" else 2
-    _random.shuffle(moves)
+    moves = _ordered(state, moves)
     best, best_mv = -10 ** 9, moves[0]
     for mv in moves:
         val = -_negamax(_apply(state, mv), depth - 1, -10 ** 9, 10 ** 9)
