@@ -25,6 +25,7 @@ from routes import (
     foursquare as fsq_routes,
     groups as groups_routes,
     guides as guides_routes,
+    chat_games as chat_games_routes,
     integrations as integrations_routes,
     live_location as live_location_routes,
     marketplace as marketplace_routes,
@@ -311,6 +312,7 @@ def _register(parent: APIRouter):
     parent.include_router(reviews_routes.router, tags=["Reviews"])
     parent.include_router(messaging_routes.router, tags=["Messaging"])
     parent.include_router(live_location_routes.router, tags=["Messaging"])
+    parent.include_router(chat_games_routes.router, tags=["Messaging"])
     parent.include_router(notifications_routes.router, tags=["Notifications"])
     parent.include_router(eta_routes.router, tags=["Routing"])
     parent.include_router(posts_routes.router, tags=["Posts"])
