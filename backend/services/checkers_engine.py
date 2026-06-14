@@ -144,3 +144,82 @@ def status(state: dict) -> str:
     if legal_moves(state):
         return "active"
     return "black_won" if state["turn"] == "w" else "white_won"
+
+
+# ----- A small CPU opponent: alpha-beta minimax on material -----
+import random as _random
+
+
+def _material(state: dict) -> int:
+    """Material + positional score from the side-to-move's perspective. Men are
+    worth ~10 (kings ~18); the positional term rewards advancing men toward
+    promotion, holding the back row, and central squares — so the CPU pushes for
+    kings and defends rather than just trading evenly."""
+    white = state["turn"] == "w"
+    score = 0
+    for sq in range(64):
+        c = state["board"][sq]
+        if c == ".":
+            continue
+        f, r = sq % 8, sq // 8           # r: 0 = top (black's back), 7 = bottom
+        king = c in ("W", "B")
+        own_white = _white(c)
+        val = 18 if king else 10
+        if not king:
+            # Advancement toward the promotion row (white promotes at r=0).
+            val += (7 - r) if own_white else r
+            # Reward holding the home back row (anchors against breakthroughs).
+            if (own_white and r == 7) or (not own_white and r == 0):
+                val += 2
+        val += (2 if 2 <= f <= 5 else 0)  # slight centre-file bonus
+        score += val if (own_white == white) else -val
+    return score
+
+
+def _negamax(state: dict, depth: int, alpha: int, beta: int) -> int:
+    moves = legal_moves(state)
+    if not moves:
+        return -1000
+    if depth <= 0 and state.get("chain") is None:
+        return _material(state)
+    best = -10 ** 9
+    for frm, to in moves:
+        nxt = apply_move(state, frm, to)
+        same = nxt["turn"] == state["turn"]
+        val = _negamax(nxt, depth - 1, alpha if same else -beta,
+                       beta if same else -alpha)
+        val = val if same else -val
+        if val > best:
+            best = val
+        if best > alpha:
+            alpha = best
+        if alpha >= beta:
+            break
+    return best
+
+
+def cpu_apply(state: dict, difficulty: str = "medium") -> Optional[dict]:
+    """Play the computer's move (resolving a forced multi-jump); new state."""
+    st = state
+    side = state["turn"]
+    guard = 0
+    while st["turn"] == side and guard < 12:
+        moves = legal_moves(st)
+        if not moves:
+            return st
+        if difficulty == "easy":
+            frm, to = _random.choice(moves)
+        else:
+            depth = 6 if difficulty == "hard" else 4
+            _random.shuffle(moves)
+            best, best_mv = -10 ** 9, moves[0]
+            for frm, to in moves:
+                nxt = apply_move(st, frm, to)
+                same = nxt["turn"] == st["turn"]
+                val = _negamax(nxt, depth - 1, -10 ** 9, 10 ** 9)
+                best_mv = (frm, to) if (val if same else -val) > best else best_mv
+                best = max(best, val if same else -val)
+            frm, to = best_mv
+        st = apply_move(st, frm, to)
+        guard += 1
+    return st
