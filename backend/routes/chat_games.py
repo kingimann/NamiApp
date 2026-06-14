@@ -744,6 +744,51 @@ async def get_game_scores(
         scores={r["game_type"]: r["best"] for r in rows if r.get("game_type")})
 
 
+def _fresh_state(game: dict) -> dict:
+    """Type-specific fields to reset a game to a fresh start (a rematch)."""
+    gt = game["game_type"]
+    now = datetime.now(timezone.utc)
+    base = {"status": "active", "stats_recorded": False, "updated_at": now}
+    if gt == "tictactoe":
+        return {**base, "board": [""] * 9, "turn": game["x_player"],
+                "winner": None}
+    if gt == "chess":
+        return {**base, "chess": ce.initial_state(), "winner": None,
+                "move_count": 0}
+    if gt == "checkers":
+        return {**base, "checkers": ck.initial_state(), "winner": None,
+                "move_count": 0}
+    if gt == "blackjack":
+        deck = _new_deck()
+        player = [deck.pop(), deck.pop()]
+        dealer = [deck.pop(), deck.pop()]
+        status = "active"
+        if _hand_total(player) == 21:
+            status = "push" if _hand_total(dealer) == 21 else "blackjack"
+        return {**base, "deck": deck, "player": player, "dealer": dealer,
+                "status": status}
+    if gt == "poker":
+        deck = pk.new_deck()
+        return {**base, "deck": deck,
+                "player": [deck.pop() for _ in range(5)],
+                "cpu": [deck.pop() for _ in range(5)]}
+    return base   # arcade games reset on the client
+
+
+@router.post("/chat-games/{game_id}/rematch")
+async def rematch(game_id: str, authorization: Optional[str] = Header(None)):
+    """Play again: reset the shared card to a fresh board/deal of the same
+    type, so both players (or the player vs the dealer) start over."""
+    user = await get_current_user(authorization)
+    game = await db.chat_games.find_one({"game_id": game_id}, {"_id": 0})
+    if not game:
+        raise HTTPException(status_code=404, detail="Game not found")
+    await _conv_or_404(game["conversation_id"], user)
+    await db.chat_games.update_one(
+        {"game_id": game_id}, {"$set": _fresh_state(game)})
+    return {"ok": True}
+
+
 @router.get("/game-stats/{user_id}", response_model=GameStats)
 async def get_game_stats(
     user_id: str, authorization: Optional[str] = Header(None)

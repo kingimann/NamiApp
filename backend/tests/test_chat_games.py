@@ -195,6 +195,25 @@ async def test_stats_recorded_once(env):
 
 
 @pytest.mark.asyncio
+async def test_rematch_resets_the_game(env):
+    db, mp = env
+    gid = await _new_game(db, mp)   # alice vs bob, tic-tac-toe
+    for uid, cell in [("alice", 0), ("bob", 3), ("alice", 1), ("bob", 4),
+                      ("alice", 2)]:
+        _as(mp, uid)
+        await games.play_move(gid, GameMove(cell=cell))
+    over = await db.chat_games.find_one({"game_id": gid})
+    assert over["status"] == "won"
+    # Play again resets the board and the stats flag.
+    _as(mp, "alice")
+    await games.rematch(gid)
+    fresh = await db.chat_games.find_one({"game_id": gid})
+    assert fresh["status"] == "active"
+    assert fresh["board"] == [""] * 9
+    assert fresh["turn"] == "alice" and fresh["stats_recorded"] is False
+
+
+@pytest.mark.asyncio
 async def test_non_participant_cannot_move_or_read(env):
     db, mp = env
     gid = await _new_game(db, mp)
