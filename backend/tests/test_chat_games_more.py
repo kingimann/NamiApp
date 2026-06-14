@@ -5,6 +5,7 @@ from fastapi import HTTPException
 from routes import chat_games as games
 from models import (
     GameCreate, ChessMoveBody, CheckersMoveBody, PokerDrawBody,
+    ConnectFourMoveBody,
 )
 from services import checkers_engine as ck
 from tests._fakedb import FakeDB
@@ -201,3 +202,34 @@ async def test_poker_draw_then_reveal(env):
     assert final.status in ("win", "lose", "push")
     assert all(c["r"] != "?" for c in final.opponent)   # revealed
     assert final.opponent_hand is not None
+
+
+# ----- Connect Four -----
+
+@pytest.mark.asyncio
+async def test_connect4_drop_and_turn(env):
+    db, mp = env
+    _as(mp, "alice")
+    msg = await games.create_chat_game("c1", GameCreate(game_type="connect4"))
+    gid = msg.game_id
+    g = await db.chat_games.find_one({"game_id": gid})
+    assert g["red_player"] == "alice" and g["yellow_player"] == "bob"
+    out = await games.connect4_move(gid, ConnectFourMoveBody(col=3))
+    assert out.turn == "bob"
+    # Disc landed at the bottom of column 3 (row 5).
+    assert out.board[5 * 7 + 3] == "R"
+
+
+@pytest.mark.asyncio
+async def test_connect4_self_chat_vs_cpu(env):
+    db, mp = env
+    _as(mp, "alice")
+    msg = await games.create_chat_game(
+        "self", GameCreate(game_type="connect4", difficulty="medium"))
+    gid = msg.game_id
+    g = await db.chat_games.find_one({"game_id": gid})
+    assert g["vs_cpu"] is True and g["yellow_player"] == "cpu"
+    await games.connect4_move(gid, ConnectFourMoveBody(col=3))
+    out = await games.connect4_cpu_move(gid)
+    assert out.turn == "alice"           # back to the human after the CPU drops
+    assert out.board.count("Y") == 1

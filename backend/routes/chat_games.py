@@ -15,19 +15,20 @@ from fastapi import APIRouter, Header, HTTPException
 from core import db, get_current_user
 from models import (
     BlackjackView, CheckersMoveBody, CheckersView, ChessMoveBody, ChessView,
-    GameCreate, GameMove, GameScoreBody, GameScores, GameStats, GameView,
-    Message, PokerDrawBody, PokerView,
+    ConnectFourMoveBody, ConnectFourView, GameCreate, GameMove, GameScoreBody,
+    GameScores, GameStats, GameView, Message, PokerDrawBody, PokerView,
 )
 from routes.messaging import _decrypt_msg
 from routes.notifications import emit_notification
 from services import chess_engine as ce
 from services import checkers_engine as ck
 from services import poker_engine as pk
+from services import connect_four as c4
 
 router = APIRouter()
 
 _GAME_TYPES = {"tictactoe", "blackjack", "chess", "checkers", "poker",
-               "pong", "snake"}
+               "connect4", "pong", "snake"}
 # Real-time arcade games run entirely on the client; the server only drops the
 # card and (for Pong) records the reported result.
 _LOCAL_TYPES = {"pong", "snake"}
@@ -131,6 +132,14 @@ def _outcomes(game: dict) -> list:
         if status == "white_won":
             return [(game["white_player"], "win"), (game["black_player"], "loss")]
         return [(game["black_player"], "win"), (game["white_player"], "loss")]
+    if gt == "connect4":
+        if status == "draw":
+            return [(game["red_player"], "tie"),
+                    (game["yellow_player"], "tie")]
+        w = game.get("winner")
+        loser = (game["yellow_player"] if w == game["red_player"]
+                 else game["red_player"])
+        return [(w, "win"), (loser, "loss")]
     if gt in ("blackjack", "poker"):
         p = game["player_id"]
         if status in ("blackjack", "win"):
@@ -270,6 +279,20 @@ def _checkers_view(game: dict) -> CheckersView:
     )
 
 
+def _c4_view(game: dict) -> ConnectFourView:
+    return ConnectFourView(
+        game_id=game["game_id"],
+        conversation_id=game["conversation_id"],
+        board=game["c4"],
+        red_player=game["red_player"],
+        yellow_player=game["yellow_player"],
+        turn=game["turn"],
+        status=game.get("status", "active"),
+        winner=game.get("winner"),
+        updated_at=game["updated_at"],
+    )
+
+
 def _poker_view(game: dict) -> PokerView:
     done = game["status"] in ("win", "lose", "push")
     return PokerView(
@@ -375,6 +398,16 @@ async def create_chat_game(
                 "vs_cpu": vs_cpu, "winner": None, "move_count": 0}
         if not vs_cpu:
             notify_other = (others[0], "🔴 Wants to play checkers")
+    elif body.game_type == "connect4":  # vs a person, or the computer
+        vs_cpu = body.vs_cpu or len(others) == 0
+        if not vs_cpu and len(others) != 1:
+            raise HTTPException(
+                status_code=400, detail="Connect Four needs an opponent")
+        game = {**base, "c4": c4.initial_board(), "red_player": uid,
+                "yellow_player": _CPU if vs_cpu else others[0],
+                "vs_cpu": vs_cpu, "turn": uid, "winner": None, "move_count": 0}
+        if not vs_cpu:
+            notify_other = (others[0], "🔵 Wants to play Connect Four")
     elif body.game_type == "poker":  # five-card draw vs the dealer (anywhere)
         deck = pk.new_deck()
         player = [deck.pop() for _ in range(5)]
@@ -741,6 +774,92 @@ async def checkers_cpu_move(
     return _checkers_view(game)
 
 
+# ===== Connect Four =====
+@router.post("/chat-games/{game_id}/connect4/move", response_model=ConnectFourView)
+async def connect4_move(
+    game_id: str, body: ConnectFourMoveBody, authorization: Optional[str] = Header(None)
+):
+    user = await get_current_user(authorization)
+    game = await db.chat_games.find_one({"game_id": game_id}, {"_id": 0})
+    if not game or game.get("game_type") != "connect4":
+        raise HTTPException(status_code=404, detail="Game not found")
+    await _conv_or_404(game["conversation_id"], user)
+    uid = user["user_id"]
+    if uid not in (game["red_player"], game["yellow_player"]):
+        raise HTTPException(status_code=403, detail="You're not in this game")
+    if game.get("status") != "active":
+        raise HTTPException(status_code=409, detail="The game is over")
+    if game["turn"] != uid:
+        raise HTTPException(status_code=409, detail="Not your turn")
+    piece = "R" if uid == game["red_player"] else "Y"
+    nb = c4.drop(game["c4"], body.col, piece)
+    if nb is None:
+        raise HTTPException(status_code=400, detail="Column is full")
+    moves = game.get("move_count", 0)
+    patch = {"c4": nb, "move_count": moves + 1,
+             "updated_at": datetime.now(timezone.utc)}
+    if c4.winner(nb):
+        patch["status"] = "won"
+        patch["winner"] = uid
+        patch["turn"] = uid
+    elif c4.is_full(nb):
+        patch["status"] = "draw"
+        patch["turn"] = ""
+    else:
+        patch["turn"] = (game["yellow_player"] if uid == game["red_player"]
+                         else game["red_player"])
+    claim = await db.chat_games.update_one(
+        {"game_id": game_id, "status": "active", "move_count": moves},
+        {"$set": patch})
+    if getattr(claim, "matched_count", 0) != 1:
+        raise HTTPException(status_code=409, detail="Move no longer valid")
+    updated = await db.chat_games.find_one({"game_id": game_id}, {"_id": 0})
+    await _record_result(updated)
+    return _c4_view(updated)
+
+
+@router.post("/chat-games/{game_id}/connect4/cpu-move", response_model=ConnectFourView)
+async def connect4_cpu_move(
+    game_id: str, authorization: Optional[str] = Header(None)
+):
+    user = await get_current_user(authorization)
+    game = await db.chat_games.find_one({"game_id": game_id}, {"_id": 0})
+    if not game or game.get("game_type") != "connect4":
+        raise HTTPException(status_code=404, detail="Game not found")
+    await _conv_or_404(game["conversation_id"], user)
+    if game.get("vs_cpu") and game.get("status") == "active" \
+            and game["yellow_player"] == _CPU and game["turn"] == _CPU:
+        col = c4.cpu_col(game["c4"], "Y", "R", game.get("difficulty", "medium"))
+        nb = c4.drop(game["c4"], col, "Y") if col is not None else None
+        if nb is not None:
+            patch = {"c4": nb, "move_count": game.get("move_count", 0) + 1,
+                     "updated_at": datetime.now(timezone.utc)}
+            if c4.winner(nb):
+                patch["status"] = "won"
+                patch["winner"] = _CPU
+            elif c4.is_full(nb):
+                patch["status"] = "draw"
+                patch["turn"] = ""
+            else:
+                patch["turn"] = game["red_player"]
+            await db.chat_games.update_one({"game_id": game_id}, {"$set": patch})
+            game = await db.chat_games.find_one({"game_id": game_id}, {"_id": 0})
+            await _record_result(game)
+    return _c4_view(game)
+
+
+@router.get("/chat-games/{game_id}/connect4", response_model=ConnectFourView)
+async def get_connect4(
+    game_id: str, authorization: Optional[str] = Header(None)
+):
+    user = await get_current_user(authorization)
+    game = await db.chat_games.find_one({"game_id": game_id}, {"_id": 0})
+    if not game or game.get("game_type") != "connect4":
+        raise HTTPException(status_code=404, detail="Game not found")
+    await _conv_or_404(game["conversation_id"], user)
+    return _c4_view(game)
+
+
 # ===== Poker (five-card draw vs the dealer) =====
 async def _load_poker(game_id: str, user: dict) -> dict:
     game = await db.chat_games.find_one({"game_id": game_id}, {"_id": 0})
@@ -854,6 +973,9 @@ def _fresh_state(game: dict) -> dict:
     if gt == "checkers":
         return {**base, "checkers": ck.initial_state(), "winner": None,
                 "move_count": 0}
+    if gt == "connect4":
+        return {**base, "c4": c4.initial_board(), "turn": game["red_player"],
+                "winner": None, "move_count": 0}
     if gt == "blackjack":
         deck = _new_deck()
         player = [deck.pop(), deck.pop()]

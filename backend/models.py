@@ -641,6 +641,23 @@ class CheckersView(BaseModel):
     updated_at: datetime
 
 
+class ConnectFourMoveBody(BaseModel):
+    col: int                           # 0..6 column to drop into
+
+
+class ConnectFourView(BaseModel):
+    game_id: str
+    conversation_id: str
+    game_type: str = "connect4"
+    board: str                         # 42-char board, row0=top, "."/"R"/"Y"
+    red_player: str
+    yellow_player: str
+    turn: str                          # user_id whose move it is
+    status: str = "active"             # active | won | draw
+    winner: Optional[str] = None       # user_id of the winner
+    updated_at: datetime
+
+
 class PokerDrawBody(BaseModel):
     holds: List[int] = []              # indices (0..4) of cards to keep
 
