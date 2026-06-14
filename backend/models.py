@@ -898,6 +898,7 @@ class Post(BaseModel):
     reactions_total: int = 0
     my_reaction: Optional[str] = None        # the emoji the viewer reacted with, if any
     replies_count: int = 0
+    thread_count: int = 0              # self-replies under this post (author continuing their own thread)
     reposts_count: int = 0
     quotes_count: int = 0
     bookmarks_count: int = 0
