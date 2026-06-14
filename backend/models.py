@@ -434,6 +434,9 @@ class Message(BaseModel):
     place_address: Optional[str] = None
     place_longitude: Optional[float] = None
     place_latitude: Optional[float] = None
+    live_share_id: Optional[str] = None      # type == "live_location": the share to poll
+    live_expires_at: Optional[datetime] = None  # when the live share stops
+    live_active: Optional[bool] = None       # False once stopped/expired
     media: List["PostMedia"] = []
     audio_base64: Optional[str] = None       # voice note
     audio_duration_ms: Optional[int] = None  # length of the voice note
@@ -537,6 +540,28 @@ class EtaUpdate(BaseModel):
     current_longitude: float = _Lng()
     current_latitude: float = _Lat()
     eta_minutes: Optional[int] = None
+
+
+class LiveLocationCreate(BaseModel):
+    minutes: int = 60                 # how long to keep sharing (1 .. 1440)
+    latitude: float = _Lat()
+    longitude: float = _Lng()
+
+
+class LiveLocationUpdate(BaseModel):
+    latitude: float = _Lat()
+    longitude: float = _Lng()
+
+
+class LiveLocationView(BaseModel):
+    share_id: str
+    user_id: str
+    name: Optional[str] = None
+    latitude: float
+    longitude: float
+    active: bool = True
+    expires_at: datetime
+    updated_at: datetime
 
 
 # ---------- Marketplace ----------
