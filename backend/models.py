@@ -434,6 +434,11 @@ class Message(BaseModel):
     place_address: Optional[str] = None
     place_longitude: Optional[float] = None
     place_latitude: Optional[float] = None
+    live_share_id: Optional[str] = None      # type == "live_location": the share to poll
+    live_expires_at: Optional[datetime] = None  # when the live share stops
+    live_active: Optional[bool] = None       # False once stopped/expired
+    game_id: Optional[str] = None            # type == "game": the game to poll/play
+    game_type: Optional[str] = None          # e.g. "tictactoe"
     media: List["PostMedia"] = []
     audio_base64: Optional[str] = None       # voice note
     audio_duration_ms: Optional[int] = None  # length of the voice note
@@ -537,6 +542,50 @@ class EtaUpdate(BaseModel):
     current_longitude: float = _Lng()
     current_latitude: float = _Lat()
     eta_minutes: Optional[int] = None
+
+
+class LiveLocationCreate(BaseModel):
+    minutes: int = 60                 # how long to keep sharing (1 .. 1440)
+    latitude: float = _Lat()
+    longitude: float = _Lng()
+
+
+class LiveLocationUpdate(BaseModel):
+    latitude: float = _Lat()
+    longitude: float = _Lng()
+
+
+class LiveLocationView(BaseModel):
+    share_id: str
+    user_id: str
+    name: Optional[str] = None
+    latitude: float
+    longitude: float
+    active: bool = True
+    expires_at: datetime
+    updated_at: datetime
+
+
+class GameCreate(BaseModel):
+    game_type: str = "tictactoe"
+    vs_cpu: bool = False               # play the computer (forced on in notes-to-self)
+
+
+class GameMove(BaseModel):
+    cell: int                          # 0..8 (tic-tac-toe board index)
+
+
+class GameView(BaseModel):
+    game_id: str
+    conversation_id: str
+    game_type: str
+    board: List[str]                   # 9 cells: "", "X" or "O"
+    x_player: str
+    o_player: str
+    turn: str                          # user_id whose move it is
+    status: str = "active"             # active | won | draw
+    winner: Optional[str] = None       # user_id of the winner (None on draw/active)
+    updated_at: datetime
 
 
 # ---------- Marketplace ----------
